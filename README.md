@@ -51,7 +51,11 @@ Install the current macOS release with Homebrew:
 
 ```sh
 brew install --cask igarrux/kuali/kuali
+xattr -dr com.apple.quarantine /Applications/Kuali.app
 ```
+
+Kuali is not yet notarized by Apple. The second command explicitly removes the
+quarantine attribute only from `Kuali.app`; review it before running it.
 
 To build from source, install Rust 1.89+, CMake, and a C/C++ toolchain. Node.js
 22+ is needed only for extension development and tests.
