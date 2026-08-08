@@ -1,0 +1,30 @@
+# Rust and Tauri build output
+/target/
+/src-tauri/gen/schemas/
+
+# Reproducible browser-extension packages
+/browser-extension/dist/
+
+# Local model weights and interrupted transfers
+*.bin
+*.ggml
+*.onnx
+*.part
+*.kuali-moving
+
+# Local configuration, credentials, and logs
+.env
+.env.*
+!.env.example
+config.toml
+*.log
+
+# Editor and operating-system files
+.DS_Store
+**/.DS_Store
+.idea/
+.vscode/
+
+# JavaScript dependencies and reports
+node_modules/
+coverage/

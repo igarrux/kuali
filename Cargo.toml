@@ -1,0 +1,71 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/kuali-core",
+    "crates/kuali-llm",
+    "crates/kuali-stt",
+    "crates/kuali-discord",
+    "crates/kuali-meet",
+    "crates/kuali-store",
+    "crates/kuali-engine",
+    "src-tauri",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.89"
+license = "MIT"
+repository = "https://github.com/igarrux/kuali"
+
+[workspace.dependencies]
+kuali-core = { path = "crates/kuali-core" }
+kuali-llm = { path = "crates/kuali-llm" }
+kuali-stt = { path = "crates/kuali-stt" }
+kuali-discord = { path = "crates/kuali-discord" }
+kuali-meet = { path = "crates/kuali-meet" }
+kuali-store = { path = "crates/kuali-store" }
+kuali-engine = { path = "crates/kuali-engine" }
+
+anyhow = "1"
+thiserror = "2"
+async-trait = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
+directories = "6"
+futures = "0.3"
+hmac = "0.12"
+hex = "0.4"
+parking_lot = "0.12"
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+] }
+rubato = "0.16"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha2 = "0.10"
+tokio = { version = "1", features = ["full"] }
+tokio-tungstenite = { version = "0.28", default-features = false, features = ["handshake"] }
+futures-util = "0.3"
+toml = "0.8"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+serenity = { version = "0.12", default-features = false, features = [
+    "client",
+    "gateway",
+    "rustls_backend",
+    "model",
+    "cache",
+] }
+songbird = { version = "0.6", features = ["serenity", "driver", "receive", "rustls", "builtin-queue"] }
+symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
+whisper-rs = "0.16"
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = 3
+strip = true
