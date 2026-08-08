@@ -1,0 +1,22 @@
+[package]
+name = "kuali-stt"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+kuali-core.workspace = true
+
+futures.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+whisper-rs.workspace = true
+
+# Metal on Apple Silicon enables real-time `large-v3-turbo` transcription
+# without saturating the CPU.
+[target.'cfg(target_os = "macos")'.dependencies]
+whisper-rs = { workspace = true, features = ["metal"] }
