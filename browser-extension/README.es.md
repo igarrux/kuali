@@ -4,8 +4,7 @@
 
 Conecta reuniones de Google Meet, Microsoft Teams y Zoom con la aplicación
 local de Kuali. Tú sigues siendo un participante normal; no entra una cuenta de
-bot externa. YouTube se excluyó a propósito y la extensión no pide permiso para
-ese sitio.
+bot externa.
 
 ## Instalar para probar
 

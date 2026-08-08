@@ -4,8 +4,7 @@
 
 This unpacked Chrome/Chromium extension connects Google Meet, Microsoft Teams,
 and Zoom meetings to the Kuali desktop app. You remain a normal participant in
-the meeting; no external bot account joins it. YouTube is intentionally not
-supported and the manifest requests no access to it.
+the meeting; no external bot account joins it.
 
 ## Install for development
 

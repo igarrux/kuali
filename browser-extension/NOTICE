@@ -12,11 +12,9 @@ https://github.com/googleworkspace/meet-media-api-samples
 Upstream revision: 9baacb08c0ec3bd454816e4cf593a3f13462486b
 The samples are distributed under the Apache License, Version 2.0.
 
-Kuali substantially modified the upstream approach: Vexa services, API keys,
-telemetry, bot management, transcript UI, recording upload, and YouTube support
-were removed; the extension was renamed and redesigned around Kuali's local
-WebSocket, per-frame channel namespaces, participant ID/name/avatar bindings,
-and explicit separate-versus-mixed audio semantics.
+Kuali substantially modified the upstream approach and redesigned the extension
+around Kuali's local WebSocket, per-frame channel namespaces, participant
+ID/name/avatar bindings, and explicit separate-versus-mixed audio semantics.
 
 The Kuali name and artwork belong to the Kuali project. Vexa names and artwork
 are not bundled with this extension.
