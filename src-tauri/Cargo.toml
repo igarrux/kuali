@@ -1,0 +1,31 @@
+[package]
+name = "kuali-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+description = "Local, speaker-aware meeting transcription for Discord and browser calls"
+
+[[bin]]
+name = "kuali"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+kuali-core.workspace = true
+kuali-engine.workspace = true
+kuali-llm.workspace = true
+kuali-stt.workspace = true
+kuali-store.workspace = true
+
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-dialog = "2"
+tauri-plugin-opener = "2"
+tauri-plugin-autostart = "2"
+tokio.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true

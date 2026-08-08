@@ -1,0 +1,1220 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0b0e13" />
+    <title>Kuali</title>
+    <link rel="icon" type="image/svg+xml" href="kuali-logo.svg" />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#content">Saltar al contenido</a>
+    <header class="topbar">
+      <a class="brand brand-button" id="btn-home" href="#home" aria-label="Ir a Inicio">
+        <img
+          class="brand-logo"
+          src="kuali-logo.svg"
+          width="34"
+          height="34"
+          alt=""
+          fetchpriority="high"
+        />
+        <div>
+          <h1>Kuali</h1>
+          <p class="brand-sub">Tu memoria para reuniones</p>
+        </div>
+      </a>
+
+      <div class="status" id="status" role="status" aria-live="polite">
+        <span class="status-dot" id="status-dot"></span>
+        <span class="status-copy">
+          <small>Estado</small>
+          <strong id="status-text">Iniciando…</strong>
+        </span>
+        <span class="elapsed" id="elapsed" hidden></span>
+      </div>
+
+      <div class="topbar-actions">
+        <button type="button" class="ghost compact" id="btn-guide">
+          <span aria-hidden="true">?</span> Guía
+        </button>
+        <button type="button" class="ghost compact" id="btn-folder" title="Abrir la carpeta de reuniones">
+          <span aria-hidden="true">↗</span> Carpeta
+        </button>
+        <button type="button" class="ghost compact" id="btn-settings">
+          <span aria-hidden="true">⚙</span> Ajustes
+        </button>
+      </div>
+    </header>
+
+    <main class="layout" id="app-layout">
+      <aside class="sidebar">
+        <nav class="app-nav" aria-label="Navegación principal">
+          <button type="button" class="app-nav-item active" id="nav-home" aria-current="page">
+            <span class="nav-glyph" aria-hidden="true">⌂</span>
+            <span>Inicio</span>
+          </button>
+          <button type="button" class="app-nav-item" id="nav-tasks">
+            <span class="nav-glyph" aria-hidden="true">✓</span>
+            <span>Tareas</span>
+            <span class="nav-count" id="pending-task-count" hidden></span>
+          </button>
+        </nav>
+
+        <div class="sidebar-library-content" id="sidebar-library-content">
+        <section class="live-library" id="live-library" aria-labelledby="live-library-title" hidden>
+          <div class="live-library-head">
+            <div>
+              <span class="eyebrow">Ahora</span>
+              <h2 id="live-library-title">En vivo</h2>
+            </div>
+            <span class="live-count" id="live-meeting-count">0</span>
+          </div>
+          <ul class="live-meeting-list" id="live-meeting-list" data-i18n-skip></ul>
+        </section>
+
+        <div class="sidebar-divider"></div>
+        <div class="sidebar-head">
+          <div>
+            <span class="eyebrow">Biblioteca</span>
+            <h2>Reuniones</h2>
+          </div>
+          <div class="sidebar-head-actions">
+            <span class="count" id="meeting-count"></span>
+          </div>
+        </div>
+        <div class="library-search">
+          <label class="sr-only" for="library-search">Buscar en la biblioteca</label>
+          <span aria-hidden="true">⌕</span>
+          <input
+            type="search"
+            id="library-search"
+            name="meeting-search"
+            placeholder="Canal, fecha o contenido…"
+            autocomplete="off"
+            spellcheck="false"
+          />
+        </div>
+        <p
+          class="library-search-status"
+          id="library-search-status"
+          role="status"
+          aria-live="polite"
+        ></p>
+        <div class="library-bulk-actions" id="library-bulk-actions" hidden>
+          <span id="library-selection-count">0 seleccionadas</span>
+          <div>
+            <button type="button" class="ghost" id="btn-select-visible">Todas</button>
+            <button type="button" class="ghost danger" id="btn-delete-selected" disabled>
+              Eliminar
+            </button>
+            <button type="button" class="ghost" id="btn-cancel-selection">Cancelar</button>
+          </div>
+        </div>
+        <ul class="meeting-list" id="meeting-list" aria-label="Reuniones por canal" data-i18n-skip></ul>
+        <p class="empty-hint" id="history-empty">
+          Tus reuniones aparecerán aquí cuando Kuali termine de escucharlas.
+        </p>
+        <div class="sidebar-foot">
+          <span class="privacy-mark" aria-hidden="true"></span>
+          <span>Audio y transcripciones locales</span>
+        </div>
+        </div>
+      </aside>
+
+      <section class="content" id="content">
+        <!-- Incomplete configuration -->
+        <div class="pane setup" id="pane-setup" hidden>
+          <div class="setup-card">
+            <div class="setup-visual" aria-hidden="true">
+              <span class="setup-orbit"></span>
+              <img class="setup-logo" src="kuali-logo.svg" width="112" height="112" alt="" />
+            </div>
+            <div class="setup-content">
+              <span class="eyebrow">Configuración inicial</span>
+              <h2>Preparemos a Kuali</h2>
+              <p class="lead">
+                Solo necesita el bot de Discord. Seguir a un usuario concreto es opcional.
+              </p>
+              <ul class="missing" id="missing-list" data-i18n-skip></ul>
+              <p class="note">
+                Kuali usa un bot invitado al servidor; nunca automatiza tu cuenta personal.
+              </p>
+              <button type="button" class="primary" id="btn-open-settings">Completar configuración</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- No meeting selected -->
+        <div class="pane idle" id="pane-idle" hidden>
+          <div class="idle-shell">
+            <div class="listening-visual" aria-hidden="true">
+              <span class="wave wave-one"></span>
+              <span class="wave wave-two"></span>
+              <span class="wave wave-three"></span>
+              <span class="listening-core"><i></i><i></i><i></i></span>
+            </div>
+            <span class="eyebrow" id="idle-eyebrow">Seguimiento automático</span>
+            <h2 id="idle-title">Kuali está listo para una llamada</h2>
+            <p id="idle-sub">
+              Entra a un canal de voz de Discord. Kuali te seguirá y empezará a transcribir.
+            </p>
+            <div class="readiness" aria-label="Estado de preparación">
+              <div class="readiness-item">
+                <span class="ready-dot" id="ready-discord-dot"></span>
+                <span><small>Discord</small><strong id="ready-discord">Conectado</strong></span>
+              </div>
+              <div class="readiness-item">
+                <span class="ready-dot" id="ready-follow-dot"></span>
+                <span><small>Entrada a llamadas</small><strong id="ready-follow">Preparando…</strong></span>
+              </div>
+              <div class="readiness-item">
+                <span class="ready-dot" id="ready-web-dot"></span>
+                <span><small>Extensión web</small><strong id="ready-web">Preparando…</strong></span>
+              </div>
+              <div class="readiness-item">
+                <span class="ready-dot private"></span>
+                <span><small>Procesamiento</small><strong>En tu Mac</strong></span>
+              </div>
+            </div>
+            <button
+              type="button"
+              class="ghost compact idle-follow-toggle"
+              id="btn-toggle-follow"
+              aria-pressed="true"
+              hidden
+            >
+              Pausar seguimiento de Discord
+            </button>
+          </div>
+        </div>
+
+        <!-- Tasks across all meetings -->
+        <div class="pane tasks-pane" id="pane-tasks" hidden>
+          <div class="page-head">
+            <div>
+              <span class="eyebrow">Trabajo pendiente</span>
+              <h2>Tareas</h2>
+              <p>Todo lo acordado, sin tener que recordar en qué llamada se dijo.</p>
+            </div>
+            <span class="page-stat" id="tasks-page-count">0 pendientes</span>
+          </div>
+
+          <div class="task-filters" aria-label="Filtros de tareas">
+            <label class="task-filter-control task-search-control">
+              <span>Buscar</span>
+              <span class="task-search"><span aria-hidden="true">⌕</span><input type="search" id="tasks-search" name="tasks-search" placeholder="Escribe una tarea…" autocomplete="off" /></span>
+            </label>
+
+            <div class="task-filter-control task-person-filter">
+              <span>Personas</span>
+              <button type="button" class="filter-trigger" id="tasks-person-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="tasks-person-popover">
+                <span id="tasks-person-label">Todas las personas</span><span aria-hidden="true">⌄</span>
+              </button>
+              <div class="filter-popover people-popover" id="tasks-person-popover" role="dialog" aria-label="Elegir personas" hidden>
+                <label class="popover-search" for="tasks-person-search"><span aria-hidden="true">⌕</span><input type="search" id="tasks-person-search" name="tasks-person-search" placeholder="Buscar persona…" autocomplete="off" /></label>
+                <div class="people-options" id="tasks-person-options" role="group" aria-label="Personas disponibles"></div>
+                <p class="filter-result-note" id="tasks-person-result-note"></p>
+                <div class="filter-popover-actions"><button type="button" class="ghost" id="btn-clear-task-people">Limpiar</button><button type="button" class="primary" id="btn-close-task-people">Listo</button></div>
+              </div>
+            </div>
+
+            <label class="task-filter-control">
+              <span>Reunión de origen</span>
+              <select id="tasks-meeting-filter" name="tasks-meeting-filter"><option value="all">Todas</option></select>
+            </label>
+
+            <div class="task-filter-control task-date-filter">
+              <span>Fecha</span>
+              <button type="button" class="filter-trigger" id="tasks-date-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="tasks-date-popover"><span id="tasks-date-label">Cualquier fecha</span><span aria-hidden="true">⌄</span></button>
+              <div class="filter-popover date-popover" id="tasks-date-popover" role="dialog" aria-label="Elegir rango de fechas" hidden>
+                <div class="date-range-fields">
+                  <label for="tasks-date-from"><span>Desde</span><input type="date" id="tasks-date-from" name="tasks-date-from" autocomplete="off" /></label>
+                  <label for="tasks-date-to"><span>Hasta</span><input type="date" id="tasks-date-to" name="tasks-date-to" autocomplete="off" /></label>
+                </div>
+                <p class="date-range-error" id="tasks-date-error" role="status" aria-live="polite"></p>
+                <div class="filter-popover-actions"><button type="button" class="ghost" id="btn-clear-task-dates">Limpiar</button><button type="button" class="primary" id="btn-close-task-dates">Aplicar rango</button></div>
+              </div>
+            </div>
+
+            <label class="task-filter-control">
+              <span>Estado</span>
+              <select id="tasks-status-filter" name="tasks-status-filter">
+                <option value="pending">Pendientes</option>
+                <option value="done">Completadas</option>
+                <option value="all">Todas</option>
+              </select>
+            </label>
+          </div>
+          <div class="global-task-list" id="global-task-list" aria-live="polite" data-i18n-skip></div>
+        </div>
+
+        <!-- Setup guide, always available and shown on first launch -->
+        <div class="pane guide-pane" id="pane-guide" hidden>
+          <div class="page-head guide-head">
+            <div>
+              <span class="eyebrow">Configuración guiada</span>
+              <h2>Conecta Kuali a tus reuniones</h2>
+              <p>Completa una integración o ambas. Puedes volver aquí en cualquier momento.</p>
+            </div>
+            <button type="button" class="ghost" id="btn-finish-guide">Terminar por ahora</button>
+          </div>
+
+          <div class="guide-grid">
+            <section class="guide-card" aria-labelledby="guide-discord-title">
+              <div class="guide-card-head">
+                <span class="integration-logo discord" aria-hidden="true">D</span>
+                <div><span class="eyebrow">Opción 1</span><h3 id="guide-discord-title">Discord</h3></div>
+                <span class="guide-state" id="guide-discord-state">Sin configurar</span>
+              </div>
+              <div class="guide-stepper" id="discord-guide-stepper">
+                <div class="guide-progress-head">
+                  <span id="discord-guide-progress-label">Paso 1 de 8</span>
+                  <span id="discord-guide-progress-title">Abre el portal</span>
+                </div>
+                <div
+                  class="guide-progress-track"
+                  role="progressbar"
+                  aria-label="Progreso de configuración de Discord"
+                  aria-valuemin="1"
+                  aria-valuemax="8"
+                  aria-valuenow="1"
+                  id="discord-guide-progress"
+                ><span id="discord-guide-progress-bar"></span></div>
+
+                <div class="guide-step-pages">
+                  <section class="guide-step-page" data-discord-guide-step="0" aria-labelledby="discord-step-1-title">
+                    <span class="guide-step-number" aria-hidden="true">1</span>
+                    <div>
+                      <span class="eyebrow">Portal de desarrolladores</span>
+                      <h4 id="discord-step-1-title">Abre el portal de Discord</h4>
+                      <p>Inicia sesión con tu cuenta de Discord. Aquí crearás un bot independiente para Kuali; tu cuenta personal nunca se automatiza.</p>
+                      <button type="button" class="primary guide-action" id="btn-open-discord-portal">Abrir portal de Discord ↗</button>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="1" aria-labelledby="discord-step-2-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">2</span>
+                    <div>
+                      <span class="eyebrow">Crear aplicación</span>
+                      <h4 id="discord-step-2-title">Pulsa “Nueva aplicación”</h4>
+                      <p>Está en la esquina superior derecha. Escribe <strong>Kuali</strong>, acepta las condiciones y confirma con <strong>Crear</strong>.</p>
+                      <p class="guide-translation" data-language-only="es"><span aria-hidden="true">A</span> Si el portal aparece en inglés: <em>New Application</em> y <em>Create</em>.</p>
+                      <details class="guide-example" data-guide-image hidden>
+                        <summary>Ver ejemplo</summary>
+                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
+                          <img
+                            src="assets/guides/discord/discord-02-new-application.png"
+                            data-guide-src-es="assets/guides/discord/discord-02-new-application.png"
+                            data-guide-src-en="assets/guides/discord/en-discord-02-new-application.png"
+                            alt="Botón Nueva aplicación en el portal de Discord"
+                            width="2560"
+                            height="1440"
+                            decoding="async"
+                          />
+                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                        </button>
+                        <p class="guide-example-caption">Ejemplo: botón “Nueva aplicación”.</p>
+                      </details>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="2" aria-labelledby="discord-step-3-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">3</span>
+                    <div>
+                      <span class="eyebrow">Token privado</span>
+                      <h4 id="discord-step-3-title">Restablece y copia el token</h4>
+                      <p>En el panel izquierdo entra en <strong>Bot</strong>. Pulsa <strong>Restablecer token</strong>, confirma y copia el valor que muestra Discord.</p>
+                      <p class="guide-secret-note"><span aria-hidden="true">!</span> El token es una contraseña. No lo publiques, no lo subas a Git y no lo envíes a nadie.</p>
+                      <details class="guide-example" data-guide-image hidden>
+                        <summary>Ver ejemplo</summary>
+                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
+                          <img
+                            src="assets/guides/discord/discord-03-reset-token.png"
+                            data-guide-src-es="assets/guides/discord/discord-03-reset-token.png"
+                            data-guide-src-en="assets/guides/discord/en-discord-03-reset-token.png"
+                            alt="Botón Restablecer token en la sección Bot de Discord"
+                            width="2560"
+                            height="1440"
+                            decoding="async"
+                          />
+                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                        </button>
+                        <p class="guide-example-caption">Ejemplo: Bot → “Restablecer token”.</p>
+                      </details>
+                      <label class="guide-inline-field" for="guide-token">Pega aquí el token copiado</label>
+                      <input type="password" id="guide-token" name="guide-discord-token" placeholder="MTIz…" autocomplete="off" spellcheck="false" />
+                      <p class="guide-field-error" id="guide-token-error" role="alert"></p>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="3" aria-labelledby="discord-step-4-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">4</span>
+                    <div>
+                      <span class="eyebrow">Dónde se instala</span>
+                      <h4 id="discord-step-4-title">Activa “Instalación de servidor”</h4>
+                      <p>En el panel izquierdo entra en <strong>Instalaciones</strong>. En <strong>Contextos de instalación → Seleccionar métodos</strong>, marca <strong>Instalación de servidor</strong>. Kuali necesita pertenecer al servidor para entrar a sus canales de voz.</p>
+                      <p class="guide-translation" data-language-only="es"><span aria-hidden="true">A</span> En inglés: <em>Installation → Installation Contexts → Guild Install</em>.</p>
+                      <details class="guide-example" data-guide-image hidden>
+                        <summary>Ver ejemplo</summary>
+                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
+                          <img
+                            src="assets/guides/discord/discord-04-guild-install.png"
+                            data-guide-src-es="assets/guides/discord/discord-04-guild-install.png"
+                            data-guide-src-en="assets/guides/discord/en-discord-04-guild-install.png"
+                            alt="Instalación de servidor marcada en Contextos de instalación"
+                            width="2560"
+                            height="1440"
+                            decoding="async"
+                          />
+                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                        </button>
+                        <p class="guide-example-caption">Ejemplo: “Instalación de servidor” marcada.</p>
+                      </details>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="4" aria-labelledby="discord-step-5-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">5</span>
+                    <div>
+                      <span class="eyebrow">Ámbitos</span>
+                      <h4 id="discord-step-5-title">Configura el enlace y los ámbitos</h4>
+                      <p>En <strong>Enlace de instalación</strong>, elige <strong>Enlace proporcionado por Discord</strong>. Luego, en <strong>Ajustes de instalación predeterminados → Instalación de servidor → Ámbitos</strong>, añade:</p>
+                      <div class="guide-code-list" aria-label="Ámbitos necesarios"><code translate="no">applications.commands</code><code translate="no">bot</code></div>
+                      <p><code translate="no">applications.commands</code> muestra los comandos de Kuali y <code translate="no">bot</code> añade el bot al servidor.</p>
+                      <details class="guide-example" data-guide-image hidden>
+                        <summary>Ver ejemplo</summary>
+                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
+                          <img
+                            src="assets/guides/discord/discord-05-install-link-scopes.png"
+                            data-guide-src-es="assets/guides/discord/discord-05-install-link-scopes.png"
+                            data-guide-src-en="assets/guides/discord/en-discord-05-install-link-scopes.png"
+                            alt="Ámbitos applications.commands y bot añadidos en Instalación de servidor"
+                            width="2560"
+                            height="1440"
+                            decoding="async"
+                          />
+                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                        </button>
+                        <p class="guide-example-caption">Ejemplo: “Enlace proporcionado por Discord” y ambos ámbitos.</p>
+                      </details>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="5" aria-labelledby="discord-step-6-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">6</span>
+                    <div>
+                      <span class="eyebrow">Permisos mínimos</span>
+                      <h4 id="discord-step-6-title">Selecciona lo que Kuali necesita</h4>
+                      <p>Al añadir el ámbito <code translate="no">bot</code> aparecerá <strong>Permisos</strong>. Marca solamente:</p>
+                      <ul class="guide-permission-list">
+                        <li>Ver canales</li>
+                        <li>Enviar mensajes</li>
+                        <li>Enviar mensajes en los hilos</li>
+                        <li>Conectar</li>
+                        <li>Hablar</li>
+                        <li>Usar actividad de voz</li>
+                      </ul>
+                      <p class="guide-translation"><span aria-hidden="true">✓</span> No marques <strong>Administrador</strong>; Kuali no necesita moderar ni leer tus mensajes.</p>
+                      <details class="guide-example" data-guide-image hidden>
+                        <summary>Ver ejemplo</summary>
+                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
+                          <img
+                            src="assets/guides/discord/discord-06-bot-permissions.png"
+                            data-guide-src-es="assets/guides/discord/discord-06-bot-permissions.png"
+                            data-guide-src-en="assets/guides/discord/en-discord-06-bot-permissions.png"
+                            alt="Permisos mínimos del bot Kuali seleccionados en Discord"
+                            width="2560"
+                            height="1440"
+                            decoding="async"
+                          />
+                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                        </button>
+                        <p class="guide-example-caption">Ejemplo: los seis permisos mínimos seleccionados.</p>
+                      </details>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="6" aria-labelledby="discord-step-7-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">7</span>
+                    <div>
+                      <span class="eyebrow">Invitar y conectar</span>
+                      <h4 id="discord-step-7-title">Invita el bot a tu servidor</h4>
+                      <p>Copia el enlace de la sección <strong>Enlace de instalación</strong>, ábrelo, pulsa <strong>Añadir a un servidor</strong> y elige el servidor donde usarás Kuali.</p>
+                      <p>Después escribe tu nombre de usuario real de Discord. Kuali buscará una sola cuenta exacta en los servidores que comparte contigo y guardará internamente su ID.</p>
+                      <label class="guide-inline-field" for="guide-discord-username">Tu usuario de Discord</label>
+                      <input type="text" id="guide-discord-username" name="guide-discord-username" placeholder="@tu_usuario" autocomplete="off" spellcheck="false" translate="no" />
+                      <p class="guide-field-hint">Usa el <strong>@usuario</strong>, no el nombre visible del perfil.</p>
+                      <p class="guide-field-error" id="guide-username-error" role="alert"></p>
+                      <button type="button" class="primary guide-save" id="btn-save-discord-guide">Guardar token y conectar</button>
+                      <p class="guide-note" id="guide-discord-note" role="status" aria-live="polite">Después podrás cambiar el token en Ajustes → Discord.</p>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-discord-guide-step="7" aria-labelledby="discord-step-8-title" hidden>
+                    <span class="guide-step-number complete" aria-hidden="true">✓</span>
+                    <div>
+                      <span class="eyebrow">Todo listo</span>
+                      <h4 id="discord-step-8-title">Empieza a usar Kuali</h4>
+                      <p>Entra a un canal de voz. Con el usuario ya reconocido, Kuali entrará automáticamente detrás de ti.</p>
+                      <ul class="guide-command-list">
+                        <li><code translate="no">/grabar · /record</code><span>Invita a Kuali al canal de voz en el que estás, aunque el seguimiento esté apagado.</span></li>
+                        <li><strong>Ver transcripción completa</strong><span>El botón aparece debajo del resumen y entrega el texto completo de forma privada.</span></li>
+                      </ul>
+                      <p class="guide-success-note">Si cambias tu @usuario, actualízalo en Ajustes → Discord para que Kuali vuelva a reconocerte.</p>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="guide-stepper-actions">
+                  <button type="button" class="ghost" id="btn-discord-guide-back" disabled>← Atrás</button>
+                  <button type="button" class="primary" id="btn-discord-guide-next">Siguiente →</button>
+                </div>
+              </div>
+            </section>
+
+            <section class="guide-card" aria-labelledby="guide-meet-title">
+              <div class="guide-card-head">
+                <span class="integration-logo meet" aria-hidden="true">M</span>
+                <div><span class="eyebrow">Opción 2</span><h3 id="guide-meet-title">Meet, Teams y Zoom</h3></div>
+                <span class="guide-state" id="guide-meet-state">Extensión manual</span>
+              </div>
+              <div class="guide-stepper" id="meet-guide-stepper">
+                <div class="guide-progress-head">
+                  <span id="meet-guide-progress-label">Paso 1 de 5</span>
+                  <span id="meet-guide-progress-title">Elige tu navegador</span>
+                </div>
+                <div class="guide-progress-track" role="progressbar" aria-label="Progreso de configuración de la extensión" aria-valuemin="1" aria-valuemax="5" aria-valuenow="1" id="meet-guide-progress"><span id="meet-guide-progress-bar"></span></div>
+
+                <div class="guide-step-pages">
+                  <section class="guide-step-page" data-meet-guide-step="0" aria-labelledby="meet-step-1-title">
+                    <span class="guide-step-number" aria-hidden="true">1</span>
+                    <div>
+                      <span class="eyebrow">Navegador</span>
+                      <h4 id="meet-step-1-title">Abre la página de extensiones</h4>
+                      <p>Elige el navegador donde usarás Meet, Teams o Zoom. Kuali abrirá directamente su administrador de extensiones.</p>
+                      <div class="browser-actions" role="group" aria-label="Abrir extensiones del navegador">
+                        <button type="button" class="ghost browser-action" data-browser="chrome"><span aria-hidden="true">C</span>Chrome</button>
+                        <button type="button" class="ghost browser-action" data-browser="edge"><span aria-hidden="true">E</span>Edge</button>
+                        <button type="button" class="ghost browser-action" data-browser="brave"><span aria-hidden="true">B</span>Brave</button>
+                        <button type="button" class="ghost browser-action" data-browser="arc"><span aria-hidden="true">A</span>Arc</button>
+                      </div>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-meet-guide-step="1" aria-labelledby="meet-step-2-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">2</span>
+                    <div>
+                      <span class="eyebrow">Administrador de extensiones</span>
+                      <h4 id="meet-step-2-title">Activa “Modo desarrollador”</h4>
+                      <p>Busca el interruptor <strong>Modo desarrollador</strong> en la página que se abrió y actívalo. Al hacerlo aparecerá el botón <strong>Cargar descomprimida</strong>.</p>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-meet-guide-step="2" aria-labelledby="meet-step-3-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">3</span>
+                    <div>
+                      <span class="eyebrow">Carpeta de Kuali</span>
+                      <h4 id="meet-step-3-title">Carga la extensión</h4>
+                      <p>Pulsa <strong>Cargar descomprimida</strong>. En el selector de carpetas presiona <kbd>⌘ Shift G</kbd>, pega la ruta y confirma.</p>
+                      <div class="copy-path"><code id="extension-path">Buscando carpeta…</code><button type="button" class="ghost" id="btn-copy-extension-path">Copiar ruta</button></div>
+                      <button type="button" class="ghost guide-action" id="btn-reveal-extension">Mostrar carpeta en Finder</button>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-meet-guide-step="3" aria-labelledby="meet-step-4-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">4</span>
+                    <div>
+                      <span class="eyebrow">Barra del navegador</span>
+                      <h4 id="meet-step-4-title">Fija Kuali para tenerlo a mano</h4>
+                      <p>Abre el menú de extensiones del navegador y fija <strong>Kuali</strong>. Así podrás iniciar o detener una grabación desde cualquier reunión.</p>
+                    </div>
+                  </section>
+
+                  <section class="guide-step-page" data-meet-guide-step="4" aria-labelledby="meet-step-5-title" hidden>
+                    <span class="guide-step-number complete" aria-hidden="true">✓</span>
+                    <div>
+                      <span class="eyebrow">Prueba rápida</span>
+                      <h4 id="meet-step-5-title">Comprueba que Kuali está disponible</h4>
+                      <p>Mantén abierta la aplicación, entra a una reunión y pulsa el icono de Kuali. La extensión debe indicar que la app está conectada y permitirte grabar.</p>
+                      <p class="guide-success-note">El puerto predeterminado es <code>9099</code>. Solo necesitas tocarlo si lo cambiaste en Ajustes → Integraciones.</p>
+                    </div>
+                  </section>
+                </div>
+
+                <div class="guide-stepper-actions">
+                  <button type="button" class="ghost" id="btn-meet-guide-back" disabled>← Atrás</button>
+                  <button type="button" class="primary" id="btn-meet-guide-next">Siguiente →</button>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <!-- Live or saved meeting -->
+        <div class="pane meeting" id="pane-meeting" hidden>
+          <div class="meeting-head">
+            <div>
+              <span class="eyebrow">Reunión</span>
+              <h2 id="meeting-title"></h2>
+              <p class="meeting-meta" id="meeting-meta"></p>
+            </div>
+            <div class="meeting-actions">
+              <button type="button" class="ghost danger" id="btn-leave-call" hidden>Sacar de la llamada</button>
+              <button type="button" class="ghost" id="btn-resummarize">Rehacer resumen</button>
+              <button type="button" class="ghost" id="btn-export-md">Markdown</button>
+              <button type="button" class="ghost" id="btn-export-json">JSON</button>
+              <button type="button" class="ghost danger" id="btn-delete">Eliminar</button>
+            </div>
+          </div>
+
+          <div class="speakers" id="speakers" data-i18n-skip></div>
+
+          <div class="columns">
+            <div class="col transcript-col">
+              <div class="col-head">
+                <div class="col-title">
+                  <h3>Transcripción</h3>
+                  <span class="live-pill" id="transcript-live" hidden><i></i> En vivo</span>
+                </div>
+                <label class="toggle">
+                  <input type="checkbox" id="follow-live" checked />
+                  <span>Seguir en vivo</span>
+                </label>
+              </div>
+              <div class="transcript" id="transcript" data-i18n-skip></div>
+            </div>
+
+            <div class="col insights-col">
+              <div class="meeting-panel-tabs" role="tablist" aria-label="Información de la reunión">
+                <button type="button" id="meeting-tab-summary" role="tab" aria-selected="true" aria-controls="meeting-panel-summary">Resumen</button>
+                <button type="button" id="meeting-tab-tasks" role="tab" aria-selected="false" aria-controls="meeting-panel-tasks" tabindex="-1">Tareas <span id="meeting-task-count"></span></button>
+              </div>
+              <section class="meeting-insight-panel" id="meeting-panel-summary" role="tabpanel" aria-labelledby="meeting-tab-summary">
+                <div class="summary" id="summary" data-i18n-skip></div>
+              </section>
+              <section class="meeting-insight-panel meeting-tasks" id="meeting-panel-tasks" role="tabpanel" aria-labelledby="meeting-tab-tasks" hidden>
+                <div id="task-assignee-filter-section">
+                  <div class="assignee-filter-head"><span>Filtrar por persona</span><small>Solo aparecen personas con tareas</small></div>
+                  <div class="assignee-filter-list" id="task-assignee-filter" role="group" aria-label="Filtrar tareas por persona" data-i18n-skip></div>
+                </div>
+                <div id="meeting-tasks-list" data-i18n-skip></div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <!-- Settings -->
+    <div class="modal-backdrop" id="settings-modal" hidden>
+      <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
+        <div class="modal-head">
+          <div>
+            <span class="eyebrow">Kuali</span>
+            <h2 id="settings-title">Ajustes</h2>
+            <p>Configura cada parte de Kuali por separado.</p>
+          </div>
+          <button type="button" class="ghost icon" id="btn-close-settings" aria-label="Cerrar">×</button>
+        </div>
+
+        <div class="modal-body">
+          <nav class="settings-nav" role="tablist" aria-label="Secciones de ajustes" aria-orientation="vertical">
+            <button
+              type="button"
+              class="settings-tab active"
+              id="settings-tab-discord"
+              role="tab"
+              aria-selected="true"
+              aria-controls="settings-panel-discord"
+              data-settings-tab="discord"
+            >
+              <span class="tab-index" aria-hidden="true">01</span>
+              <span><strong>Discord</strong><small>Conexión y llamadas</small></span>
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settings-tab-transcription"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settings-panel-transcription"
+              data-settings-tab="transcription"
+              tabindex="-1"
+            >
+              <span class="tab-index" aria-hidden="true">02</span>
+              <span><strong>Transcripción</strong><small>Whisper y vocabulario</small></span>
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settings-tab-summary"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settings-panel-summary"
+              data-settings-tab="summary"
+              tabindex="-1"
+            >
+              <span class="tab-index" aria-hidden="true">03</span>
+              <span><strong>Resumen</strong><small>Proveedor y tareas</small></span>
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settings-tab-integrations"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settings-panel-integrations"
+              data-settings-tab="integrations"
+              tabindex="-1"
+            >
+              <span class="tab-index" aria-hidden="true">04</span>
+              <span><strong>Integraciones</strong><small>Navegador y webhooks</small></span>
+            </button>
+            <button
+              type="button"
+              class="settings-tab"
+              id="settings-tab-application"
+              role="tab"
+              aria-selected="false"
+              aria-controls="settings-panel-application"
+              data-settings-tab="application"
+              tabindex="-1"
+            >
+              <span class="tab-index" aria-hidden="true">05</span>
+              <span><strong>Aplicación</strong><small>Inicio y ayuda</small></span>
+            </button>
+          </nav>
+
+          <div class="settings-panels">
+            <section
+              class="field-group settings-panel"
+              id="settings-panel-discord"
+              role="tabpanel"
+              aria-labelledby="settings-tab-discord"
+              data-settings-panel="discord"
+            >
+              <div class="group-head">
+                <div>
+                  <h3>Discord</h3>
+                  <p>El bot que entra contigo al canal y publica los resultados.</p>
+                </div>
+              </div>
+
+              <label class="field">
+                <span>Token del bot</span>
+                <input
+                  type="password"
+                  id="cfg-token"
+                  name="discord-bot-token"
+                  placeholder="MTIz…"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <small
+                  >Se guarda en tu equipo con permisos 0600. Lo sacas del
+                  <em>Bot → Restablecer token</em> del portal de desarrolladores.</small
+                >
+              </label>
+
+              <label class="field">
+                <span>Tu usuario de Discord <em class="optional">Opcional</em></span>
+                <input
+                  type="text"
+                  id="cfg-follow"
+                  name="discord-username"
+                  placeholder="@tu_usuario"
+                  autocomplete="off"
+                  spellcheck="false"
+                  translate="no"
+                />
+                <small
+                  >Escribe el @usuario real, no el nombre visible. Kuali buscará tu cuenta;
+                  si lo dejas vacío, entra únicamente mediante <em>/grabar</em>.</small
+                >
+              </label>
+
+              <label class="check">
+                <input
+                  type="checkbox"
+                  id="cfg-follow-automatically"
+                  name="follow-automatically"
+                />
+                <span>
+                  Seguirme automáticamente al entrar a una llamada
+                  <small
+                    >Puedes apagarlo sin borrar tu cuenta vinculada. Kuali seguirá disponible mediante
+                    <em>/grabar</em>.</small
+                  >
+                </span>
+              </label>
+
+              <div class="consent-note">
+                <span aria-hidden="true">!</span>
+                <p>
+                  <strong>Aviso de consentimiento obligatorio</strong>
+                  Kuali lo dice en voz alta, lo publica en el chat y registra la entrega al entrar
+                  y cada vez que llega una persona nueva.
+                </p>
+              </div>
+
+              <label class="check">
+                <input type="checkbox" id="cfg-leave-empty" name="leave-when-empty" />
+                <span>Salir cuando el canal se quede vacío</span>
+              </label>
+
+              <label class="check">
+                <input type="checkbox" id="cfg-post-summary" name="post-summary" />
+                <span>Publicar el resumen en el canal al terminar</span>
+              </label>
+            </section>
+
+            <section
+              class="field-group settings-panel"
+              id="settings-panel-transcription"
+              role="tabpanel"
+              aria-labelledby="settings-tab-transcription"
+              data-settings-panel="transcription"
+              hidden
+            >
+              <div class="group-head">
+                <div>
+                  <h3>Transcripción</h3>
+                  <p>Whisper escucha localmente; el audio no sale de tu equipo.</p>
+                </div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-head">
+                  <h4>Reconocimiento</h4>
+                  <p>Calidad, velocidad e idioma del audio.</p>
+                </div>
+                <label class="field">
+                  <span>Modelo de Whisper</span>
+                  <select id="cfg-model" name="whisper-model"></select>
+                  <small id="model-hint"></small>
+                </label>
+
+                <label class="field">
+                  <span>Idioma del audio</span>
+                  <select id="cfg-language" name="whisper-language">
+                    <option value="es">Español</option>
+                    <option value="en">Inglés</option>
+                    <option value="auto">Detectar automáticamente (no recomendado)</option>
+                  </select>
+                  <small>El idioma y el vocabulario se fijan al entrar y se aplican desde la próxima llamada. Detectar automáticamente decide idioma en cada turno de habla, y en las respuestas cortas se equivoca: un «ajá» de medio segundo puede acabar transcrito en ruso.</small>
+                </label>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-head">
+                  <h4>Vocabulario personalizado</h4>
+                  <p>Nombres propios y términos técnicos con su escritura exacta.</p>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfg-vocabulary-input">Añadir término</label>
+                  <div class="vocabulary-entry">
+                    <input
+                      type="text"
+                      id="cfg-vocabulary-input"
+                      name="custom-vocabulary"
+                      placeholder="Ej.: nombre del proyecto…"
+                      maxlength="80"
+                      autocomplete="off"
+                      spellcheck="false"
+                      translate="no"
+                    />
+                    <button type="button" class="ghost" id="btn-add-vocabulary">Añadir</button>
+                  </div>
+                  <div class="vocabulary-chips" id="vocabulary-chips" data-i18n-skip></div>
+                  <small>Whisper usará estas grafías como contexto desde la próxima llamada.</small>
+                </div>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-head">
+                  <h4>Almacenamiento</h4>
+                  <p>Dónde guardar los pesos descargables del modelo.</p>
+                </div>
+                <div class="field">
+                  <label class="field-label" for="cfg-models-directory">Carpeta de los modelos</label>
+                  <div class="path-picker">
+                    <input
+                      type="text"
+                      id="cfg-models-directory"
+                      name="models-directory"
+                      placeholder="~/.kuali"
+                      autocomplete="off"
+                      spellcheck="false"
+                    />
+                    <button type="button" class="ghost" id="btn-choose-models-directory">
+                      Elegir…
+                    </button>
+                  </div>
+                  <small id="models-directory-hint"></small>
+                </div>
+
+                <div class="download" id="download-row" aria-live="polite" hidden>
+                  <div class="progress"><div class="progress-bar" id="progress-bar"></div></div>
+                  <span class="progress-text" id="progress-text"></span>
+                </div>
+                <div class="model-weight-actions">
+                  <button type="button" class="ghost" id="btn-download">
+                    Descargar el modelo seleccionado
+                  </button>
+                </div>
+                <div class="installed-models-section">
+                  <div class="installed-models-head">
+                    <strong>Pesos descargados</strong>
+                    <small>Cada botón elimina solamente el peso indicado.</small>
+                  </div>
+                  <div class="installed-models" id="installed-models" data-i18n-skip></div>
+                </div>
+              </div>
+            </section>
+
+            <section
+              class="field-group settings-panel"
+              id="settings-panel-summary"
+              role="tabpanel"
+              aria-labelledby="settings-tab-summary"
+              data-settings-panel="summary"
+              hidden
+            >
+              <div class="group-head">
+                <div>
+                  <h3>Resúmenes y tareas</h3>
+                  <p>Decide si Kuali puede procesar las transcripciones con un LLM.</p>
+                </div>
+              </div>
+
+              <label class="feature-toggle summary-feature-toggle">
+                <input type="checkbox" id="cfg-summarize" name="summarize-on-leave" />
+                <span class="feature-toggle-copy">
+                  <strong>Resúmenes y tareas</strong>
+                  <small>Al activarlo, Kuali usa el proveedor configurado cuando termina una reunión. Si está apagado, ninguna transcripción se envía a un LLM.</small>
+                </span>
+              </label>
+
+              <div id="summary-settings-details">
+              <div class="settings-subsection">
+                <div class="subsection-head">
+                  <h4>Proveedor</h4>
+                  <p>Una sesión que ya tengas iniciada, o una clave de API.</p>
+                </div>
+
+                <div class="provider-list" id="provider-list" role="radiogroup" aria-label="Proveedor del resumen" data-i18n-skip></div>
+                <small id="provider-hint"></small>
+              </div>
+
+              <div class="settings-subsection" id="provider-settings" hidden>
+                <div class="subsection-head">
+                  <h4 id="provider-settings-title">Ajustes del proveedor</h4>
+                  <p id="provider-settings-hint"></p>
+                </div>
+
+                <div class="field" id="provider-key-field" hidden>
+                  <label class="field-label" for="cfg-provider-key">Clave de API</label>
+                  <div class="secret-entry">
+                    <input
+                      type="password"
+                      id="cfg-provider-key"
+                      name="llm-api-key"
+                      placeholder="sk-…"
+                      autocomplete="off"
+                      spellcheck="false"
+                      translate="no"
+                    />
+                    <button
+                      type="button"
+                      class="ghost"
+                      id="btn-toggle-provider-key"
+                      aria-pressed="false"
+                    >
+                      Ver
+                    </button>
+                  </div>
+                  <small id="provider-key-hint"></small>
+                </div>
+
+                <div class="field" id="provider-base-url-field" hidden>
+                  <label class="field-label" for="cfg-provider-base-url">Dirección del servidor</label>
+                  <input
+                    type="text"
+                    id="cfg-provider-base-url"
+                    name="llm-base-url"
+                    placeholder="http://localhost:11434/v1"
+                    autocomplete="off"
+                    spellcheck="false"
+                    translate="no"
+                  />
+                  <small>Debe terminar donde empieza <code>/chat/completions</code>.</small>
+                </div>
+
+                <div class="field">
+                  <label class="field-label" for="cfg-provider-model">Modelo</label>
+                  <div class="model-picker">
+                    <input
+                      type="text"
+                      id="cfg-provider-model"
+                      name="llm-model"
+                      list="provider-model-options"
+                      placeholder="Predeterminado…"
+                      autocomplete="off"
+                      spellcheck="false"
+                      translate="no"
+                    />
+                    <button type="button" class="ghost" id="btn-refresh-models" hidden>
+                      Actualizar
+                    </button>
+                  </div>
+                  <datalist id="provider-model-options"></datalist>
+                  <small id="provider-model-hint"></small>
+                </div>
+
+                <div class="provider-test">
+                  <button type="button" class="ghost" id="btn-test-provider">Probar conexión</button>
+                  <span class="provider-test-result" id="provider-test-result" role="status" aria-live="polite"></span>
+                </div>
+              </div>
+
+              <label class="field">
+                <span>Idioma del resumen</span>
+                <input
+                  type="text"
+                  id="cfg-output-language"
+                  name="summary-language"
+                  placeholder="Español…"
+                  autocomplete="off"
+                />
+              </label>
+              </div>
+            </section>
+
+            <section
+              class="field-group settings-panel"
+              id="settings-panel-integrations"
+              role="tabpanel"
+              aria-labelledby="settings-tab-integrations"
+              data-settings-panel="integrations"
+              hidden
+            >
+              <div class="group-head">
+                <div>
+                  <h3>Integraciones</h3>
+                  <p>Conecta reuniones del navegador y avisa a otras aplicaciones.</p>
+                </div>
+              </div>
+
+              <div class="settings-subsection web-meetings-settings">
+                <div class="subsection-head integration-section-head">
+                  <div>
+                    <h4>Reuniones del navegador</h4>
+                    <p>Google Meet, Microsoft Teams y Zoom mediante la extensión Kuali.</p>
+                  </div>
+                  <span class="listener-state" id="web-listener-status">Comprobando…</span>
+                </div>
+
+                <label class="check">
+                  <input type="checkbox" id="cfg-web-enabled" name="web-meetings-enabled" />
+                  <span>
+                    Escuchar reuniones del navegador
+                    <small>Solo abre un receptor local; no expone nada a tu red.</small>
+                  </span>
+                </label>
+
+                <label class="field compact-field">
+                  <span>Puerto local de la extensión</span>
+                  <input
+                    type="number"
+                    id="cfg-web-port"
+                    name="web-meetings-port"
+                    min="1"
+                    max="65535"
+                    value="9099"
+                    inputmode="numeric"
+                  />
+                  <small>Debe ser el mismo puerto configurado en la extensión. Por defecto: 9099.</small>
+                </label>
+              </div>
+
+              <div class="webhook-contract">
+                <div>
+                  <span class="eyebrow">Evento</span>
+                  <strong><code>meeting.completed</code></strong>
+                </div>
+                <p>
+                  Kuali hace un <code>POST</code> después del resumen. Envía la transcripción
+                  íntegra con hablantes y tiempos, participantes, puntos clave, decisiones,
+                  tareas y preguntas. El audio nunca se envía.
+                </p>
+                <small>
+                  Firma: <code>X-Kuali-Signature: sha256=…</code> sobre
+                  <code>timestamp.cuerpo</code> usando el secreto compartido.
+                </small>
+              </div>
+
+              <div class="settings-subsection">
+                <div class="subsection-head webhook-section-head">
+                  <div>
+                    <h4>Aplicaciones suscritas</h4>
+                    <p>Pueden escuchar todos los canales o solamente uno.</p>
+                  </div>
+                  <button type="button" class="ghost" id="btn-add-webhook">
+                    Añadir aplicación
+                  </button>
+                </div>
+                <div class="webhook-list" id="webhook-list" data-i18n-skip></div>
+                <p class="webhook-empty" id="webhook-empty">
+                  Aún no hay aplicaciones suscritas.
+                </p>
+              </div>
+            </section>
+
+            <section
+              class="field-group settings-panel"
+              id="settings-panel-application"
+              role="tabpanel"
+              aria-labelledby="settings-tab-application"
+              data-settings-panel="application"
+              hidden
+            >
+              <div class="group-head">
+                <div>
+                  <h3>Aplicación</h3>
+                  <p>Haz que Kuali esté disponible antes de que empiece la llamada.</p>
+                </div>
+              </div>
+              <label class="field">
+                <span>Idioma de la interfaz</span>
+                <select id="cfg-ui-language" name="interface-language">
+                  <option value="auto">Automático (idioma del sistema)</option>
+                  <option value="es">Español</option>
+                  <option value="en">English</option>
+                </select>
+                <small>Solo cambia la interfaz; no modifica el idioma del audio ni del resumen.</small>
+              </label>
+              <label class="check">
+                <input type="checkbox" id="cfg-autostart" name="launch-at-login" />
+                <span>
+                  Abrir Kuali al iniciar sesión en este Mac
+                  <small>El receptor de la extensión y el seguimiento de Discord quedarán listos automáticamente.</small>
+                </span>
+              </label>
+              <div class="settings-guide-link">
+                <div><strong>¿Necesitas volver a configurar algo?</strong><p>La guía de Discord y Meet siempre está disponible desde Inicio.</p></div>
+                <button type="button" class="ghost" id="btn-settings-open-guide">Abrir guía</button>
+              </div>
+              <div class="settings-danger-zone">
+                <div>
+                  <span class="eyebrow">Zona de peligro</span>
+                  <strong>Borrar todos los datos de Kuali</strong>
+                  <p>Devuelve la aplicación al estado de una instalación nueva.</p>
+                </div>
+                <button type="button" class="ghost danger" id="btn-open-factory-reset">
+                  Borrar todos los datos…
+                </button>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="modal-foot">
+          <span class="save-note" id="save-note" role="status" aria-live="polite"></span>
+          <button type="button" class="ghost" id="btn-cancel-settings">Cancelar</button>
+          <button type="button" class="primary" id="btn-save-settings">Guardar cambios</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="context-menu" id="library-context-menu" role="menu" hidden>
+      <button type="button" id="context-select" role="menuitem">Seleccionar</button>
+      <div class="context-menu-separator" role="separator"></div>
+      <button type="button" class="danger" id="context-delete" role="menuitem">Eliminar…</button>
+    </div>
+
+    <div class="modal-backdrop confirm-backdrop" id="confirm-modal" hidden>
+      <div
+        class="confirm-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="confirm-title"
+        aria-describedby="confirm-description"
+      >
+        <span class="eyebrow" id="confirm-kind">Confirmar</span>
+        <h2 id="confirm-title">¿Estás seguro?</h2>
+        <div class="confirm-target" id="confirm-target"></div>
+        <p id="confirm-description"></p>
+        <div class="confirm-actions">
+          <button type="button" class="ghost" id="btn-confirm-cancel">Cancelar</button>
+          <button type="button" class="confirm-danger" id="btn-confirm-accept">Eliminar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop factory-reset-backdrop" id="factory-reset-modal" hidden>
+      <div
+        class="factory-reset-dialog"
+        role="alertdialog"
+        aria-modal="true"
+        aria-labelledby="factory-reset-title"
+        aria-describedby="factory-reset-description factory-reset-prompt"
+      >
+        <span class="eyebrow">Restablecimiento total</span>
+        <h2 id="factory-reset-title">¿Borrar todos los datos de Kuali?</h2>
+        <p id="factory-reset-description">Esta acción no se puede deshacer. Se eliminarán:</p>
+        <ul class="factory-reset-list">
+          <li>Configuración, bots vinculados, claves, webhooks y preferencias.</li>
+          <li>Reuniones, transcripciones, tareas y registros de consentimiento.</li>
+          <li>Todos los pesos descargados de Whisper, incluso en la carpeta externa elegida.</li>
+        </ul>
+        <p class="factory-reset-keeps">Kuali conservará Silero, el motor de Whisper, la extensión y cualquier archivo ajeno.</p>
+        <p id="factory-reset-prompt">Para confirmar, escribe exactamente:</p>
+        <code class="factory-reset-phrase" id="factory-reset-phrase" data-i18n-skip></code>
+        <label class="field factory-reset-field" for="factory-reset-input">
+          <span>Frase de confirmación</span>
+          <input
+            type="text"
+            id="factory-reset-input"
+            name="factory-reset-confirmation"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
+          />
+        </label>
+        <p class="factory-reset-status" id="factory-reset-status" role="status" aria-live="polite"></p>
+        <div class="confirm-actions">
+          <button type="button" class="ghost" id="btn-cancel-factory-reset">Cancelar</button>
+          <button type="button" class="confirm-danger" id="btn-confirm-factory-reset" disabled>Borrar todo y reiniciar</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="guide-image-lightbox" id="guide-image-lightbox" hidden>
+      <section
+        class="guide-image-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="guide-image-lightbox-title"
+        aria-describedby="guide-image-lightbox-caption"
+      >
+        <header class="guide-image-dialog-head">
+          <div>
+            <span class="eyebrow">Guía de Discord</span>
+            <h2 id="guide-image-lightbox-title">Vista ampliada</h2>
+          </div>
+          <button type="button" class="ghost icon" id="btn-close-guide-image" aria-label="Cerrar imagen">×</button>
+        </header>
+        <div class="guide-image-stage">
+          <img id="guide-image-large" alt="" width="2560" height="1440" />
+        </div>
+        <p class="guide-image-dialog-caption" id="guide-image-lightbox-caption"></p>
+      </section>
+    </div>
+
+    <div class="toasts" id="toasts" role="status" aria-live="polite" data-i18n-skip></div>
+
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

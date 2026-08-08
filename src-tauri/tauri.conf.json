@@ -1,0 +1,45 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Kuali",
+  "version": "0.1.0",
+  "identifier": "com.onwev.kuali",
+  "build": {
+    "frontendDist": "../src"
+  },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "title": "Kuali",
+        "width": 1220,
+        "height": 820,
+        "minWidth": 880,
+        "minHeight": 600,
+        "resizable": true,
+        "center": true
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": ["../browser-extension/**/*"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ],
+    "category": "Productivity",
+    "shortDescription": "Escucha tus reuniones y saca las tareas",
+    "longDescription": "Kuali se une a tus llamadas de Discord, las transcribe atribuyendo cada frase a quien la dijo, y al colgar extrae el resumen y las tareas pendientes.",
+    "macOS": {
+      "minimumSystemVersion": "11.0"
+    }
+  }
+}

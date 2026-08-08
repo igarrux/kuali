@@ -1,0 +1,544 @@
+//! Commands exposed by the engine to the interface.
+//!
+//! Commands return `Result<_, String>` because the frontend only needs a
+//! displayable message, not the concrete error type.
+
+use std::collections::BTreeMap;
+
+use kuali_core::{
+    ActionItem, EngineStatus, KualiConfig, Meeting, MeetingMeta, MeetingSummary, ModelState,
+    ProviderSettings, WebhookSubscription, WhisperModel,
+};
+use kuali_engine::Engine;
+use kuali_llm::{ModelChoice, ProviderInfo, ProviderStatus};
+use serde::Serialize;
+use tauri::{Manager, State};
+use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
+use tauri_plugin_dialog::DialogExt;
+
+fn fail(e: impl std::fmt::Display) -> String {
+    e.to_string()
+}
+
+// --- configuration --------------------------------------------------------
+
+#[tauri::command]
+pub fn get_config(engine: State<'_, Engine>) -> KualiConfig {
+    engine.config()
+}
+
+#[tauri::command]
+pub async fn set_config(engine: State<'_, Engine>, config: KualiConfig) -> Result<(), String> {
+    engine.update_config(config).await.map_err(fail)
+}
+
+/// User-facing requirements that still prevent Kuali from operating.
+#[tauri::command]
+pub fn missing_requirements(engine: State<'_, Engine>) -> Vec<String> {
+    engine
+        .config()
+        .missing_requirements()
+        .into_iter()
+        .map(str::to_string)
+        .collect()
+}
+
+// --- state ----------------------------------------------------------------
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Snapshot {
+    pub status: EngineStatus,
+    pub model_state: ModelState,
+    pub current_meeting: Option<Meeting>,
+    pub current_meetings: Vec<Meeting>,
+    pub missing: Vec<String>,
+    pub web_meetings: WebMeetingsSnapshot,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebMeetingsSnapshot {
+    pub enabled: bool,
+    pub port: u16,
+    pub listening: bool,
+}
+
+/// Returns all state at once so initial rendering does not require several calls.
+#[tauri::command]
+pub fn get_snapshot(engine: State<'_, Engine>) -> Snapshot {
+    let config = engine.config();
+    let current_meetings = engine.current_meetings();
+    let current_meeting = current_meetings
+        .iter()
+        .max_by_key(|meeting| meeting.meta.started_at)
+        .cloned();
+    Snapshot {
+        status: engine.status(),
+        model_state: engine.model_state(),
+        current_meeting,
+        current_meetings,
+        missing: config
+            .missing_requirements()
+            .into_iter()
+            .map(str::to_string)
+            .collect(),
+        web_meetings: WebMeetingsSnapshot {
+            enabled: config.meet.enabled,
+            port: config.meet.port,
+            listening: engine.web_ingest_ready(),
+        },
+    }
+}
+
+#[tauri::command]
+pub async fn connect(engine: State<'_, Engine>) -> Result<(), String> {
+    engine.connect().await.map_err(fail)
+}
+
+#[tauri::command]
+pub async fn disconnect(engine: State<'_, Engine>) -> Result<(), String> {
+    engine.disconnect().await;
+    Ok(())
+}
+
+#[tauri::command]
+pub async fn leave_call(engine: State<'_, Engine>) -> Result<(), String> {
+    engine.leave_call().await.map_err(fail)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WebhookChannelInfo {
+    pub guild_id: String,
+    pub guild_name: String,
+    pub channel_id: String,
+    pub channel_name: String,
+}
+
+#[tauri::command]
+pub fn webhook_channels(engine: State<'_, Engine>) -> Result<Vec<WebhookChannelInfo>, String> {
+    let mut channels = BTreeMap::new();
+    for meeting in engine.list_meetings().map_err(fail)? {
+        channels
+            .entry((meeting.guild_id, meeting.channel_id))
+            .or_insert((meeting.guild_name, meeting.channel_name));
+    }
+    Ok(channels
+        .into_iter()
+        .map(
+            |((guild_id, channel_id), (guild_name, channel_name))| WebhookChannelInfo {
+                guild_id: guild_id.to_string(),
+                guild_name,
+                channel_id: channel_id.to_string(),
+                channel_name,
+            },
+        )
+        .collect())
+}
+
+#[tauri::command]
+pub async fn test_webhook(
+    engine: State<'_, Engine>,
+    webhook: WebhookSubscription,
+) -> Result<String, String> {
+    engine.test_webhook(&webhook).await.map_err(fail)
+}
+
+// --- meetings -------------------------------------------------------------
+
+#[tauri::command]
+pub fn list_meetings(engine: State<'_, Engine>) -> Result<Vec<MeetingMeta>, String> {
+    engine.list_meetings().map_err(fail)
+}
+
+#[tauri::command]
+pub async fn search_meetings(
+    query: String,
+) -> Result<Vec<kuali_store::MeetingSearchResult>, String> {
+    tauri::async_runtime::spawn_blocking(move || kuali_store::search(&query))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub fn load_meeting(engine: State<'_, Engine>, id: String) -> Result<Meeting, String> {
+    engine.load_meeting(&id).map_err(fail)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskListItem {
+    pub meeting_id: String,
+    pub meeting_title: String,
+    pub guild_name: String,
+    pub channel_name: String,
+    pub started_at: String,
+    /// Kept as text so Discord snowflakes and normalized web-platform IDs never
+    /// lose precision in JavaScript.
+    pub assignee_id: Option<String>,
+    pub assignee_avatar_url: Option<String>,
+    pub assignee_color: Option<String>,
+    pub task: ActionItem,
+}
+
+/// Lightweight index for the global task view. It runs off the UI thread because
+/// it scans complete meeting records from disk.
+#[tauri::command]
+pub async fn list_tasks() -> Result<Vec<TaskListItem>, String> {
+    tauri::async_runtime::spawn_blocking(|| {
+        let mut tasks = Vec::new();
+        for meta in kuali_store::list().map_err(fail)? {
+            let meeting = match kuali_store::load(&meta.id) {
+                Ok(meeting) => meeting,
+                Err(_) => continue,
+            };
+            let Some(summary) = meeting.summary.as_ref() else {
+                continue;
+            };
+            for task in &summary.action_items {
+                let assignee = task.assignee.as_deref().unwrap_or("");
+                let speaker = meeting.speakers.iter().find(|speaker| {
+                    !speaker.is_bot
+                        && (speaker.display_name.eq_ignore_ascii_case(assignee)
+                            || speaker.username.eq_ignore_ascii_case(assignee))
+                });
+                tasks.push(TaskListItem {
+                    meeting_id: meta.id.clone(),
+                    meeting_title: meta.title(),
+                    guild_name: meta.guild_name.clone(),
+                    channel_name: meta.channel_name.clone(),
+                    started_at: meta.started_at.to_rfc3339(),
+                    assignee_id: speaker.map(|speaker| speaker.user_id.to_string()),
+                    assignee_avatar_url: speaker.and_then(|speaker| speaker.avatar_url.clone()),
+                    assignee_color: speaker.map(|speaker| speaker.color.clone()),
+                    task: task.clone(),
+                });
+            }
+        }
+        Ok(tasks)
+    })
+    .await
+    .map_err(fail)?
+}
+
+#[tauri::command]
+pub fn delete_meeting(engine: State<'_, Engine>, id: String) -> Result<(), String> {
+    engine.delete_meeting(&id).map_err(fail)
+}
+
+#[tauri::command]
+pub async fn delete_meetings(engine: State<'_, Engine>, ids: Vec<String>) -> Result<usize, String> {
+    let engine = engine.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || engine.delete_meetings(&ids))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub async fn delete_channel_meetings(
+    engine: State<'_, Engine>,
+    meeting_id: String,
+) -> Result<usize, String> {
+    let engine = engine.inner().clone();
+    tauri::async_runtime::spawn_blocking(move || engine.delete_channel_meetings(&meeting_id))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub fn set_task_done(
+    engine: State<'_, Engine>,
+    meeting_id: String,
+    task_id: String,
+    done: bool,
+) -> Result<(), String> {
+    engine
+        .set_task_done(&meeting_id, &task_id, done)
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub async fn resummarize(
+    engine: State<'_, Engine>,
+    meeting_id: String,
+) -> Result<MeetingSummary, String> {
+    engine.resummarize(&meeting_id).await.map_err(fail)
+}
+
+/// Opens the save dialog and exports, returning `None` when the user cancels.
+#[tauri::command]
+pub async fn export_meeting(
+    app: tauri::AppHandle,
+    engine: State<'_, Engine>,
+    meeting_id: String,
+    format: String,
+) -> Result<Option<String>, String> {
+    let markdown = format == "markdown";
+    let extension = if markdown { "md" } else { "json" };
+    let suggested = engine.suggested_filename(&meeting_id, extension);
+
+    let path = app
+        .dialog()
+        .file()
+        .set_file_name(&suggested)
+        .add_filter(if markdown { "Markdown" } else { "JSON" }, &[extension])
+        .blocking_save_file();
+
+    let Some(path) = path else { return Ok(None) };
+    let path = path.into_path().map_err(fail)?;
+
+    engine.export(&meeting_id, &path, markdown).map_err(fail)?;
+    Ok(Some(path.display().to_string()))
+}
+
+// --- providers and models -------------------------------------------------
+
+#[tauri::command]
+pub async fn available_providers(engine: State<'_, Engine>) -> Result<Vec<ProviderInfo>, String> {
+    Ok(engine.available_providers().await)
+}
+
+/// Every known provider, including unavailable ones and their missing
+/// requirements. This drives the settings picker.
+#[tauri::command]
+pub async fn provider_catalog(engine: State<'_, Engine>) -> Result<Vec<ProviderStatus>, String> {
+    Ok(engine.provider_statuses().await)
+}
+
+/// Tests a provider with the unsaved settings currently shown in the UI.
+/// Provider errors remain verbatim because they usually explain the actual
+/// issue, such as an invalid key, missing model, or offline server.
+#[tauri::command]
+pub async fn test_provider(
+    engine: State<'_, Engine>,
+    id: String,
+    settings: Option<ProviderSettings>,
+) -> Result<String, String> {
+    engine.test_provider(&id, settings).await.map_err(fail)
+}
+
+/// Fetches the provider's live model catalog with the key currently in the UI.
+#[tauri::command]
+pub async fn provider_models(
+    engine: State<'_, Engine>,
+    id: String,
+    settings: Option<ProviderSettings>,
+) -> Result<Vec<ModelChoice>, String> {
+    engine.list_models(&id, settings).await.map_err(fail)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModelInfo {
+    pub id: String,
+    pub label: String,
+    pub approx_bytes: u64,
+    pub downloaded: bool,
+}
+
+#[tauri::command]
+pub fn whisper_models(engine: State<'_, Engine>) -> Vec<ModelInfo> {
+    let models_dir = engine.config().whisper.resolved_models_directory();
+    WhisperModel::ALL
+        .iter()
+        .map(|model| ModelInfo {
+            // Match serde's representation so the frontend can write it back
+            // unchanged in the configuration.
+            id: serde_json::to_value(model)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default(),
+            label: model.label().to_string(),
+            approx_bytes: model.approx_bytes(),
+            downloaded: kuali_stt::is_downloaded(&models_dir, *model),
+        })
+        .collect()
+}
+
+#[tauri::command]
+pub fn resolved_models_directory(engine: State<'_, Engine>) -> String {
+    engine
+        .config()
+        .whisper
+        .resolved_models_directory()
+        .display()
+        .to_string()
+}
+
+#[tauri::command]
+pub async fn choose_models_directory(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    // Synchronous Tauri commands run on the main thread. Opening a blocking
+    // picker there prevents macOS from rendering and servicing its own dialog.
+    let (reply, response) = tokio::sync::oneshot::channel();
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Elige dónde guardar los modelos de Whisper");
+
+    // Parenting keeps the picker above Kuali instead of behind the application.
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+
+    dialog.pick_folder(move |selected| {
+        let selected = selected
+            .map(|path| path.into_path().map(|path| path.display().to_string()))
+            .transpose()
+            .map_err(fail);
+        let _ = reply.send(selected);
+    });
+
+    response
+        .await
+        .map_err(|_| "El selector de carpetas se cerró inesperadamente".to_string())?
+}
+
+#[tauri::command]
+pub async fn download_model(engine: State<'_, Engine>, model: String) -> Result<(), String> {
+    let model: WhisperModel =
+        serde_json::from_value(serde_json::Value::String(model)).map_err(fail)?;
+    engine.download_model(model).await.map_err(fail)
+}
+
+#[tauri::command]
+pub async fn delete_model(engine: State<'_, Engine>, model: String) -> Result<u64, String> {
+    let model: WhisperModel =
+        serde_json::from_value(serde_json::Value::String(model)).map_err(fail)?;
+    engine.delete_model(model).await.map_err(fail)
+}
+
+/// Opens the directory containing Kuali meeting records.
+#[tauri::command]
+pub fn reveal_data_dir(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = kuali_core::paths::meetings_dir();
+    std::fs::create_dir_all(&dir).map_err(fail)?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(fail)
+}
+
+fn browser_extension_dir(app: &tauri::AppHandle) -> Result<std::path::PathBuf, String> {
+    let resource_dir = app.path().resource_dir().map_err(fail)?;
+    let candidates = [
+        resource_dir.join("browser-extension"),
+        resource_dir.join("_up_").join("browser-extension"),
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("..")
+            .join("browser-extension"),
+    ];
+    candidates
+        .into_iter()
+        .find(|path| path.join("manifest.json").is_file())
+        .ok_or_else(|| "No encontré la carpeta empaquetada de la extensión de Kuali".to_string())
+}
+
+#[tauri::command]
+pub fn browser_extension_path(app: tauri::AppHandle) -> Result<String, String> {
+    Ok(browser_extension_dir(&app)?.display().to_string())
+}
+
+#[tauri::command]
+pub fn reveal_browser_extension(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let dir = browser_extension_dir(&app)?;
+    app.opener()
+        .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub fn open_setup_destination(app: tauri::AppHandle, destination: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = match destination.as_str() {
+        "discord-developers" => "https://discord.com/developers/applications",
+        "chrome-extensions" => "chrome://extensions",
+        _ => return Err("Ese destino no forma parte de la guía de Kuali".into()),
+    };
+    app.opener().open_url(url, None::<&str>).map_err(fail)
+}
+
+/// Opens the extensions page in the selected browser rather than the default
+/// one. Internal schemes such as `chrome://` and `edge://` are not reliable
+/// through ordinary web links.
+#[tauri::command]
+pub fn open_browser_extensions(app: tauri::AppHandle, browser: String) -> Result<(), String> {
+    let (application, url) = match browser.as_str() {
+        "chrome" => ("Google Chrome", "chrome://extensions"),
+        "edge" => ("Microsoft Edge", "edge://extensions"),
+        "brave" => ("Brave Browser", "brave://extensions"),
+        // Arc accepts Chromium's internal extensions page.
+        "arc" => ("Arc", "chrome://extensions"),
+        _ => return Err("Ese navegador no forma parte de la guía de Kuali".into()),
+    };
+
+    #[cfg(target_os = "macos")]
+    {
+        let _ = app;
+        let status = std::process::Command::new("open")
+            .args(["-a", application, url])
+            .status()
+            .map_err(fail)?;
+        if status.success() {
+            Ok(())
+        } else {
+            Err(format!("No encontré {application} en esta Mac"))
+        }
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        use tauri_plugin_opener::OpenerExt;
+        let _ = application;
+        app.opener().open_url(url, None::<&str>).map_err(fail)
+    }
+}
+
+#[tauri::command]
+pub fn autostart_enabled(app: tauri::AppHandle) -> Result<bool, String> {
+    app.autolaunch().is_enabled().map_err(fail)
+}
+
+#[tauri::command]
+pub fn set_autostart_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(), String> {
+    if enabled {
+        app.autolaunch().enable().map_err(fail)
+    } else {
+        app.autolaunch().disable().map_err(fail)
+    }
+}
+
+/// Schedules a reset for the next launch and restarts. Deleting in the new
+/// process prevents downloads, meetings, or summaries from writing concurrently.
+#[tauri::command]
+pub async fn factory_reset(
+    app: tauri::AppHandle,
+    engine: State<'_, Engine>,
+    confirmation: String,
+) -> Result<(), String> {
+    if !crate::factory_reset::confirmation_matches(&confirmation) {
+        return Err("La frase de confirmación no coincide exactamente".into());
+    }
+
+    if app.autolaunch().is_enabled().map_err(fail)? {
+        app.autolaunch().disable().map_err(fail)?;
+    }
+    crate::factory_reset::schedule(&engine.config())?;
+
+    // Give the WebView enough time to clear localStorage and render the final
+    // state before Tauri terminates this process.
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_millis(450)).await;
+        app.restart();
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn take_factory_reset_completed() -> Result<bool, String> {
+    crate::factory_reset::take_completed()
+}
