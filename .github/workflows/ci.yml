@@ -65,3 +65,18 @@ jobs:
 
       - name: Build Chrome Web Store package
         run: npm run package:store
+
+  website:
+    name: Static website
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Validate pages, SEO, links, and deployment files
+        run: node --test website/tests/site.test.mjs
