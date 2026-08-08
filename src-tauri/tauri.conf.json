@@ -39,7 +39,8 @@
     "shortDescription": "Escucha tus reuniones y saca las tareas",
     "longDescription": "Kuali se une a tus llamadas de Discord, las transcribe atribuyendo cada frase a quien la dijo, y al colgar extrae el resumen y las tareas pendientes.",
     "macOS": {
-      "minimumSystemVersion": "11.0"
+      "minimumSystemVersion": "11.0",
+      "signingIdentity": "-"
     }
   }
 }
