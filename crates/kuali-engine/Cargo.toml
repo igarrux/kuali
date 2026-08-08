@@ -1,0 +1,32 @@
+[package]
+name = "kuali-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+kuali-core.workspace = true
+kuali-discord.workspace = true
+kuali-meet.workspace = true
+kuali-llm.workspace = true
+kuali-stt.workspace = true
+kuali-store.workspace = true
+
+chrono.workspace = true
+hex.workspace = true
+hmac.workspace = true
+parking_lot.workspace = true
+reqwest.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+anyhow.workspace = true
+futures-util.workspace = true
+tokio-tungstenite.workspace = true

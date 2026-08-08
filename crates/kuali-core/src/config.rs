@@ -378,7 +378,8 @@ pub struct LlmConfig {
     pub providers: BTreeMap<String, ProviderSettings>,
     /// Language used for summaries and action items.
     pub output_language: String,
-    /// Generate a summary automatically when a meeting ends.
+    /// Allow meeting transcripts to be processed by the configured LLM.
+    /// When disabled, automatic and manual summaries are both blocked.
     pub summarize_on_leave: bool,
 }
 
