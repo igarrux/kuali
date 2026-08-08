@@ -17,13 +17,22 @@ const EVENT_CHANNEL: &str = "kuali://event";
 const NAVIGATION_CHANNEL: &str = "kuali://navigate";
 const CONFIG_CHANGED_CHANNEL: &str = "kuali://config-changed";
 
-fn show_main_window(app: &tauri::AppHandle, destination: &str) {
+fn reveal_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
+}
+
+fn show_main_window(app: &tauri::AppHandle, destination: &str) {
+    reveal_main_window(app);
     let _ = app.emit(NAVIGATION_CHANNEL, destination);
+}
+
+#[cfg(any(target_os = "macos", test))]
+fn should_restore_main_window(has_visible_windows: bool) -> bool {
+    !has_visible_windows
 }
 
 fn main() {
@@ -215,6 +224,29 @@ fn main() {
             commands::factory_reset,
             commands::take_factory_reset_completed,
         ])
-        .run(tauri::generate_context!())
-        .expect("Kuali no pudo arrancar");
+        .build(tauri::generate_context!())
+        .expect("Kuali no pudo arrancar")
+        .run(|_app, _event| {
+            #[cfg(target_os = "macos")]
+            if let tauri::RunEvent::Reopen {
+                has_visible_windows,
+                ..
+            } = _event
+            {
+                if should_restore_main_window(has_visible_windows) {
+                    reveal_main_window(_app);
+                }
+            }
+        });
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_restore_main_window;
+
+    #[test]
+    fn dock_reopen_restores_only_when_every_window_is_hidden() {
+        assert!(should_restore_main_window(false));
+        assert!(!should_restore_main_window(true));
+    }
 }
