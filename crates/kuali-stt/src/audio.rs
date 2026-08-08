@@ -74,9 +74,6 @@ mod tests {
             .map(|i| (2.0 * std::f32::consts::PI * 1_000.0 * i as f32 / 16_000.0).sin())
             .collect();
         let energy = rms(&sine);
-        assert!(
-            (energy - 0.707).abs() < 0.01,
-            "sine-wave RMS: {energy}"
-        );
+        assert!((energy - 0.707).abs() < 0.01, "sine-wave RMS: {energy}");
     }
 }

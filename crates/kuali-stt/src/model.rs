@@ -640,7 +640,10 @@ mod tests {
         assert!(vad_model_path(&root).exists(), "Silero must be preserved");
         assert!(vad_model_path(&root).with_extension("part").exists());
         assert!(root.join("notas-del-usuario.txt").exists());
-        assert!(root.is_dir(), "an external directory is never removed wholesale");
+        assert!(
+            root.is_dir(),
+            "an external directory is never removed wholesale"
+        );
 
         std::fs::remove_dir_all(&root).unwrap();
     }

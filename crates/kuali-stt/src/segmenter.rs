@@ -559,10 +559,7 @@ mod tests {
     fn buffered_silence_is_dropped_instead_of_hallucinated_over() {
         let mut s = Segmenter::new(config());
         s.push(ANA, 1_000, &silence(2_000));
-        assert!(
-            s.tick(4_000).is_empty(),
-            "silence should not reach Whisper"
-        );
+        assert!(s.tick(4_000).is_empty(), "silence should not reach Whisper");
     }
 
     #[test]
