@@ -1,0 +1,121 @@
+//! Contract for anything able to summarize a meeting, from an authenticated
+//! local CLI to a keyed remote API.
+
+use async_trait::async_trait;
+
+#[derive(Debug, thiserror::Error)]
+pub enum LlmError {
+    #[error("provider `{0}` is unavailable")]
+    Unavailable(String),
+    #[error("no LLM provider is configured")]
+    NoProvider,
+    #[error("{provider} failed: {message}")]
+    Provider { provider: String, message: String },
+    #[error("{provider} returned invalid JSON: {message}")]
+    BadJson { provider: String, message: String },
+    #[error("{provider} rejected the request because of its safety filters{}", detail.as_ref().map(|d| format!(" ({d})")).unwrap_or_default())]
+    Refused {
+        provider: String,
+        detail: Option<String>,
+    },
+    #[error("network error while contacting {provider}: {source}")]
+    Http {
+        provider: String,
+        #[source]
+        source: reqwest::Error,
+    },
+    #[error("failed to run `{command}`: {source}")]
+    Spawn {
+        command: String,
+        #[source]
+        source: std::io::Error,
+    },
+}
+
+/// Model request. Providers that enforce structured output use `json_schema`;
+/// others receive prompt instructions and are validated during parsing.
+#[derive(Debug, Clone)]
+pub struct CompletionRequest {
+    pub system: String,
+    pub prompt: String,
+    pub json_schema: Option<serde_json::Value>,
+    pub max_tokens: u32,
+}
+
+impl CompletionRequest {
+    pub fn new(system: impl Into<String>, prompt: impl Into<String>) -> Self {
+        Self {
+            system: system.into(),
+            prompt: prompt.into(),
+            json_schema: None,
+            max_tokens: 16_000,
+        }
+    }
+
+    pub fn with_schema(mut self, schema: serde_json::Value) -> Self {
+        self.json_schema = Some(schema);
+        self
+    }
+}
+
+/// Credential source displayed in Settings so users do not have to infer it.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum ProviderKind {
+    /// Installed command-line tool with an authenticated session.
+    LocalCli,
+    /// Remote API using a key from the environment.
+    RemoteApi,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderInfo {
+    pub id: String,
+    pub label: String,
+    pub model: String,
+    pub kind: ProviderKind,
+    /// Whether structured JSON is guaranteed or requires manual extraction.
+    pub structured_output: bool,
+}
+
+/// Provider state shown in Settings, including availability and any reason it
+/// cannot be used. Unavailable providers remain visible because a missing key is
+/// actionable while a missing card is not.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProviderStatus {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub description: &'static str,
+    pub kind: ProviderKind,
+    pub available: bool,
+    /// Missing requirement, or `None` when ready.
+    pub missing: Option<&'static str>,
+    /// Model that would currently be requested.
+    pub model: String,
+    /// Whether credentials come from the environment rather than configuration,
+    /// allowing the UI to explain an intentionally empty field.
+    pub api_key_from_environment: bool,
+    pub needs_api_key: bool,
+    pub configurable_base_url: bool,
+    pub default_base_url: Option<&'static str>,
+    pub default_model: &'static str,
+    /// Fallback suggestions used until the UI obtains the live provider catalog.
+    pub models: &'static [crate::catalog::ModelOption],
+    /// Whether the provider exposes a model catalog.
+    pub lists_models: bool,
+    pub structured_output: bool,
+}
+
+#[async_trait]
+pub trait LlmProvider: Send + Sync {
+    fn id(&self) -> &'static str;
+    fn info(&self) -> ProviderInfo;
+
+    /// Cheap availability check used at startup and when opening Settings: the
+    /// CLI exists and is authenticated, or the required key is configured.
+    async fn is_available(&self) -> bool;
+
+    async fn complete(&self, request: &CompletionRequest) -> Result<String, LlmError>;
+}
