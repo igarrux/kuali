@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="es-419">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Kuali — Transcripción privada y local de reuniones</title>
+    <meta name="description" content="Kuali transcribe reuniones de Discord y navegador localmente, conserva quién dijo cada cosa y convierte conversaciones en notas y tareas fáciles de buscar.">
+    <meta name="theme-color" content="#090d12">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://igarrux.github.io/kuali/es/">
+    <link rel="alternate" hreflang="en" href="https://igarrux.github.io/kuali/">
+    <link rel="alternate" hreflang="es" href="https://igarrux.github.io/kuali/es/">
+    <link rel="alternate" hreflang="x-default" href="https://igarrux.github.io/kuali/">
+    <link rel="icon" href="../assets/kuali-logo.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="../assets/icon.png">
+    <link rel="manifest" href="../site.webmanifest">
+    <link rel="stylesheet" href="../assets/site.css">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Kuali">
+    <meta property="og:title" content="Kuali — Tus reuniones se convierten en memoria útil">
+    <meta property="og:description" content="Transcripción en vivo por hablante en tu computadora. Reuniones fáciles de buscar, resúmenes opcionales y ninguna cuenta en la nube de Kuali.">
+    <meta property="og:url" content="https://igarrux.github.io/kuali/es/">
+    <meta property="og:image" content="https://igarrux.github.io/kuali/assets/kuali-app.es.png">
+    <meta property="og:image:width" content="1220">
+    <meta property="og:image:height" content="820">
+    <meta property="og:image:alt" content="Interfaz real de Kuali mostrando su biblioteca local y el estado de conexión">
+    <meta property="og:locale" content="es_419">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Kuali — Transcripción privada y local de reuniones">
+    <meta name="twitter:description" content="Descubre quién dijo qué mientras la reunión todavía está ocurriendo.">
+    <meta name="twitter:image" content="https://igarrux.github.io/kuali/assets/kuali-app.es.png">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Kuali",
+        "description": "Transcripción privada y local de reuniones con atribución en vivo por hablante.",
+        "applicationCategory": "BusinessApplication",
+        "operatingSystem": "macOS",
+        "softwareVersion": "0.1.0",
+        "license": "https://github.com/igarrux/kuali/blob/main/LICENSE",
+        "downloadUrl": "https://github.com/igarrux/kuali/releases/latest",
+        "codeRepository": "https://github.com/igarrux/kuali",
+        "isAccessibleForFree": true,
+        "offers": {
+          "@type": "Offer",
+          "price": "0",
+          "priceCurrency": "USD"
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Kuali sube el audio de mis reuniones?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. Whisper y Silero procesan el audio en memoria dentro de tu computadora. Kuali no conserva una grabación ni envía el audio a un servicio operado por Kuali." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Kuali puede distinguir a los participantes?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Sí. Kuali conserva la identidad expuesta por Discord y los servicios compatibles de reuniones del navegador para mantener transcripciones y tareas asociadas al participante correcto." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿Los resúmenes con IA son obligatorios?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. Los resúmenes y tareas son opcionales y se pueden desactivar por completo. La transcripción continúa siendo local en ambos casos." }
+          }
+        ]
+      }
+    </script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+    <header class="site-header" data-site-header>
+      <nav class="nav container" aria-label="Navegación principal">
+        <a class="brand" href="./" aria-label="Inicio de Kuali"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="Abrir navegación" data-nav-toggle><span></span></button>
+        <div class="nav-menu" id="nav-menu" data-nav-menu>
+          <div class="nav-links"><a href="#funciones">Funciones</a><a href="#privacidad">Privacidad</a><a href="./guides/">Guía</a><a href="#preguntas">Preguntas</a></div>
+          <div class="nav-actions"><a class="language-link" href="../" lang="en" hreflang="en">EN</a><a class="button button-small button-quiet" href="https://github.com/igarrux/kuali">GitHub ↗</a></div>
+        </div>
+      </nav>
+    </header>
+
+    <main id="contenido">
+      <section class="hero">
+        <div class="container hero-grid">
+          <div class="hero-copy" data-reveal>
+            <span class="eyebrow">Código abierto · Local primero</span>
+            <h1>Tus reuniones se convierten en <span class="text-gradient">memoria útil.</span></h1>
+            <p class="hero-lead">Kuali escucha mientras hablan, transcribe en vivo a cada participante dentro de tu computadora y convierte el resultado en decisiones y tareas fáciles de buscar.</p>
+            <div class="hero-actions"><a class="button button-primary" href="https://github.com/igarrux/kuali/releases/latest">Descargar para macOS <span aria-hidden="true">↓</span></a><a class="button" href="./guides/">Abrir guía de instalación <span aria-hidden="true">→</span></a></div>
+            <div class="hero-note" aria-label="Ventajas principales"><span>Sin cuenta en la nube</span><span>El audio permanece local</span><span>Gratis y de código abierto</span></div>
+          </div>
+
+          <div class="hero-visual" data-reveal>
+            <figure class="app-preview">
+              <img src="../assets/kuali-app.es.png" width="1220" height="820" fetchpriority="high" alt="Interfaz real de Kuali con su biblioteca de reuniones y el seguimiento de Discord listo">
+              <figcaption><span class="preview-dot" aria-hidden="true"></span> Interfaz real de Kuali</figcaption>
+            </figure>
+          </div>
+        </div>
+      </section>
+
+      <div class="platform-strip" aria-label="Fuentes de reuniones compatibles">
+        <div class="platform-inner container"><span class="platform-label">Un espacio para tus llamadas</span><div class="platform-list"><span class="platform-badge"><i></i>Discord</span><span class="platform-badge"><i></i>Google Meet</span><span class="platform-badge"><i></i>Microsoft Teams</span><span class="platform-badge"><i></i>Zoom</span></div></div>
+      </div>
+
+      <section class="section" id="funciones">
+        <div class="container">
+          <span class="eyebrow" data-reveal>Lo que Kuali cambia</span>
+          <h2 data-reveal>Descubre quién dijo qué.<br>Mientras aún está ocurriendo.</h2>
+          <p class="section-copy" data-reveal>Kuali no es un bloque de texto que aparece al terminar. Mantiene conectados al hablante, el contexto, las decisiones y sus responsables desde la primera palabra.</p>
+          <div class="bento">
+            <article class="feature-card wide" data-reveal><span class="feature-stat">EN VIVO</span><span class="feature-icon" aria-hidden="true">01</span><h3>Transcripción en vivo por hablante</h3><p>Mira cómo crece la transcripción durante la reunión. Cada intervención permanece asociada al participante expuesto por la plataforma.</p></article>
+            <article class="feature-card violet" data-reveal><span class="feature-icon" aria-hidden="true">02</span><h3>Biblioteca fácil de buscar</h3><p>Busca una frase, canal, participante o fecha y vuelve directamente al contexto exacto.</p></article>
+            <article class="feature-card" data-reveal><span class="feature-icon" aria-hidden="true">03</span><h3>Whisper + Silero, localmente</h3><p>Whisper transcribe. Silero evita que el teclado, los golpes y el ruido de fondo lleguen al decodificador.</p></article>
+            <article class="feature-card wide violet" data-reveal><span class="feature-stat">OPCIONAL</span><span class="feature-icon" aria-hidden="true">04</span><h3>Decisiones y tareas con responsables</h3><p>Cuando lo activas, el LLM elegido extrae puntos clave, preguntas, decisiones y tareas por participante. Al apagarlo, ninguna transcripción se envía a un LLM.</p></article>
+            <article class="feature-card" data-reveal><span class="feature-icon" aria-hidden="true">05</span><h3>Reuniones simultáneas</h3><p>Graba varias llamadas separadas sin mezclar participantes, tiempos ni transcripciones.</p></article>
+            <article class="feature-card" data-reveal><span class="feature-icon" aria-hidden="true">06</span><h3>Webhooks al terminar</h3><p>Permite que otras herramientas reciban eventos firmados con la reunión completa y sus resultados.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-compact">
+        <div class="container"><span class="eyebrow" data-reveal>Un flujo más tranquilo</span><h2 data-reveal>Entra. Habla. Encuéntralo después.</h2><div class="steps"><article class="step-card" data-reveal><h3>Conecta una vez</h3><p>Configura el bot de Discord o carga la extensión incluida usando la guía paso a paso.</p></article><article class="step-card" data-reveal><h3>Mira la conversación en vivo</h3><p>Kuali separa participantes, filtra el audio que no es voz y transcribe continuamente.</p></article><article class="step-card" data-reveal><h3>Sal con algo útil</h3><p>Busca en el texto completo o revisa decisiones, preguntas y tareas opcionales.</p></article></div></div>
+      </section>
+
+      <section class="section section-glow" id="privacidad">
+        <div class="container privacy-intro" data-reveal>
+          <span class="eyebrow">Tu computadora es el límite</span>
+          <h2>Todo lo que Kuali genera vive en tu PC.</h2>
+          <p>Transcripciones, reuniones, tareas, configuraciones y registros se guardan únicamente en tu computadora. Kuali no tiene una nube propia ni sincroniza esos datos por su cuenta.</p>
+        </div>
+        <div class="container privacy-boundary" data-reveal>
+          <div class="local-vault">
+            <span class="vault-label">Dentro de tu computadora</span>
+            <div class="vault-grid">
+              <div><span>PCM</span><strong>Audio</strong><small>Se procesa en memoria y no se conserva como grabación.</small></div>
+              <div><span>TXT</span><strong>Datos generados</strong><small>Transcripciones, reuniones, tareas, búsquedas y registros permanecen locales.</small></div>
+              <div><span>AI</span><strong>Modelos locales</strong><small>Whisper y Silero se ejecutan en tu equipo.</small></div>
+            </div>
+          </div>
+          <div class="user-controlled-exit">
+            <span class="exit-label">Solo si tú lo configuras</span>
+            <div class="exit-card"><span>LLM</span><div><strong>Proveedor de resúmenes</strong><small>Recibe la transcripción únicamente cuando activas resúmenes y tareas.</small></div></div>
+            <div class="exit-card"><span>WEB</span><div><strong>Webhook</strong><small>Recibe la reunión terminada únicamente en las suscripciones que creas.</small></div></div>
+            <p>El audio original no sale del equipo en ninguno de estos flujos.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-compact">
+        <div class="container"><span class="eyebrow" data-reveal>Empieza sin adivinar</span><h2 data-reveal>Guías que muestran los botones reales.</h2><p class="section-copy" data-reveal>Desde instalar Kuali hasta crear el bot de Discord y cargar la extensión, cada paso está escrito para alguien que lo hace por primera vez.</p><div class="guide-preview-grid"><a class="guide-preview" href="./guides/#discord" data-reveal><span class="guide-preview-tag">8 pasos · con imágenes</span><span class="arrow" aria-hidden="true">↗</span><h3>Conectar Discord</h3><p>Crea el bot, selecciona solamente los permisos necesarios y conecta tu cuenta de forma segura.</p></a><a class="guide-preview" href="./guides/#navegador" data-reveal><span class="guide-preview-tag">5 pasos · navegadores Chromium</span><span class="arrow" aria-hidden="true">↗</span><h3>Conectar reuniones del navegador</h3><p>Carga la extensión incluida para Meet, Teams y Zoom y comprueba la conexión local.</p></a></div></div>
+      </section>
+
+      <section class="section" id="instalar">
+        <div class="container install-panel" data-reveal>
+          <div><span class="eyebrow">Instala Kuali</span><h2>Dos comandos.<br>Sin misterios.</h2><p>La versión actual tiene firma ad hoc y todavía no está notarizada por Apple. El segundo comando elimina explícitamente la cuarentena únicamente de Kuali.app.</p></div>
+          <div><div class="terminal"><div class="terminal-head"><span>Terminal · macOS</span><button class="copy-button" type="button" data-copy-target="install-command" data-copied-label="Copiado" data-error-label="Selecciona y copia">Copiar</button></div><pre id="install-command"><span class="prompt">$ </span>brew install --cask igarrux/kuali/kuali
+<span class="prompt">$ </span>xattr -dr com.apple.quarantine /Applications/Kuali.app</pre></div><p class="terminal-note">Revisa ambos comandos antes de ejecutarlos. Requiere macOS 11 o posterior en Apple Silicon.</p></div>
+        </div>
+      </section>
+
+      <section class="section section-compact" id="preguntas">
+        <div class="container narrow"><span class="eyebrow" data-reveal>Preguntas respondidas</span><h2 data-reveal>Antes de invitar a Kuali.</h2><div class="faq-list" data-reveal>
+          <details><summary>¿Kuali sube el audio de la reunión?</summary><p>No. Whisper y Silero procesan el audio en memoria dentro de tu computadora. Kuali no conserva una grabación ni la envía a un servicio operado por el proyecto.</p></details>
+          <details><summary>¿Puede distinguir a los participantes?</summary><p>Sí. Kuali conserva la identidad cuando Discord o el servicio de reuniones la expone. Si una fuente entrega audio mezclado, lo indica claramente en lugar de inventar una atribución.</p></details>
+          <details><summary>¿Necesito un proveedor de IA externo?</summary><p>No. La transcripción funciona localmente sin un LLM. Los resúmenes y tareas son opcionales y permanecen desactivados cuando apagas su interruptor.</p></details>
+          <details><summary>¿Kuali avisa que está transcribiendo?</summary><p>En Discord, Kuali reproduce y publica el aviso de consentimiento al entrar, lo repite para quienes llegan después y conserva un registro cronológico.</p></details>
+          <details><summary>¿Kuali es gratis?</summary><p>Sí. La aplicación de escritorio es de código abierto bajo MIT. La extensión interoperable se distribuye bajo Apache-2.0.</p></details>
+        </div></div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="./"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="#funciones">Funciones</a><a href="#privacidad">Privacidad</a><a href="https://github.com/igarrux/kuali/releases/latest">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./guides/">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div>
+    </footer>
+  </body>
+</html>

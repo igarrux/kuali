@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="es-419">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Instalar y configurar Kuali — Guía completa</title>
+    <meta name="description" content="Instala Kuali en macOS, conecta un bot de Discord con los permisos mínimos, carga la extensión del navegador e inicia tu primera transcripción local.">
+    <meta name="theme-color" content="#090d12">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://igarrux.github.io/kuali/es/guides/">
+    <link rel="alternate" hreflang="en" href="https://igarrux.github.io/kuali/guides/">
+    <link rel="alternate" hreflang="es" href="https://igarrux.github.io/kuali/es/guides/">
+    <link rel="alternate" hreflang="x-default" href="https://igarrux.github.io/kuali/guides/">
+    <link rel="icon" href="../../assets/kuali-logo.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="../../assets/icon.png">
+    <link rel="stylesheet" href="../../assets/site.css">
+    <meta property="og:type" content="article">
+    <meta property="og:site_name" content="Kuali">
+    <meta property="og:title" content="Instala y configura Kuali">
+    <meta property="og:description" content="Una guía visual completa para macOS, Discord y reuniones del navegador.">
+    <meta property="og:url" content="https://igarrux.github.io/kuali/es/guides/">
+    <meta property="og:image" content="https://igarrux.github.io/kuali/assets/discord/es/new-application.png">
+    <meta property="og:locale" content="es_419">
+    <meta name="twitter:card" content="summary_large_image">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "HowTo",
+        "name": "Instalar y configurar Kuali",
+        "description": "Instala Kuali en macOS y conéctalo con Discord y reuniones del navegador.",
+        "totalTime": "PT15M",
+        "tool": [
+          { "@type": "HowToTool", "name": "Una Mac con Apple Silicon" },
+          { "@type": "HowToTool", "name": "Homebrew" },
+          { "@type": "HowToTool", "name": "Una cuenta de Discord o navegador basado en Chromium" }
+        ],
+        "step": [
+          { "@type": "HowToStep", "name": "Instalar Kuali", "text": "Instala el cask de Kuali y elimina explícitamente la cuarentena después de revisar el comando." },
+          { "@type": "HowToStep", "name": "Elegir una integración", "text": "Crea un bot de Discord o carga la extensión incluida con Kuali." },
+          { "@type": "HowToStep", "name": "Descargar un modelo", "text": "Abre Kuali y descarga el modelo de Whisper adecuado para tu computadora." },
+          { "@type": "HowToStep", "name": "Iniciar una reunión", "text": "Entra a una llamada y confirma que Kuali muestre actividad y transcripción en vivo." }
+        ]
+      }
+    </script>
+    <script src="../../assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido-guia">Saltar a la guía</a>
+    <header class="site-header" data-site-header>
+      <nav class="nav container" aria-label="Navegación principal">
+        <a class="brand" href="../" aria-label="Inicio de Kuali"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="Abrir navegación" data-nav-toggle><span></span></button>
+        <div class="nav-menu" id="nav-menu" data-nav-menu><div class="nav-links"><a href="../#funciones">Funciones</a><a href="../#privacidad">Privacidad</a><a href="./" aria-current="page">Guía</a><a href="../#preguntas">Preguntas</a></div><div class="nav-actions"><a class="language-link" href="../../guides/" lang="en" hreflang="en">EN</a><a class="button button-small button-quiet" href="https://github.com/igarrux/kuali">GitHub ↗</a></div></div>
+      </nav>
+    </header>
+
+    <main>
+      <header class="guide-hero container" data-reveal><span class="eyebrow">Guía completa</span><h1>Desde la descarga hasta tu <span class="text-gradient">primera transcripción en vivo.</span></h1><p>Elige Discord, reuniones del navegador o ambas opciones. La aplicación repite esta guía y puede guardar la configuración mientras avanzas.</p></header>
+
+      <div class="guide-layout container" id="contenido-guia">
+        <nav class="guide-toc" aria-label="Secciones de la guía"><strong>En esta página</strong><a href="#instalar">Instalar Kuali</a><a href="#modelo">Elegir modelo</a><a href="#discord">Conectar Discord</a><a href="#navegador">Reuniones web</a><a href="#primera-llamada">Primera llamada</a></nav>
+
+        <div class="guide-content">
+          <section class="guide-section" id="instalar" data-reveal>
+            <span class="eyebrow">01 · Escritorio</span><h2>Instala Kuali en macOS</h2><p>La versión actual requiere macOS 11 o posterior en Apple Silicon. Homebrew verifica el checksum fijado en el tap de Kuali antes de instalar la aplicación.</p>
+            <div class="terminal"><div class="terminal-head"><span>Terminal · macOS</span><button class="copy-button" type="button" data-copy-target="guide-install-command" data-copied-label="Copiado" data-error-label="Selecciona y copia">Copiar</button></div><pre id="guide-install-command"><span class="prompt">$ </span>brew install --cask igarrux/kuali/kuali
+<span class="prompt">$ </span>xattr -dr com.apple.quarantine /Applications/Kuali.app</pre></div>
+            <div class="notice">Kuali tiene firma ad hoc, pero todavía no está notarizado por Apple. El segundo comando está visible y separado porque elimina la cuarentena de Kuali.app. Revísalo antes de ejecutarlo.</div>
+            <p>Abre Kuali desde Aplicaciones. Durante el primer inicio aparecerá automáticamente la configuración guiada. Podrás volver a ella mediante el botón Guía.</p>
+          </section>
+
+          <section class="guide-section" id="modelo" data-reveal>
+            <span class="eyebrow">02 · Transcripción</span><h2>Descarga un modelo de Whisper</h2><p>Los pesos se distribuyen por separado de la aplicación. Abre <strong>Ajustes → Modelos de transcripción</strong> y elige uno. Kuali verifica la descarga antes de usarla.</p>
+            <div class="guide-steps"><article class="guide-step"><div><h3>Empieza con Large v3 Turbo Q5</h3><p>Es el equilibrio recomendado para la mayoría de Macs con Apple Silicon: multilingüe, preciso y mucho más ligero que el modelo completo.</p></div></article><article class="guide-step"><div><h3>Usa Large v3 Turbo para la máxima calidad</h3><p>Elige el modelo completo cuando tengas suficiente memoria y la precisión importe más que el tamaño.</p></div></article><article class="guide-step"><div><h3>Añade nombres propios al vocabulario</h3><p>En <strong>Ajustes → Transcripción → Terminología especial</strong>, agrega productos, siglas o personas que Whisper deba conservar.</p></div></article></div>
+          </section>
+
+          <section class="guide-section" id="discord" data-reveal>
+            <span class="eyebrow">03 · Discord</span><h2>Conecta Kuali con Discord</h2><p>Crearás un bot dedicado. Kuali nunca automatiza tu cuenta personal y el token debe tratarse como una contraseña.</p>
+            <div class="guide-steps">
+              <article class="guide-step"><div><h3>Abre el Portal de desarrolladores</h3><p>Visita el <a href="https://discord.com/developers/applications">Portal de desarrolladores de Discord</a> e inicia sesión con tu cuenta.</p></div></article>
+              <article class="guide-step"><div><h3>Pulsa “Nueva aplicación”</h3><p>El botón se encuentra en la esquina superior derecha. Escribe <strong>Kuali</strong>, acepta las condiciones y pulsa <strong>Crear</strong>.</p><button class="guide-image-button" type="button" data-lightbox-source data-lightbox-title="Nueva aplicación en el Portal de Discord"><img src="../../assets/discord/es/new-application.png" width="2560" height="1440" loading="lazy" alt="Botón Nueva aplicación resaltado en el Portal de desarrolladores de Discord"><span class="zoom-hint">Ver en grande</span></button></div></article>
+              <article class="guide-step"><div><h3>Restablece y copia el token</h3><p>Abre <strong>Bot</strong> en el panel izquierdo, pulsa <strong>Restablecer token</strong>, confirma y copia el valor que muestra Discord.</p><div class="notice">Nunca publiques el token, lo subas a Git ni se lo envíes a otra persona. Pégalo solamente dentro de Kuali.</div><button class="guide-image-button" type="button" data-lightbox-source data-lightbox-title="Restablecer token en Discord"><img src="../../assets/discord/es/reset-token.png" width="2560" height="1440" loading="lazy" alt="Botón Restablecer token resaltado en la sección Bot de Discord"><span class="zoom-hint">Ver en grande</span></button></div></article>
+              <article class="guide-step"><div><h3>Activa Instalación de servidor</h3><p>Abre <strong>Instalaciones</strong>. En <strong>Contextos de instalación → Seleccionar métodos de instalación</strong>, activa <strong>Instalación de servidor</strong>.</p><button class="guide-image-button" type="button" data-lightbox-source data-lightbox-title="Contexto Instalación de servidor"><img src="../../assets/discord/es/guild-install.png" width="2560" height="1440" loading="lazy" alt="Instalación de servidor seleccionada en los contextos de Discord"><span class="zoom-hint">Ver en grande</span></button></div></article>
+              <article class="guide-step"><div><h3>Configura el enlace y los ámbitos</h3><p>Elige <strong>Enlace proporcionado por Discord</strong>. En <strong>Ajustes de instalación predeterminados → Instalación de servidor → Ámbitos</strong>, añade <code>applications.commands</code> y <code>bot</code>.</p><button class="guide-image-button" type="button" data-lightbox-source data-lightbox-title="Ámbitos del enlace de instalación"><img src="../../assets/discord/es/install-link-scopes.png" width="2560" height="1440" loading="lazy" alt="Ámbitos applications commands y bot seleccionados en Discord"><span class="zoom-hint">Ver en grande</span></button></div></article>
+              <article class="guide-step"><div><h3>Selecciona solamente los permisos mínimos</h3><p>Activa <strong>Ver canales</strong>, <strong>Enviar mensajes</strong>, <strong>Enviar mensajes en los hilos</strong>, <strong>Conectar</strong>, <strong>Hablar</strong> y <strong>Usar actividad de voz</strong>. No actives Administrador.</p><button class="guide-image-button" type="button" data-lightbox-source data-lightbox-title="Permisos mínimos del bot"><img src="../../assets/discord/es/bot-permissions.png" width="2560" height="1440" loading="lazy" alt="Seis permisos mínimos de Kuali seleccionados en Discord"><span class="zoom-hint">Ver en grande</span></button></div></article>
+              <article class="guide-step"><div><h3>Invita el bot y conecta tu usuario</h3><p>Copia el enlace de instalación, ábrelo y añade Kuali a tu servidor. En la aplicación, pega el token y escribe tu <strong>@usuario</strong> exacto de Discord, no el nombre visible.</p></div></article>
+              <article class="guide-step"><div><h3>Entra a un canal de voz</h3><p>Con el seguimiento automático activado, Kuali entrará después de ti. Puedes pausarlo desde Inicio o invitarlo manualmente con <code>/grabar</code> o <code>/record</code>.</p></div></article>
+            </div>
+          </section>
+
+          <section class="guide-section" id="navegador" data-reveal>
+            <span class="eyebrow">04 · Meet, Teams y Zoom</span><h2>Carga la extensión incluida</h2><p>La extensión se comunica únicamente con el receptor de Kuali en tu computadora. Mantén abierta la aplicación mientras grabas una reunión del navegador.</p>
+            <div class="guide-steps"><article class="guide-step"><div><h3>Abre el administrador de extensiones</h3><p>Usa <code>chrome://extensions</code> en Chrome o Arc, <code>edge://extensions</code> en Edge o <code>brave://extensions</code> en Brave.</p></div></article><article class="guide-step"><div><h3>Activa el Modo desarrollador</h3><p>Enciende <strong>Modo desarrollador</strong>. Aparecerá el botón <strong>Cargar descomprimida</strong>.</p></div></article><article class="guide-step"><div><h3>Muestra la carpeta de la extensión</h3><p>Dentro de la aplicación abre la guía y pulsa <strong>Mostrar carpeta en Finder</strong>. Kuali incluye la versión exacta compatible con la aplicación.</p></div></article><article class="guide-step"><div><h3>Carga y fija la extensión</h3><p>Pulsa <strong>Cargar descomprimida</strong> y elige la carpeta revelada por Kuali. Después fija su icono desde el menú de extensiones.</p></div></article><article class="guide-step"><div><h3>Comprueba la conexión local</h3><p>Entra a una reunión y abre la extensión. Debe indicar que la aplicación está disponible y permitir grabar. El puerto local predeterminado es <code>9099</code>.</p></div></article></div>
+          </section>
+
+          <section class="guide-section" id="primera-llamada" data-reveal>
+            <span class="eyebrow">05 · Comprobación</span><h2>Comprueba tu primera llamada</h2><p>Si puedes, empieza con dos participantes. Hablen por turnos y luego superpongan la voz brevemente para confirmar que la actividad y atribución reaccionan correctamente.</p>
+            <ul class="check-list"><li>Kuali muestra la reunión dentro de Reuniones en vivo.</li><li>El participante activo se ilumina cuando habla.</li><li>El texto aparece durante la llamada, no solamente al terminar.</li><li>Silenciar a un participante detiene su actividad.</li><li>Salir de la reunión la finaliza y libera el modelo de Whisper.</li></ul>
+            <h3>Comandos de Discord</h3><ul class="command-list"><li><code>/grabar · /record</code><span>Invita a Kuali al canal de voz en el que estás.</span></li></ul>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <dialog class="lightbox" data-lightbox aria-label="Imagen ampliada de la guía"><div class="lightbox-head"><strong data-lightbox-title>Imagen de la guía</strong><button class="lightbox-close" type="button" data-lightbox-close aria-label="Cerrar imagen">×</button></div><img data-lightbox-image alt=""></dialog>
+
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="../#funciones">Funciones</a><a href="../#privacidad">Privacidad</a><a href="https://github.com/igarrux/kuali/releases/latest">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="../#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div></footer>
+  </body>
+</html>

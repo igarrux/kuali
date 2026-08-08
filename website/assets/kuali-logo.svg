@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 200 200">
+  <title>Logo de Kuali</title>
+  <desc>Letra K compacta acompañada por dos ondas de sonido</desc>
+  <g transform="translate(200 0) scale(-1 1)">
+    <path
+      d="M42 28v144m90-140q-66 68 0 136"
+      fill="none"
+      stroke="#2dd4bf"
+      stroke-linecap="round"
+      stroke-width="30"
+    />
+    <path
+      d="M162 56q-42 44 0 88"
+      fill="none"
+      stroke="#14b8a6"
+      stroke-linecap="round"
+      stroke-width="9"
+    />
+    <path
+      d="M184 76q-20 24 0 48"
+      fill="none"
+      stroke="#0f766e"
+      stroke-linecap="round"
+      stroke-width="7"
+    />
+  </g>
+</svg>

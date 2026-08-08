@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://igarrux.github.io/kuali/sitemap.xml
