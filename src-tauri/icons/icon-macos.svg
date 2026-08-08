@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <title>Kuali macOS app icon</title>
+  <rect x="64" y="64" width="896" height="896" rx="208" fill="#12171f" />
+  <g transform="translate(199 152) scale(3.6)">
+    <g transform="translate(200 0) scale(-1 1)">
+      <path
+        d="M42 28v144m90-140q-66 68 0 136"
+        fill="none"
+        stroke="#2dd4bf"
+        stroke-linecap="round"
+        stroke-width="30"
+      />
+      <path
+        d="M162 56q-42 44 0 88"
+        fill="none"
+        stroke="#14b8a6"
+        stroke-linecap="round"
+        stroke-width="9"
+      />
+      <path
+        d="M184 76q-20 24 0 48"
+        fill="none"
+        stroke="#0f766e"
+        stroke-linecap="round"
+        stroke-width="7"
+      />
+    </g>
+  </g>
+</svg>
