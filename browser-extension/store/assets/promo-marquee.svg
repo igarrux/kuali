@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="560" viewBox="0 0 1400 560">
+  <defs>
+    <radialGradient id="bg" cx="62%" cy="38%" r="72%"><stop offset="0" stop-color="#16413a"/><stop offset=".52" stop-color="#0c1a1a"/><stop offset="1" stop-color="#070b10"/></radialGradient>
+    <linearGradient id="line" x1="0" x2="1"><stop stop-color="#7ddab9"/><stop offset="1" stop-color="#24946f"/></linearGradient>
+  </defs>
+  <rect width="1400" height="560" fill="url(#bg)"/>
+  <path d="M0 430C260 330 380 510 630 405s390-72 770 30" fill="none" stroke="url(#line)" stroke-width="2" opacity=".18"/>
+  <g transform="translate(930 120) scale(1.55)">
+    <g transform="translate(200 0) scale(-1 1)">
+      <path d="M42 28v144m90-140q-66 68 0 136" fill="none" stroke="#7ddab9" stroke-linecap="round" stroke-width="30"/>
+      <path d="M162 56q-42 44 0 88" fill="none" stroke="#49c99d" stroke-linecap="round" stroke-width="9"/>
+      <path d="M184 76q-20 24 0 48" fill="none" stroke="#24946f" stroke-linecap="round" stroke-width="7"/>
+    </g>
+  </g>
+  <text x="120" y="244" fill="#f2f5f7" font-family="Arial" font-size="82" font-weight="760" letter-spacing="-3">Kuali</text>
+  <text x="123" y="304" fill="#a5b2be" font-family="Arial" font-size="27">Local-first meeting transcription</text>
+  <g transform="translate(123 355)" fill="#7ddab9" font-family="Arial" font-size="18" font-weight="650">
+    <text x="0">Meet</text><circle cx="75" cy="-6" r="3" fill="#50605c"/><text x="94">Teams</text><circle cx="168" cy="-6" r="3" fill="#50605c"/><text x="187">Zoom</text>
+  </g>
+</svg>

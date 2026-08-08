@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="0" r="95%"><stop stop-color="#142826"/><stop offset=".55" stop-color="#0b1117"/><stop offset="1" stop-color="#070a0f"/></radialGradient>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="0" dy="22" stdDeviation="24" flood-opacity=".42"/></filter>
+  </defs>
+  <rect width="1280" height="800" fill="url(#bg)"/>
+  <circle cx="1040" cy="95" r="190" fill="#49c99d" opacity=".035"/>
+  <text x="86" y="106" fill="#7ddab9" font-family="Arial" font-size="15" font-weight="750" letter-spacing="2.4">VISIBLE CONSENT</text>
+  <text x="86" y="168" fill="#f2f5f7" font-family="Arial" font-size="48" font-weight="760" letter-spacing="-1.7">You stay in control.</text>
+  <text x="86" y="211" fill="#9ba7b7" font-family="Arial" font-size="21">Kuali explains what it captures before recording can begin.</text>
+
+  <g transform="translate(370 278)" filter="url(#shadow)">
+    <rect width="540" height="397" rx="22" fill="#121821" stroke="#324039"/>
+    <g transform="translate(25 22)">
+      <rect width="50" height="50" rx="15" fill="#173129" stroke="#356052"/>
+      <g transform="translate(8 8) scale(.17)"><g transform="translate(200 0) scale(-1 1)"><path d="M42 28v144m90-140q-66 68 0 136" fill="none" stroke="#7ddab9" stroke-linecap="round" stroke-width="30"/><path d="M162 56q-42 44 0 88" fill="none" stroke="#49c99d" stroke-linecap="round" stroke-width="9"/><path d="M184 76q-20 24 0 48" fill="none" stroke="#24946f" stroke-linecap="round" stroke-width="7"/></g></g>
+      <text x="67" y="21" fill="#f2f5f7" font-family="Arial" font-size="19" font-weight="730">Before recording this meeting</text>
+      <text x="0" y="94" fill="#b9c3cc" font-family="Arial" font-size="15">Kuali will capture participant audio and identity and send</text>
+      <text x="0" y="118" fill="#b9c3cc" font-family="Arial" font-size="15">them to the local Kuali app for transcription.</text>
+      <text x="0" y="157" fill="#8795a4" font-family="Arial" font-size="14">Configured AI providers or webhooks may receive the transcript.</text>
+      <rect x="0" y="183" width="490" height="74" rx="13" fill="#171f2b" stroke="#344139"/>
+      <rect x="15" y="201" width="18" height="18" rx="4" fill="#7ddab9"/><path d="M19 210l4 4 7-9" fill="none" stroke="#08130f" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round"/>
+      <text x="46" y="207" fill="#f2f5f7" font-family="Arial" font-size="13">I informed the participants and have permission to</text>
+      <text x="46" y="228" fill="#f2f5f7" font-family="Arial" font-size="13">record and transcribe this meeting.</text>
+      <text x="0" y="286" fill="#7ddab9" font-family="Arial" font-size="13" font-weight="650">Read the privacy policy</text>
+      <rect x="314" y="313" width="176" height="43" rx="12" fill="#7ddab9"/><text x="402" y="340" text-anchor="middle" fill="#08130f" font-family="Arial" font-size="13" font-weight="750">Record and transcribe</text>
+    </g>
+  </g>
+</svg>

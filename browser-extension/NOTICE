@@ -1,0 +1,22 @@
+Kuali Browser Extension
+Copyright 2026 Kuali contributors
+
+This product contains concepts and adapted interoperability code from Vexa:
+https://github.com/Vexa-ai/vexa
+Upstream revision: 616778fe394919f871d792fd6214ea23d0aeac6e
+Vexa is distributed under the Apache License, Version 2.0.
+
+The Google Meet CSRC and virtual-stream interoperability design also references
+Google's Meet Media API samples:
+https://github.com/googleworkspace/meet-media-api-samples
+Upstream revision: 9baacb08c0ec3bd454816e4cf593a3f13462486b
+The samples are distributed under the Apache License, Version 2.0.
+
+Kuali substantially modified the upstream approach: Vexa services, API keys,
+telemetry, bot management, transcript UI, recording upload, and YouTube support
+were removed; the extension was renamed and redesigned around Kuali's local
+WebSocket, per-frame channel namespaces, participant ID/name/avatar bindings,
+and explicit separate-versus-mixed audio semantics.
+
+The Kuali name and artwork belong to the Kuali project. Vexa names and artwork
+are not bundled with this extension.

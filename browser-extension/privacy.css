@@ -1,0 +1,46 @@
+:root {
+  color-scheme: dark;
+  font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  background: #080d12;
+  color: #f2f5f7;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  min-height: 100vh;
+  margin: 0;
+  padding: 36px 20px 72px;
+  background:
+    radial-gradient(circle at 50% -15%, rgba(73, 201, 157, .12), transparent 42%),
+    #080d12;
+}
+
+header,
+main { width: min(720px, 100%); margin-inline: auto; }
+
+header { display: flex; align-items: center; gap: 13px; margin-bottom: 44px; }
+header span { color: #7ddab9; font-size: 11px; font-weight: 800; letter-spacing: .13em; text-transform: uppercase; }
+header h1 { margin: 2px 0 0; font-size: 22px; }
+
+.eyebrow { margin: 0 0 8px; color: #7ddab9; font-size: 12px; font-weight: 750; text-transform: uppercase; letter-spacing: .1em; }
+h2 { margin: 0; font-size: clamp(32px, 7vw, 52px); line-height: 1.04; letter-spacing: -.04em; text-wrap: balance; }
+.lead { margin: 18px 0 30px; color: #b8c1cd; font-size: 17px; line-height: 1.65; }
+section { padding: 22px 0; border-top: 1px solid rgba(207, 224, 238, .12); }
+h3 { margin: 0 0 9px; font-size: 16px; }
+section p { margin: 0; color: #9ba7b7; font-size: 14px; line-height: 1.68; }
+code { padding: 2px 5px; border-radius: 5px; background: rgba(125, 218, 185, .1); color: #b5f0db; }
+.links { display: flex; flex-wrap: wrap; gap: 12px 22px; margin-top: 30px; }
+a { color: #7ddab9; font-weight: 700; text-underline-offset: 4px; }
+a:hover { color: #a7ead2; }
+a:focus-visible { outline: 2px solid #7ddab9; outline-offset: 4px; border-radius: 2px; }
+
+@media (prefers-color-scheme: light) {
+  :root { color-scheme: light; background: #f5f8f6; color: #17201d; }
+  body { background: radial-gradient(circle at 50% -15%, rgba(24, 143, 105, .1), transparent 42%), #f5f8f6; }
+  .lead { color: #53605b; }
+  section { border-color: rgba(27, 48, 40, .12); }
+  section p { color: #64716c; }
+  code { color: #117655; background: rgba(24, 143, 105, .09); }
+  a { color: #117655; }
+}

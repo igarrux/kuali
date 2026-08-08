@@ -1,0 +1,12 @@
+{
+  "name": "kuali-browser-extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "Apache-2.0",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:e2e:meet": "node e2e/run-meet-e2e.mjs",
+    "package:store": "node scripts/package-store.mjs"
+  }
+}

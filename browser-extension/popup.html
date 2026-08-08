@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Kuali</title>
+    <meta name="theme-color" content="#071817" />
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <header>
+      <img src="kuali-logo.svg" width="46" height="46" alt="" />
+      <div><h1 translate="no">Kuali</h1><span data-i18n="webMeetings">Web meetings</span></div>
+    </header>
+    <main>
+      <h2 id="platform" data-i18n="checkingTab">Checking this tab…</h2>
+      <p id="status" class="status" role="status" aria-live="polite" data-i18n="waiting">Ready</p>
+
+      <section class="consent-panel" id="consent-panel" aria-labelledby="consent-title">
+        <h3 id="consent-title" data-i18n="beforeRecording">Before recording</h3>
+        <p data-i18n="captureDisclosure">Kuali will send participant audio and identity to the local desktop app to transcribe this meeting.</p>
+        <p class="data-note" data-i18n="destinationDisclosure">The app may share the transcript with the AI provider or webhook you configured. The extension does not retain audio as a file.</p>
+        <label class="consent-check">
+          <input id="participant-consent" name="participant-consent" type="checkbox" />
+          <span data-i18n="consentConfirmation">I confirm that I informed the participants and have permission to record and transcribe.</span>
+        </label>
+        <a href="privacy.html" target="_blank" rel="noreferrer" data-i18n="privacyPolicy">Read the privacy policy</a>
+      </section>
+
+      <button id="toggle" type="button" data-i18n="recordAndTranscribe">Record and transcribe</button>
+      <label class="port-field" for="port">
+        <span data-i18n="localPort">Local port</span>
+        <input id="port" name="kuali-port" type="number" inputmode="numeric" min="1" max="65535" value="9099" autocomplete="off" />
+      </label>
+      <p id="error" class="error" role="alert" hidden></p>
+    </main>
+    <script src="popup.js"></script>
+  </body>
+</html>
