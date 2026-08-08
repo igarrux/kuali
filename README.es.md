@@ -49,9 +49,14 @@ de audio ni la envía a un servicio operado por el proyecto.
 
 ## Inicio rápido
 
-La compilación actual requiere macOS 11 o posterior en Apple Silicon, Rust
-1.89+, CMake y un toolchain de C/C++. Node.js 22+ solo hace falta para desarrollar
-y probar la extensión.
+Instala la versión actual para macOS con Homebrew:
+
+```sh
+brew install --cask igarrux/kuali/kuali
+```
+
+Para compilar desde el código fuente, instala Rust 1.89+, CMake y un toolchain
+de C/C++. Node.js 22+ solo hace falta para desarrollar y probar la extensión.
 
 ```sh
 git clone https://github.com/igarrux/kuali.git

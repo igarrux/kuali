@@ -47,9 +47,14 @@ an audio recording and never sent to a Kuali-operated service.
 
 ## Quick start
 
-The current desktop build requires macOS 11 or newer on Apple Silicon, Rust
-1.89+, CMake, and a C/C++ toolchain. Node.js 22+ is needed only for extension
-development and tests.
+Install the current macOS release with Homebrew:
+
+```sh
+brew install --cask igarrux/kuali/kuali
+```
+
+To build from source, install Rust 1.89+, CMake, and a C/C++ toolchain. Node.js
+22+ is needed only for extension development and tests.
 
 ```sh
 git clone https://github.com/igarrux/kuali.git
