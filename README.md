@@ -54,8 +54,6 @@ brew install --cask igarrux/kuali/kuali
 xattr -dr com.apple.quarantine /Applications/Kuali.app
 ```
 
-Kuali is not yet notarized by Apple.
-
 To build from source, install Rust 1.89+, CMake, and a C/C++ toolchain. Node.js
 22+ is needed only for extension development and tests.
 
