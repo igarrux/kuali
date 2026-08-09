@@ -131,10 +131,43 @@ enum FollowUsernameResolution {
     Unavailable,
 }
 
+/// Keeps an explicit UI departure from being undone by ordinary voice-state
+/// updates such as mute, camera, or screen-share changes. The pause belongs to
+/// one channel and ends when the followed user leaves it, moves elsewhere, or
+/// explicitly invites Kuali again.
+#[derive(Debug, Default)]
+struct ManualFollowPause {
+    channel: Option<(GuildId, ChannelId)>,
+}
+
+impl ManualFollowPause {
+    fn block(&mut self, guild_id: GuildId, channel_id: ChannelId) {
+        self.channel = Some((guild_id, channel_id));
+    }
+
+    fn clear(&mut self) {
+        self.channel = None;
+    }
+
+    fn should_follow(&mut self, guild_id: GuildId, channel_id: ChannelId) -> bool {
+        match self.channel {
+            Some(blocked) if blocked == (guild_id, channel_id) => false,
+            Some(_) => {
+                // Moving to another channel is a real transition, so automatic
+                // following resumes immediately at the new location.
+                self.clear();
+                true
+            }
+            None => true,
+        }
+    }
+}
+
 struct Handler {
     config: Arc<RwLock<DiscordConfig>>,
     tx: UnboundedSender<VoiceEvent>,
     current: Arc<RwLock<Option<CurrentCall>>>,
+    manual_follow_pause: Arc<RwLock<ManualFollowPause>>,
     consent_audio: Arc<[u8]>,
     audit: Arc<AuditLog>,
     recovery_tx: UnboundedSender<ReceiveRecoveryRequest>,
@@ -259,6 +292,11 @@ impl Handler {
         channel_id: ChannelId,
         origin: CallOrigin,
     ) -> JoinOutcome {
+        if origin == CallOrigin::SlashCommand {
+            // An explicit /record or /grabar request overrides a previous
+            // departure selected in Kuali's desktop UI.
+            self.manual_follow_pause.write().clear();
+        }
         if let Some(current) = *self.current.read() {
             if current.guild_id == guild_id && current.channel_id == channel_id {
                 return JoinOutcome::AlreadyHere;
@@ -810,6 +848,16 @@ impl EventHandler for Handler {
             match (new.guild_id, new.channel_id) {
                 // The followed user joined or moved to a channel.
                 (Some(guild_id), Some(channel_id)) => {
+                    if !self
+                        .manual_follow_pause
+                        .write()
+                        .should_follow(guild_id, channel_id)
+                    {
+                        // Discord also emits voice-state updates when screen
+                        // sharing, video, mute, or other flags change. Remaining
+                        // in the blocked channel is not a new join.
+                        return;
+                    }
                     let entered_channel =
                         old.as_ref().and_then(|state| state.channel_id) != Some(channel_id);
                     let join_context = if entered_channel {
@@ -840,6 +888,8 @@ impl EventHandler for Handler {
                 }
                 // The followed user disconnected.
                 (guild_id, None) => {
+                    // The next real channel entry may be followed again.
+                    self.manual_follow_pause.write().clear();
                     let current = *self.current.read();
                     if current.map(|call| call.origin) == Some(CallOrigin::FollowedUser) {
                         let guild_id = guild_id
@@ -925,6 +975,7 @@ pub struct DiscordHandle {
     songbird: Arc<Songbird>,
     shard_manager: Arc<serenity::gateway::ShardManager>,
     current: Arc<RwLock<Option<CurrentCall>>>,
+    manual_follow_pause: Arc<RwLock<ManualFollowPause>>,
     config: Arc<RwLock<DiscordConfig>>,
     task: JoinHandle<()>,
     recovery_task: JoinHandle<()>,
@@ -934,6 +985,14 @@ impl DiscordHandle {
     /// Applies settings that require no new gateway session. Pausing automatic
     /// following must never end an active call.
     pub fn update_config(&self, config: DiscordConfig) {
+        let previous = self.config.read().clone();
+        let follow_was_explicitly_resumed =
+            !previous.follow_automatically && config.follow_automatically;
+        let followed_user_changed = previous.follow_user_id != config.follow_user_id
+            || previous.follow_username != config.follow_username;
+        if follow_was_explicitly_resumed || followed_user_changed {
+            self.manual_follow_pause.write().clear();
+        }
         *self.config.write() = config;
     }
 
@@ -967,9 +1026,12 @@ impl DiscordHandle {
 
     /// Leaves the current voice channel, if any.
     pub async fn leave_call(&self) {
-        let guild_id = self.current.write().take().map(|c| c.guild_id);
-        if let Some(guild_id) = guild_id {
-            let _ = self.songbird.remove(guild_id).await;
+        let current = self.current.write().take();
+        if let Some(current) = current {
+            self.manual_follow_pause
+                .write()
+                .block(current.guild_id, current.channel_id);
+            let _ = self.songbird.remove(current.guild_id).await;
         }
     }
 
@@ -1116,6 +1178,7 @@ pub async fn start(
             .map_err(|error| DiscordError::Audit(format!("{}: {error}", audit_path.display())))?,
     );
     let current = Arc::new(RwLock::new(None));
+    let manual_follow_pause = Arc::new(RwLock::new(ManualFollowPause::default()));
     let (recovery_tx, recovery_rx) = unbounded_channel();
     let recovery_voice_tx = tx.clone();
     let live_config = Arc::new(RwLock::new(config.clone()));
@@ -1123,6 +1186,7 @@ pub async fn start(
         config: Arc::clone(&live_config),
         tx,
         current: Arc::clone(&current),
+        manual_follow_pause: Arc::clone(&manual_follow_pause),
         consent_audio,
         audit,
         recovery_tx,
@@ -1168,6 +1232,7 @@ pub async fn start(
         songbird,
         shard_manager,
         current,
+        manual_follow_pause,
         config: live_config,
         task,
         recovery_task,
@@ -1231,5 +1296,31 @@ mod tests {
         assert_eq!(transcript_id_from_button(&custom_id), Some("meeting-123"));
         assert_eq!(transcript_id_from_button("otro:meeting-123"), None);
         assert_eq!(transcript_id_from_button(TRANSCRIPT_BUTTON_PREFIX), None);
+    }
+
+    #[test]
+    fn manual_departure_ignores_updates_until_the_followed_user_really_leaves() {
+        let guild = GuildId::new(10);
+        let channel = ChannelId::new(20);
+        let mut pause = ManualFollowPause::default();
+
+        pause.block(guild, channel);
+        assert!(!pause.should_follow(guild, channel));
+        assert!(!pause.should_follow(guild, channel));
+
+        pause.clear();
+        assert!(pause.should_follow(guild, channel));
+    }
+
+    #[test]
+    fn moving_channels_resumes_following_after_a_manual_departure() {
+        let guild = GuildId::new(10);
+        let blocked = ChannelId::new(20);
+        let destination = ChannelId::new(21);
+        let mut pause = ManualFollowPause::default();
+
+        pause.block(guild, blocked);
+        assert!(pause.should_follow(guild, destination));
+        assert!(pause.should_follow(guild, blocked));
     }
 }
