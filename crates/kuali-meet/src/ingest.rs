@@ -11,7 +11,7 @@
 use std::collections::{HashMap, HashSet};
 use std::net::SocketAddr;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use futures_util::{SinkExt, StreamExt};
 use kuali_core::{color_for, CallInfo, DiscordUserId, Speaker, VoiceEvent};
@@ -30,6 +30,14 @@ static NEXT_WEB_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 /// Clock used by the engine to close speech turns. Discord supplies packet ticks;
 /// browser ingest must generate them or silence would never close a turn.
 const TICK_MS: u64 = 20;
+/// The extension sends a keepalive every 20 seconds. If Chrome is force-quit and
+/// the operating system does not promptly close the socket, this deadline still
+/// finalizes the meeting instead of leaving Kuali listening forever.
+const CLIENT_LIVENESS_TIMEOUT: Duration = Duration::from_secs(50);
+
+fn client_is_stale(last_activity: Instant, now: Instant) -> bool {
+    now.saturating_duration_since(last_activity) >= CLIENT_LIVENESS_TIMEOUT
+}
 
 /// Default listening address: loopback, never `0.0.0.0`.
 pub fn default_addr() -> SocketAddr {
@@ -184,10 +192,18 @@ async fn handle_connection(
     // Track signal peak because very quiet input produces more hallucinations.
     let mut peak = 0.0f32;
     let mut reported = std::time::Instant::now();
+    let mut last_client_activity = Instant::now();
 
     loop {
         tokio::select! {
             _ = ticker.tick() => {
+                if client_is_stale(last_client_activity, Instant::now()) {
+                    tracing::warn!(
+                        timeout_seconds = CLIENT_LIVENESS_TIMEOUT.as_secs(),
+                        "web meeting client stopped responding; closing capture"
+                    );
+                    break;
+                }
                 if events.send(VoiceEvent::Tick).is_err() {
                     break;
                 }
@@ -211,6 +227,7 @@ async fn handle_connection(
             }
             message = source.next() => {
                 let Some(message) = message else { break };
+                last_client_activity = Instant::now();
                 match message? {
                     Message::Binary(bytes) => {
                         if let Ok(Frame::Audio(frame)) = decode_binary(&bytes) {
@@ -495,6 +512,7 @@ fn upsert_roster(
         return;
     };
 
+    let mut current_source_ids = HashSet::new();
     for participant in participants {
         let Some(source_id) =
             detail_string(participant, &["participantId", "participant_id", "id"])
@@ -503,6 +521,7 @@ fn upsert_roster(
             continue;
         };
         let user_id = session.stable_participant_id(&source_id);
+        current_source_ids.insert(source_id.clone());
         let mut speaker = Speaker::unknown(user_id);
         speaker.source_id = Some(source_id.clone());
         speaker.audio_kind = Some("separate".to_string());
@@ -518,6 +537,27 @@ fn upsert_roster(
         }
         session.roster.insert(source_id, speaker.clone());
         let _ = events.send(VoiceEvent::ParticipantPresent(speaker));
+    }
+
+    let protocol_backed = event
+        .detail
+        .as_ref()
+        .and_then(|detail| detail.get("protocolBacked"))
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    if protocol_backed {
+        let departed = session
+            .roster
+            .keys()
+            .filter(|source_id| !current_source_ids.contains(*source_id))
+            .cloned()
+            .collect::<Vec<_>>();
+        for source_id in departed {
+            if let Some(speaker) = session.roster.remove(&source_id) {
+                session.active_speakers.remove(&speaker.user_id);
+                let _ = events.send(VoiceEvent::ParticipantLeft(speaker.user_id));
+            }
+        }
     }
 }
 
@@ -826,6 +866,19 @@ mod tests {
 
     fn test_participant_id(source_id: &str) -> DiscordUserId {
         test_session().stable_participant_id(source_id)
+    }
+
+    #[test]
+    fn an_abandoned_browser_connection_expires_after_the_keepalive_deadline() {
+        let last_activity = Instant::now();
+        assert!(!client_is_stale(
+            last_activity,
+            last_activity + CLIENT_LIVENESS_TIMEOUT - Duration::from_millis(1),
+        ));
+        assert!(client_is_stale(
+            last_activity,
+            last_activity + CLIENT_LIVENESS_TIMEOUT,
+        ));
     }
 
     async fn recv_scoped(
@@ -1301,6 +1354,31 @@ mod tests {
             Some("https://example.test/delphys.jpg")
         );
         assert_eq!(speakers[1].user_id, test_participant_id("meet-device-2"));
+    }
+
+    #[test]
+    fn an_authoritative_roster_removes_participants_who_left() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = test_session();
+        on_text(
+            r#"{"kind":"roster-state","ts":1,"detail":{"protocolBacked":true,"participants":[{"participantId":"meet-device-1","displayName":"Garrux"},{"participantId":"meet-device-2","displayName":"Pivel"}]}}"#,
+            &mut session,
+            &tx,
+        );
+        while rx.try_recv().is_ok() {}
+
+        on_text(
+            r#"{"kind":"roster-state","ts":2,"detail":{"protocolBacked":true,"participants":[{"participantId":"meet-device-1","displayName":"Garrux"}]}}"#,
+            &mut session,
+            &tx,
+        );
+        assert_eq!(session.roster.len(), 1);
+        match rx.try_recv() {
+            Ok(VoiceEvent::ParticipantLeft(user_id)) => {
+                assert_eq!(user_id, test_participant_id("meet-device-2"));
+            }
+            other => panic!("expected departed roster participant, got {other:?}"),
+        }
     }
 
     #[test]
