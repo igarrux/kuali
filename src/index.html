@@ -48,6 +48,14 @@
       </div>
     </header>
 
+    <section class="update-banner" id="update-banner" aria-live="polite" hidden>
+      <div class="update-banner-copy">
+        <span class="update-mark" aria-hidden="true">↑</span>
+        <span><strong id="update-banner-title">Hay una actualización de Kuali</strong><small id="update-banner-detail"></small></span>
+      </div>
+      <button type="button" class="primary compact" id="btn-install-update">Actualizar y reiniciar</button>
+    </section>
+
     <main class="layout" id="app-layout">
       <aside class="sidebar">
         <nav class="app-nav" aria-label="Navegación principal">
@@ -1102,6 +1110,23 @@
                   <small>El receptor de la extensión y el seguimiento de Discord quedarán listos automáticamente.</small>
                 </span>
               </label>
+              <label class="check">
+                <input type="checkbox" id="cfg-automatic-updates" name="automatic-updates" />
+                <span>
+                  Actualizar Kuali automáticamente
+                  <small>Busca versiones firmadas periódicamente y las instala cuando no hay reuniones ni resúmenes en curso.</small>
+                </span>
+              </label>
+              <div class="settings-update-card">
+                <div>
+                  <strong>Actualizaciones</strong>
+                  <p id="update-settings-status">Kuali comprobará periódicamente si hay una versión nueva.</p>
+                </div>
+                <div class="settings-update-actions">
+                  <button type="button" class="ghost" id="btn-check-update">Buscar ahora</button>
+                  <button type="button" class="primary" id="btn-settings-install-update" hidden>Actualizar y reiniciar</button>
+                </div>
+              </div>
               <div class="settings-guide-link">
                 <div><strong>¿Necesitas volver a configurar algo?</strong><p>La guía de Discord y Meet siempre está disponible desde Inicio.</p></div>
                 <button type="button" class="ghost" id="btn-settings-open-guide">Abrir guía</button>

@@ -25,6 +25,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "resources": ["../browser-extension/**/*"],
     "icon": [
@@ -41,6 +42,14 @@
     "macOS": {
       "minimumSystemVersion": "11.0",
       "signingIdentity": "-"
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDFENTcwOUJBRjBERTRBN0UKUldSK1N0N3d1Z2xYSFlEdGVrZERZU3NlL2RZVnhRMXRtVERRZDJ1eXREU0R6dkVEOTY4dUdPOUkK",
+      "endpoints": [
+        "https://github.com/igarrux/kuali/releases/latest/download/latest.json"
+      ]
     }
   }
 }

@@ -56,6 +56,24 @@ test("summaries and tasks have an explicit privacy switch", () => {
   assert.match(app, /btn-resummarize"\)\.hidden = live \|\| !summariesEnabled\(\)/);
 });
 
+test("signed updates are periodic, controllable, and deferred during active work", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const tauriConfig = JSON.parse(
+    readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+  );
+  assert.match(html, /id="cfg-automatic-updates"/);
+  assert.match(html, /id="btn-check-update"/);
+  assert.match(html, /id="btn-install-update"/);
+  assert.match(app, /UPDATE_CHECK_INTERVAL_MS = 6 \* 60 \* 60 \* 1000/);
+  assert.match(app, /state\.liveMeetings\.size === 0/);
+  assert.equal(tauriConfig.bundle.createUpdaterArtifacts, true);
+  assert.match(tauriConfig.plugins.updater.pubkey, /^[A-Za-z0-9+/=]+$/);
+  assert.deepEqual(tauriConfig.plugins.updater.endpoints, [
+    "https://github.com/igarrux/kuali/releases/latest/download/latest.json",
+  ]);
+});
+
 test("visible placeholders do not contain a contributor's personal examples", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.doesNotMatch(html, /@garrux|WaitingRoom/);

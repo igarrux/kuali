@@ -12,9 +12,10 @@ use kuali_core::{
 use kuali_engine::Engine;
 use kuali_llm::{ModelChoice, ProviderInfo, ProviderStatus};
 use serde::Serialize;
-use tauri::{Manager, State};
+use tauri::{Emitter, Manager, State};
 use tauri_plugin_autostart::ManagerExt as AutostartManagerExt;
 use tauri_plugin_dialog::DialogExt;
+use tauri_plugin_updater::UpdaterExt;
 
 fn fail(e: impl std::fmt::Display) -> String {
     e.to_string()
@@ -510,6 +511,61 @@ pub fn set_autostart_enabled(app: tauri::AppHandle, enabled: bool) -> Result<(),
     } else {
         app.autolaunch().disable().map_err(fail)
     }
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AppUpdateInfo {
+    pub current_version: String,
+    pub version: String,
+    pub notes: Option<String>,
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AppUpdateProgress {
+    downloaded_bytes: u64,
+    total_bytes: Option<u64>,
+}
+
+/// Checks GitHub's signed updater manifest without downloading the application.
+#[tauri::command]
+pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<AppUpdateInfo>, String> {
+    let current_version = app.package_info().version.to_string();
+    let update = app.updater().map_err(fail)?.check().await.map_err(fail)?;
+    Ok(update.map(|update| AppUpdateInfo {
+        current_version,
+        version: update.version.to_string(),
+        notes: update.body.clone(),
+    }))
+}
+
+/// Downloads, verifies, and installs the newest signed release before restarting.
+#[tauri::command]
+pub async fn install_update(app: tauri::AppHandle) -> Result<bool, String> {
+    let Some(update) = app.updater().map_err(fail)?.check().await.map_err(fail)? else {
+        return Ok(false);
+    };
+
+    let progress_app = app.clone();
+    let mut downloaded_bytes = 0u64;
+    update
+        .download_and_install(
+            move |chunk_length, total_bytes| {
+                downloaded_bytes = downloaded_bytes.saturating_add(chunk_length as u64);
+                let _ = progress_app.emit(
+                    "kuali://update-progress",
+                    AppUpdateProgress {
+                        downloaded_bytes,
+                        total_bytes,
+                    },
+                );
+            },
+            || {},
+        )
+        .await
+        .map_err(fail)?;
+    app.restart();
 }
 
 /// Schedules a reset for the next launch and restarts. Deleting in the new

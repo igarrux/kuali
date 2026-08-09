@@ -76,12 +76,22 @@ const state = {
   discordGuideStep: 0,
   meetGuideStep: 0,
   autostartEnabled: false,
+  updateInfo: null,
+  updateCurrentVersion: null,
+  updateStatus: "idle",
+  updateProgress: null,
+  updateTimer: null,
+  updateBootTimer: null,
+  updateAutomaticAttempted: null,
   /** IDs with an open speech turn, used by the speaking indicator. */
   talking: new Map(),
   /** Ephemeral drafts keyed by turn ID; never included in summaries. */
   liveDrafts: new Map(),
   elapsedTimer: null,
 };
+
+const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const UPDATE_BOOT_DELAY_MS = 15 * 1000;
 
 function isLiveMeeting(id) {
   return Boolean(id) && state.liveMeetings.has(id);
@@ -133,6 +143,155 @@ function timestamp(ms) {
 function humanBytes(bytes) {
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   return `${Math.round(bytes / 1e6)} MB`;
+}
+
+function canRestartForUpdate() {
+  return state.liveMeetings.size === 0 && ["offline", "watching"].includes(state.status);
+}
+
+function renderUpdateState() {
+  const info = state.updateInfo;
+  const busy = ["checking", "installing"].includes(state.updateStatus);
+  const safeToRestart = canRestartForUpdate();
+  const version = info?.version || "";
+  let statusText = t("Kuali comprobará periódicamente si hay una versión nueva.");
+
+  if (state.updateStatus === "checking") {
+    statusText = t("Buscando actualizaciones…");
+  } else if (state.updateStatus === "installing") {
+    const progress = state.updateProgress?.totalBytes
+      ? `${Math.min(100, Math.round((state.updateProgress.downloadedBytes / state.updateProgress.totalBytes) * 100))}%`
+      : state.updateProgress?.downloadedBytes
+        ? humanBytes(state.updateProgress.downloadedBytes)
+        : "";
+    statusText = progress
+      ? t("Descargando Kuali {version}: {progress}", { version, progress })
+      : t("Descargando Kuali {version}…", { version });
+  } else if (info) {
+    statusText = safeToRestart
+      ? t("Kuali {version} está disponible.", { version })
+      : t("La actualización se instalará cuando termine la actividad actual.");
+  } else if (state.updateStatus === "current") {
+    statusText = t("Tienes la versión más reciente.");
+  } else if (state.updateStatus === "error") {
+    statusText = t("No se pudo buscar actualizaciones.");
+  }
+
+  const settingsStatus = $("update-settings-status");
+  if (settingsStatus) settingsStatus.textContent = statusText;
+  const checkButton = $("btn-check-update");
+  if (checkButton) {
+    checkButton.disabled = busy;
+    checkButton.textContent = state.updateStatus === "checking"
+      ? t("Buscando actualizaciones…")
+      : t("Buscar ahora");
+  }
+
+  for (const id of ["btn-install-update", "btn-settings-install-update"]) {
+    const button = $(id);
+    if (!button) continue;
+    button.hidden = !info;
+    button.disabled = busy || !safeToRestart;
+    button.textContent = state.updateStatus === "installing"
+      ? t("Descargando Kuali {version}…", { version })
+      : t("Actualizar y reiniciar");
+    button.title = info && !safeToRestart
+      ? t("Termina la reunión o el resumen antes de reiniciar Kuali.")
+      : "";
+  }
+
+  const banner = $("update-banner");
+  if (banner) {
+    banner.hidden = !info;
+    $("update-banner-title").textContent = t("Hay una actualización de Kuali");
+    $("update-banner-detail").textContent = state.updateStatus === "installing"
+      ? statusText
+      : safeToRestart
+        ? t("Versión {version} lista para instalar.", { version })
+        : t("La actualización se instalará cuando termine la actividad actual.");
+  }
+}
+
+async function installAvailableUpdate({ automatic = false } = {}) {
+  if (!state.updateInfo || state.updateStatus === "installing") return;
+  if (!canRestartForUpdate()) {
+    if (!automatic) {
+      toast(
+        t("Termina la reunión o el resumen antes de reiniciar Kuali."),
+        t("Actualizaciones"),
+        true,
+      );
+    }
+    renderUpdateState();
+    return;
+  }
+  const version = state.updateInfo.version;
+  state.updateStatus = "installing";
+  state.updateProgress = null;
+  renderUpdateState();
+  try {
+    const installed = await invoke("install_update");
+    if (!installed) {
+      state.updateInfo = null;
+      state.updateStatus = "current";
+      renderUpdateState();
+      if (!automatic) toast(t("No hay una actualización pendiente."), t("Actualizaciones"));
+      return;
+    }
+    toast(t("Actualización instalada; reiniciando…"), t("Actualizaciones"));
+  } catch (error) {
+    state.updateStatus = "available";
+    renderUpdateState();
+    toast(
+      `${t("No se pudo instalar la actualización.")} ${String(error)}`,
+      t("Actualizaciones"),
+      true,
+    );
+    state.updateAutomaticAttempted = version;
+  }
+}
+
+function maybeInstallUpdateAutomatically() {
+  const version = state.updateInfo?.version;
+  if (!version || state.config?.application?.["automatic-updates"] === false) return;
+  if (!canRestartForUpdate() || state.updateAutomaticAttempted === version) return;
+  state.updateAutomaticAttempted = version;
+  installAvailableUpdate({ automatic: true });
+}
+
+async function checkForUpdates({ manual = false } = {}) {
+  if (["checking", "installing"].includes(state.updateStatus)) return;
+  state.updateStatus = "checking";
+  renderUpdateState();
+  try {
+    const info = await invoke("check_for_update");
+    state.updateInfo = info;
+    state.updateCurrentVersion = info?.currentVersion || state.updateCurrentVersion;
+    state.updateStatus = info ? "available" : "current";
+    state.updateProgress = null;
+    renderUpdateState();
+    if (info && !manual) maybeInstallUpdateAutomatically();
+  } catch (error) {
+    state.updateStatus = state.updateInfo ? "available" : "error";
+    renderUpdateState();
+    if (manual) {
+      toast(
+        `${t("No se pudo buscar actualizaciones.")} ${String(error)}`,
+        t("Actualizaciones"),
+        true,
+      );
+    }
+  }
+}
+
+function scheduleAutomaticUpdateChecks() {
+  clearTimeout(state.updateBootTimer);
+  clearInterval(state.updateTimer);
+  state.updateBootTimer = null;
+  state.updateTimer = null;
+  if (state.config?.application?.["automatic-updates"] === false) return;
+  state.updateBootTimer = setTimeout(() => checkForUpdates(), UPDATE_BOOT_DELAY_MS);
+  state.updateTimer = setInterval(() => checkForUpdates(), UPDATE_CHECK_INTERVAL_MS);
 }
 
 function shortDate(iso) {
@@ -2050,6 +2209,8 @@ function handleEvent(event) {
     case "statusChanged":
       state.status = event.status;
       renderStatus();
+      renderUpdateState();
+      maybeInstallUpdateAutomatically();
       if (["idle", "setup"].includes(state.currentPane)) renderRoot();
       break;
 
@@ -2103,6 +2264,7 @@ function handleEvent(event) {
       renderStatus();
       refreshMeetings();
       renderLiveMeetingList();
+      renderUpdateState();
       break;
 
     case "meetingEnded": {
@@ -2132,6 +2294,7 @@ function handleEvent(event) {
             .catch(() => renderMeeting());
         }
         state.tasksLoaded = false;
+        renderUpdateState();
         break;
       }
 
@@ -2308,6 +2471,8 @@ async function openSettings() {
   updateSummarySettingsVisibility();
   $("cfg-ui-language").value = c.application?.language ?? "auto";
   $("cfg-autostart").checked = state.autostartEnabled;
+  $("cfg-automatic-updates").checked = c.application?.["automatic-updates"] !== false;
+  renderUpdateState();
   state.webhooks = structuredClone(c.integrations?.webhooks ?? []);
   renderWebhooks();
 
@@ -3004,6 +3169,7 @@ async function saveSettings() {
 
   c.application ??= {};
   c.application.language = $("cfg-ui-language").value;
+  c.application["automatic-updates"] = $("cfg-automatic-updates").checked;
 
   saveButton.disabled = true;
   $("save-note").textContent = t("Guardando y moviendo pesos…");
@@ -3012,6 +3178,7 @@ async function saveSettings() {
     await invoke("set_autostart_enabled", { enabled: $("cfg-autostart").checked });
     state.autostartEnabled = $("cfg-autostart").checked;
     state.config = c;
+    scheduleAutomaticUpdateChecks();
     setLanguagePreference(c.application.language);
     state.modelsDirectory = await invoke("resolved_models_directory");
     state.models = await invoke("whisper_models");
@@ -3199,6 +3366,7 @@ async function renderForLanguageChange() {
     refreshFactoryResetConfirmation({ clear: true });
   }
   renderStatus();
+  renderUpdateState();
   renderMeetingList();
   renderLiveMeetingList();
   if (state.currentPane === "meeting") renderMeeting();
@@ -3381,6 +3549,9 @@ function wireUp() {
     $("settings-modal").hidden = true;
     showGuide();
   });
+  $("btn-check-update").addEventListener("click", () => checkForUpdates({ manual: true }));
+  $("btn-install-update").addEventListener("click", () => installAvailableUpdate());
+  $("btn-settings-install-update").addEventListener("click", () => installAvailableUpdate());
 
   for (const name of ["summary", "tasks"]) {
     $(`meeting-tab-${name}`).addEventListener("click", () => selectMeetingInsightTab(name));
@@ -3673,9 +3844,14 @@ async function boot() {
   await listen("kuali://config-changed", async () => {
     state.config = await invoke("get_config");
     setLanguagePreference(state.config.application?.language ?? "auto");
+    scheduleAutomaticUpdateChecks();
     renderStatus();
     if (["idle", "setup"].includes(state.currentPane)) await renderRoot();
     else if (state.currentPane === "guide") await renderGuide();
+  });
+  await listen("kuali://update-progress", (event) => {
+    state.updateProgress = event.payload;
+    if (state.updateStatus === "installing") renderUpdateState();
   });
 
   const [snapshot, config] = await Promise.all([invoke("get_snapshot"), invoke("get_config")]);
@@ -3685,12 +3861,14 @@ async function boot() {
   state.modelState = snapshot.modelState;
   state.webMeetings = snapshot.webMeetings;
   state.config = config;
+  scheduleAutomaticUpdateChecks();
 
   applyLiveSnapshot(snapshot, true);
 
   await refreshMeetings();
   refreshTasks().catch(() => {});
   renderStatus();
+  renderUpdateState();
   const destination = location.hash.slice(1);
   if (!localStorage.getItem("kuali.onboarding.completed")) await showGuide();
   else if (destination === "tasks") await showTasks();

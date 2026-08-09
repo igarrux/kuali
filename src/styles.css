@@ -244,6 +244,64 @@ select:focus-visible {
   z-index: 5;
 }
 
+.update-banner {
+  min-height: 54px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  flex-shrink: 0;
+  padding: 9px 20px;
+  background: color-mix(in srgb, var(--accent-soft) 70%, var(--surface));
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+}
+
+.update-banner-copy,
+.update-banner-copy > span:last-child {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+}
+
+.update-banner-copy {
+  gap: 11px;
+}
+
+.update-banner-copy > span:last-child {
+  align-items: flex-start;
+  flex-direction: column;
+  line-height: 1.25;
+}
+
+.update-banner-copy strong {
+  font-size: 12.5px;
+}
+
+.update-banner-copy small {
+  margin-top: 2px;
+  color: var(--muted-strong);
+  font-size: 10.5px;
+}
+
+.update-mark {
+  width: 29px;
+  height: 29px;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 30%, transparent);
+  border-radius: 10px;
+  color: var(--accent);
+  font-size: 17px;
+  font-weight: 800;
+}
+
+.primary.compact {
+  padding: 8px 13px;
+  font-size: 11.5px;
+}
+
 .brand {
   display: flex;
   align-items: center;
@@ -3241,6 +3299,9 @@ kbd { padding: 2px 5px; background: var(--surface-3); border: 1px solid var(--li
 .avatar-initial { display: grid; place-items: center; flex: none; border-radius: 50%; color: #08130f; font-size: 8px; font-weight: 850; }
 .task-group h5 { display: flex; align-items: center; gap: 7px; }
 
+.settings-update-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding: 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }
+.settings-update-card p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
+.settings-update-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .settings-guide-link { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding: 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }
 .settings-guide-link strong { font-size: 13px; }
 .settings-guide-link p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }

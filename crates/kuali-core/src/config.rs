@@ -32,12 +32,16 @@ pub struct ApplicationConfig {
     /// the interface to that language without changing transcription or
     /// summary languages.
     pub language: String,
+    /// Check the signed release feed periodically and install updates whenever
+    /// no recording or summary is in progress.
+    pub automatic_updates: bool,
 }
 
 impl Default for ApplicationConfig {
     fn default() -> Self {
         Self {
             language: "auto".into(),
+            automatic_updates: true,
         }
     }
 }
@@ -565,16 +569,20 @@ mod tests {
     }
 
     #[test]
-    fn application_language_round_trips_and_old_configs_use_auto() {
+    fn application_preferences_round_trip_and_old_configs_use_safe_defaults() {
         let mut cfg = KualiConfig::default();
         cfg.application.language = "en".into();
-        assert_eq!(toml_round_trip(&cfg).application.language, "en");
+        cfg.application.automatic_updates = false;
+        let saved = toml_round_trip(&cfg);
+        assert_eq!(saved.application.language, "en");
+        assert!(!saved.application.automatic_updates);
 
         let old: KualiConfig = serde_json::from_value(serde_json::json!({
             "discord": { "bot-token": "token" }
         }))
         .expect("deserialize config written before UI languages existed");
         assert_eq!(old.application.language, "auto");
+        assert!(old.application.automatic_updates);
     }
 
     #[test]
