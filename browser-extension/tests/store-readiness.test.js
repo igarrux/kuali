@@ -27,6 +27,13 @@ test("capture requires disclosure and affirmative confirmation", () => {
   assert.match(content, /capture-stop/);
 });
 
+test("the recording indicator stays compact, movable, and out of Meet controls", () => {
+  const content = read("src/content.js");
+  assert.match(content, /indicator is-compact/);
+  assert.match(content, /bottom: 84px/);
+  assert.match(content, /pointerdown/);
+});
+
 test("both store locales contain a name and description", () => {
   for (const locale of ["en", "es_419"]) {
     const messages = JSON.parse(read(`_locales/${locale}/messages.json`));

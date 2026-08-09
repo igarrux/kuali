@@ -18,6 +18,9 @@ function translated(key, fallback) {
 
 const ui = {
   recordingIndicator: translated("recordingIndicator", "Kuali is recording and transcribing"),
+  moveRecordingIndicator: translated("moveRecordingIndicator", "Move recording indicator"),
+  minimizeRecordingIndicator: translated("minimizeRecordingIndicator", "Minimize recording indicator"),
+  expandRecordingIndicator: translated("expandRecordingIndicator", "Expand recording indicator"),
   stop: translated("stop", "Stop"),
   stopRecordingAria: translated("stopRecordingAria", "Stop Kuali recording and transcription"),
   recordSuggestionAria: translated("recordSuggestionAria", "Kuali suggestion to record the meeting"),
@@ -163,14 +166,14 @@ function showRecordingIndicator() {
       .indicator {
         position: fixed;
         z-index: 2147483647;
-        top: 18px;
-        right: 18px;
+        left: 16px;
+        bottom: 84px;
         box-sizing: border-box;
         display: flex;
         align-items: center;
-        gap: 9px;
+        gap: 6px;
         max-width: calc(100vw - 36px);
-        padding: 8px 9px 8px 11px;
+        padding: 5px;
         border: 1px solid rgba(248, 113, 113, .34);
         border-radius: 999px;
         background: rgba(18, 24, 33, .96);
@@ -180,6 +183,23 @@ function showRecordingIndicator() {
         backdrop-filter: blur(14px);
         animation: indicator-enter .2s ease-out both;
       }
+      .indicator.dragging { cursor: grabbing; animation: none; user-select: none; }
+      .drag-area {
+        min-width: 0;
+        min-height: 30px;
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 0 6px;
+        border: 0;
+        border-radius: 999px;
+        color: inherit;
+        background: transparent;
+        cursor: grab;
+        touch-action: none;
+      }
+      .drag-area:active { cursor: grabbing; }
+      .grip { color: #8b97a8; font: 700 13px/1 sans-serif; }
       .dot {
         width: 8px;
         height: 8px;
@@ -189,7 +209,8 @@ function showRecordingIndicator() {
         box-shadow: 0 0 0 4px rgba(251, 113, 133, .13);
       }
       .label { min-width: 0; overflow-wrap: anywhere; }
-      button {
+      .compact-label { display: none; }
+      .action {
         min-height: 30px;
         padding: 0 10px;
         border: 1px solid rgba(255, 255, 255, .12);
@@ -201,29 +222,103 @@ function showRecordingIndicator() {
         touch-action: manipulation;
         transition: background-color .14s ease, border-color .14s ease;
       }
-      button:hover { border-color: rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .12); }
+      .action:hover { border-color: rgba(255, 255, 255, .22); background: rgba(255, 255, 255, .12); }
       button:focus-visible { outline: 2px solid #fda4af; outline-offset: 2px; }
+      .toggle {
+        width: 30px;
+        padding: 0;
+        font-size: 16px;
+      }
+      .indicator.is-compact .drag-area { gap: 7px; padding-left: 7px; }
+      .indicator.is-compact .grip,
+      .indicator.is-compact .label,
+      .indicator.is-compact .stop { display: none; }
+      .indicator.is-compact .compact-label { display: inline; }
       @keyframes indicator-enter {
         from { opacity: 0; transform: translateY(-8px); }
         to { opacity: 1; transform: translateY(0); }
       }
       @media (prefers-reduced-motion: reduce) {
         .indicator { animation: none; }
-        button { transition: none; }
+        .action { transition: none; }
       }
       @media (prefers-color-scheme: light) {
         .indicator { background: rgba(251, 252, 251, .97); color: #17201d; box-shadow: 0 12px 34px rgba(34, 61, 51, .18); }
-        button { color: #552126; background: rgba(190, 24, 93, .08); border-color: rgba(190, 24, 93, .18); }
-        button:hover { background: rgba(190, 24, 93, .13); border-color: rgba(190, 24, 93, .28); }
+        .action { color: #552126; background: rgba(190, 24, 93, .08); border-color: rgba(190, 24, 93, .18); }
+        .action:hover { background: rgba(190, 24, 93, .13); border-color: rgba(190, 24, 93, .28); }
       }
     </style>
-    <aside class="indicator" role="status" aria-live="polite">
-      <span class="dot" aria-hidden="true"></span>
-      <span class="label">${ui.recordingIndicator}</span>
-      <button type="button" aria-label="${ui.stopRecordingAria}">${ui.stop}</button>
+    <aside class="indicator is-compact" role="status" aria-live="polite" aria-label="${ui.recordingIndicator}">
+      <button class="drag-area" type="button" aria-label="${ui.moveRecordingIndicator}" title="${ui.moveRecordingIndicator}">
+        <span class="grip" aria-hidden="true">⠿</span>
+        <span class="dot" aria-hidden="true"></span>
+        <span class="compact-label" aria-hidden="true">Kuali</span>
+        <span class="label" aria-hidden="true">${ui.recordingIndicator}</span>
+      </button>
+      <button class="action toggle" type="button" aria-label="${ui.expandRecordingIndicator}" title="${ui.expandRecordingIndicator}">+</button>
+      <button class="action stop" type="button" aria-label="${ui.stopRecordingAria}">${ui.stop}</button>
     </aside>
   `;
-  shadow.querySelector("button").addEventListener("click", () => {
+  const indicator = shadow.querySelector(".indicator");
+  const dragArea = shadow.querySelector(".drag-area");
+  const toggle = shadow.querySelector(".toggle");
+  let compact = true;
+  let drag = null;
+
+  const placeIndicator = (left, top) => {
+    const rect = indicator.getBoundingClientRect();
+    const margin = 8;
+    const maxLeft = Math.max(margin, window.innerWidth - rect.width - margin);
+    const maxTop = Math.max(margin, window.innerHeight - rect.height - margin);
+    indicator.style.left = `${Math.min(Math.max(margin, left), maxLeft)}px`;
+    indicator.style.top = `${Math.min(Math.max(margin, top), maxTop)}px`;
+    indicator.style.right = "auto";
+    indicator.style.bottom = "auto";
+  };
+
+  const syncCompactState = () => {
+    indicator.classList.toggle("is-compact", compact);
+    const label = compact ? ui.expandRecordingIndicator : ui.minimizeRecordingIndicator;
+    toggle.textContent = compact ? "+" : "−";
+    toggle.setAttribute("aria-label", label);
+    toggle.title = label;
+  };
+
+  const finishDrag = (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    dragArea.releasePointerCapture?.(event.pointerId);
+    drag = null;
+    indicator.classList.remove("dragging");
+  };
+
+  dragArea.addEventListener("pointerdown", (event) => {
+    if (event.button !== 0) return;
+    const rect = indicator.getBoundingClientRect();
+    drag = {
+      pointerId: event.pointerId,
+      originX: event.clientX,
+      originY: event.clientY,
+      left: rect.left,
+      top: rect.top,
+    };
+    dragArea.setPointerCapture?.(event.pointerId);
+    indicator.classList.add("dragging");
+    event.preventDefault();
+  });
+  dragArea.addEventListener("pointermove", (event) => {
+    if (!drag || event.pointerId !== drag.pointerId) return;
+    placeIndicator(
+      drag.left + event.clientX - drag.originX,
+      drag.top + event.clientY - drag.originY,
+    );
+  });
+  dragArea.addEventListener("pointerup", finishDrag);
+  dragArea.addEventListener("pointercancel", finishDrag);
+  toggle.addEventListener("click", () => {
+    compact = !compact;
+    syncCompactState();
+  });
+  shadow.querySelector(".stop").addEventListener("click", () => {
     sendRuntimeMessage({ type: "capture-stop" });
   });
   document.documentElement.append(host);
