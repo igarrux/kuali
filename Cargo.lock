@@ -2829,6 +2829,7 @@ name = "kuali-llm"
 version = "0.1.2"
 dependencies = [
  "async-trait",
+ "directories",
  "futures",
  "kuali-core",
  "reqwest 0.12.28",

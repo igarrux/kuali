@@ -8,6 +8,7 @@ use std::time::Duration;
 use kuali_core::LlmConfig;
 
 use crate::catalog::{self, ProviderDescriptor};
+use crate::cli::ResolvedCommand;
 use crate::provider::LlmError;
 
 /// Model as published by its provider.
@@ -60,7 +61,7 @@ pub async fn list_models(config: &LlmConfig, id: &str) -> Result<Vec<ModelChoice
 /// returns names accepted by the installed version.
 async fn claude_cli(descriptor: &ProviderDescriptor) -> Result<Vec<ModelChoice>, LlmError> {
     let command = require_binary(descriptor)?;
-    let output = run_briefly(command, &["--print", "/model"], Duration::from_secs(30)).await?;
+    let output = run_briefly(&command, &["--print", "/model"], Duration::from_secs(30)).await?;
 
     // Example: `Usage: /model <name>. Available: sonnet, opus, …, or a full model ID.`
     let Some(listed) = output.split("Available:").nth(1) else {
@@ -108,7 +109,8 @@ async fn codex_cli(descriptor: &ProviderDescriptor) -> Result<Vec<ModelChoice>, 
     use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 
     let command = require_binary(descriptor)?;
-    let mut child = tokio::process::Command::new(command)
+    let mut process = command.process();
+    let mut child = process
         .arg("app-server")
         .current_dir(std::env::temp_dir())
         .stdin(std::process::Stdio::piped())
@@ -117,7 +119,7 @@ async fn codex_cli(descriptor: &ProviderDescriptor) -> Result<Vec<ModelChoice>, 
         .kill_on_drop(true)
         .spawn()
         .map_err(|source| LlmError::Spawn {
-            command: command.to_string(),
+            command: command.label(),
             source,
         })?;
 
@@ -178,19 +180,22 @@ async fn codex_cli(descriptor: &ProviderDescriptor) -> Result<Vec<ModelChoice>, 
     Ok(models.ok().flatten().unwrap_or_default())
 }
 
-fn require_binary(descriptor: &ProviderDescriptor) -> Result<&'static str, LlmError> {
+fn require_binary(descriptor: &ProviderDescriptor) -> Result<ResolvedCommand, LlmError> {
     let command = descriptor
         .command
         .ok_or_else(|| LlmError::Unavailable(descriptor.id.to_string()))?;
-    if crate::cli::find_in_path(command).is_none() {
-        return Err(LlmError::Unavailable(descriptor.id.to_string()));
-    }
-    Ok(command)
+    crate::cli::resolve_command(command)
+        .ok_or_else(|| LlmError::Unavailable(descriptor.id.to_string()))
 }
 
 /// Runs a short-lived command and returns its output.
-async fn run_briefly(command: &str, args: &[&str], limit: Duration) -> Result<String, LlmError> {
-    let output = tokio::process::Command::new(command)
+async fn run_briefly(
+    command: &ResolvedCommand,
+    args: &[&str],
+    limit: Duration,
+) -> Result<String, LlmError> {
+    let mut process = command.process();
+    let output = process
         .args(args)
         .current_dir(std::env::temp_dir())
         .stdin(std::process::Stdio::null())
@@ -202,11 +207,11 @@ async fn run_briefly(command: &str, args: &[&str], limit: Duration) -> Result<St
     let output = tokio::time::timeout(limit, output)
         .await
         .map_err(|_| LlmError::Provider {
-            provider: command.to_string(),
-            message: format!("«{command} {}» tardó demasiado", args.join(" ")),
+            provider: command.label(),
+            message: format!("«{} {}» tardó demasiado", command.label(), args.join(" ")),
         })?
         .map_err(|source| LlmError::Spawn {
-            command: command.to_string(),
+            command: command.label(),
             source,
         })?;
 
@@ -223,7 +228,7 @@ async fn run_briefly(command: &str, args: &[&str], limit: Duration) -> Result<St
 /// appear without Kuali code changes.
 async fn from_cli_help(descriptor: &ProviderDescriptor) -> Result<Vec<ModelChoice>, LlmError> {
     let command = require_binary(descriptor)?;
-    let help = run_briefly(command, &["--help"], Duration::from_secs(15)).await?;
+    let help = run_briefly(&command, &["--help"], Duration::from_secs(15)).await?;
     let mut models: Vec<ModelChoice> = model_aliases_in_help(&help)
         .into_iter()
         .map(|id| ModelChoice {
