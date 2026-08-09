@@ -39,6 +39,7 @@
   const identityVotes = new Map();
   const sentIdentity = new Map();
   let cachedRoster = [];
+  let cachedDomRoster = [];
   let cachedActive = [];
   let lastIdentityScan = 0;
   let lastRosterFingerprint = "";
@@ -84,12 +85,16 @@
     const rosterIdentity = identitySnapshot().roster
       .map(({ identity }) => identity)
       .find((identity) => identity.id === deviceId);
-    return {
-      id: deviceId || `google_meet:csrc:${source}`,
-      name: rosterIdentity?.name || user?.displayName || user?.fullName || "Participante sin identificar",
-      avatarUrl: rosterIdentity?.avatarUrl || user?.profilePicture || null,
-      isSelf: !!(user?.isCurrentUser || rosterIdentity?.isSelf),
-    };
+    return capturePolicy.meetParticipantIdentity({
+      deviceId,
+      source,
+      user,
+      domIdentity: rosterIdentity,
+    });
+  }
+
+  function canonicalMeetDeviceId(deviceId) {
+    return meetUsers.get(deviceId)?.parentDeviceId || deviceId;
   }
 
   function announceMeetRoute(route) {
@@ -112,8 +117,11 @@
 
   function updateMeetRouteIdentity(route) {
     const output = meetOutputsBySource.get(route.source);
-    const nextDeviceId = output?.deviceId || route.deviceId || "";
+    const nextDeviceId = canonicalMeetDeviceId(output?.deviceId || route.deviceId || "");
     if (nextDeviceId && nextDeviceId !== route.deviceId) {
+      if (route.deviceId && meetChannelsByDevice.get(route.deviceId) === route.channel) {
+        meetChannelsByDevice.delete(route.deviceId);
+      }
       const existingChannel = meetChannelsByDevice.get(nextDeviceId);
       if (existingChannel !== undefined && existingChannel !== route.channel) {
         route.channel = existingChannel;
@@ -133,7 +141,7 @@
     let route = meetRoutesBySource.get(source);
     if (!route) {
       const output = meetOutputsBySource.get(source);
-      const deviceId = output?.deviceId || "";
+      const deviceId = canonicalMeetDeviceId(output?.deviceId || "");
       const existingChannel = deviceId ? meetChannelsByDevice.get(deviceId) : undefined;
       const channel = existingChannel ?? nextChannel++;
       route = {
@@ -191,9 +199,11 @@
         .map(({ identity }) => identity)
         .find((identity) => identity.id === currentUser.deviceId);
       localIdentity = {
-        id: currentUser.deviceId,
-        name: rosterIdentity?.name || currentUser.displayName || currentUser.fullName || "Tú",
-        avatarUrl: rosterIdentity?.avatarUrl || currentUser.profilePicture || null,
+        ...capturePolicy.meetParticipantIdentity({
+          deviceId: currentUser.deviceId,
+          user: currentUser,
+          domIdentity: rosterIdentity,
+        }),
         isSelf: true,
       };
       if (running && bindings.has(MIC_CHANNEL)) bind(MIC_CHANNEL, localIdentity);
@@ -521,8 +531,11 @@
   }
 
   function identityFrom(tile) {
-    const name = nameFrom(tile);
-    const id = idFrom(tile, name);
+    const rawName = nameFrom(tile);
+    const id = idFrom(tile, rawName);
+    const name = platform === "google_meet"
+      ? capturePolicy.usableMeetParticipantName(rawName, id)
+      : rawName;
     if (!name && !id) return null;
     return { id, name: name || "Participante", avatarUrl: avatarFrom(tile), isSelf: isSelf(tile, name) };
   }
@@ -609,13 +622,16 @@
   function identitySnapshot(force = false) {
     const now = performance.now();
     if (force || now - lastIdentityScan >= 250) {
-      cachedRoster = participantTiles();
+      cachedDomRoster = participantTiles();
+      cachedRoster = platform === "google_meet"
+        ? capturePolicy.mergeMeetRoster(cachedDomRoster, meetUsers.values())
+        : cachedDomRoster;
       cachedActive = readActiveIdentities();
       const rosterById = new Map(cachedRoster.map(({ identity }) => [identity.id, identity]));
       cachedActive = cachedActive.map((identity) => rosterById.get(identity.id) || identity);
       lastIdentityScan = now;
     }
-    return { roster: cachedRoster, active: cachedActive };
+    return { roster: cachedRoster, domRoster: cachedDomRoster, active: cachedActive };
   }
 
   function sendRosterState(snapshot) {
@@ -628,8 +644,11 @@
     // `participants` may contain the local fallback above so the UI keeps a
     // stable identity while Meet repaints. Preserve the raw DOM presence too:
     // its persistent disappearance is how the extension knows the user hung up.
-    detail.selfPresentInDom = snapshot.roster.some(({ identity }) => identity.isSelf);
+    detail.selfPresentInDom = snapshot.domRoster.some(({ identity }) => identity.isSelf);
     detail.inCall = platform !== "google_meet" || meetMicrophoneMutedFromControls() !== null;
+    detail.protocolBacked = [...meetUsers.values()].some(
+      (user) => user.status === 1 && user.isCurrentUser,
+    );
     const fingerprint = JSON.stringify(detail);
     if (fingerprint === lastRosterFingerprint) return;
     lastRosterFingerprint = fingerprint;

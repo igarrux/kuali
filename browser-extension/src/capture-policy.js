@@ -57,6 +57,87 @@
   }
 
   /**
+   * Meet occasionally exposes implementation labels such as `devices` while it
+   * repaints or virtualizes participant tiles in a background tab. Those values
+   * are identifiers, not human names, and must never replace a name already
+   * learned from Meet's collection protocol.
+   */
+  function usableMeetParticipantName(value, deviceId = "") {
+    const name = String(value || "").replace(/\s+/g, " ").trim();
+    if (!name || name.length > 100) return "";
+    const normalized = name.toLocaleLowerCase();
+    const normalizedId = String(deviceId || "").trim().toLocaleLowerCase();
+    if (normalizedId && normalized === normalizedId) return "";
+    if (/^(?:spaces\/[^/]+\/)?devices(?:\/[^/]+)?$/i.test(name)) return "";
+    if (/^(?:device|devices|participant|participants)$/i.test(name)) return "";
+    return name;
+  }
+
+  /** Resolve a Meet identity with protocol metadata as the authority. */
+  function meetParticipantIdentity({ deviceId = "", source = "", user = null, domIdentity = null } = {}) {
+    const id = String(deviceId || domIdentity?.id || `google_meet:csrc:${source}`);
+    const name = usableMeetParticipantName(user?.displayName, id)
+      || usableMeetParticipantName(user?.fullName, id)
+      || usableMeetParticipantName(domIdentity?.name, id)
+      || "Participante sin identificar";
+    return {
+      id,
+      name,
+      avatarUrl: user?.profilePicture || domIdentity?.avatarUrl || null,
+      isSelf: user ? !!user.isCurrentUser : !!domIdentity?.isSelf,
+    };
+  }
+
+  /**
+   * Merge Meet's complete protocol roster with visible DOM tiles. Meet only
+   * renders a subset of tiles in some layouts, especially in background tabs.
+   */
+  function mergeMeetRoster(domRoster, users) {
+    const domById = new Map(
+      (domRoster || [])
+        .filter((entry) => entry?.identity?.id)
+        .map((entry) => [entry.identity.id, entry]),
+    );
+    const merged = new Map();
+    const usersById = new Map(
+      [...(users || [])]
+        .filter((user) => user?.deviceId)
+        .map((user) => [user.deviceId, user]),
+    );
+
+    for (const user of usersById.values()) {
+      // Status 1 is an active participant. Screen-share devices belong to their
+      // parent participant and must not inflate the headcount.
+      if (user.status !== 1 || user.parentDeviceId) continue;
+      const domEntry = domById.get(user.deviceId);
+      merged.set(user.deviceId, {
+        tile: domEntry?.tile || null,
+        identity: meetParticipantIdentity({
+          deviceId: user.deviceId,
+          user,
+          domIdentity: domEntry?.identity || null,
+        }),
+      });
+    }
+
+    for (const entry of domRoster || []) {
+      const id = entry?.identity?.id;
+      if (!id || merged.has(id)) continue;
+      const known = usersById.get(id);
+      if (known && (known.status !== 1 || known.parentDeviceId)) continue;
+      merged.set(id, {
+        ...entry,
+        identity: meetParticipantIdentity({
+          deviceId: id,
+          user: known || null,
+          domIdentity: entry.identity,
+        }),
+      });
+    }
+    return [...merged.values()];
+  }
+
+  /**
    * Meet publishes the disabled state of every audio device in its collection
    * protocol. Reading the current user's entry is safer than trusting the raw
    * MediaStreamTrack: Meet can mute the RTP sender while leaving that source
@@ -111,6 +192,9 @@
     mediaElementIdentity,
     rosterDetail,
     connectedTrackDetail,
+    usableMeetParticipantName,
+    meetParticipantIdentity,
+    mergeMeetRoster,
     localMeetAudioDisabled,
     meetMicrophoneMuted,
     shouldSendMeetMicrophone,

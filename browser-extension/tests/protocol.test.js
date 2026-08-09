@@ -115,6 +115,81 @@ test("the roster count deduplicates Meet DOM copies instead of counting transpor
   assert.deepEqual(detail.participants.map((person) => person.displayName), ["Garrux", "Delphys JG"]);
 });
 
+test("Meet protocol names survive background-tab DOM placeholders", () => {
+  const identity = capturePolicy.meetParticipantIdentity({
+    deviceId: "spaces/meeting/devices/42",
+    source: "9981",
+    user: {
+      deviceId: "spaces/meeting/devices/42",
+      displayName: "Ana",
+      fullName: "Ana Example",
+      profilePicture: "https://example.test/ana.jpg",
+      isCurrentUser: false,
+    },
+    domIdentity: {
+      id: "spaces/meeting/devices/42",
+      name: "Devices",
+      avatarUrl: null,
+      isSelf: false,
+    },
+  });
+  assert.equal(identity.name, "Ana");
+  assert.equal(identity.avatarUrl, "https://example.test/ana.jpg");
+  assert.equal(capturePolicy.usableMeetParticipantName("devices"), "");
+});
+
+test("Meet roster includes active protocol users hidden by tile virtualization", () => {
+  const merged = capturePolicy.mergeMeetRoster([
+    { identity: { id: "devices/self", name: "Garrux", isSelf: true } },
+  ], [
+    {
+      deviceId: "devices/self",
+      displayName: "Garrux",
+      status: 1,
+      parentDeviceId: null,
+      isCurrentUser: true,
+    },
+    {
+      deviceId: "devices/remote",
+      displayName: "Pivel",
+      status: 1,
+      parentDeviceId: null,
+      isCurrentUser: false,
+    },
+    {
+      deviceId: "devices/screen",
+      displayName: "Pivel's screen",
+      status: 1,
+      parentDeviceId: "devices/remote",
+      isCurrentUser: false,
+    },
+    {
+      deviceId: "devices/left",
+      displayName: "Already left",
+      status: 6,
+      parentDeviceId: null,
+      isCurrentUser: false,
+    },
+  ]);
+  assert.deepEqual(merged.map(({ identity }) => identity.name), ["Garrux", "Pivel"]);
+  assert.equal(capturePolicy.rosterDetail(merged, "google_meet").participantCount, 2);
+});
+
+test("participants with the same display name remain distinct by Meet device ID", () => {
+  const merged = capturePolicy.mergeMeetRoster([
+    { identity: { id: "devices/phone", name: "Garrux", isSelf: true } },
+    { identity: { id: "devices/mac", name: "Garrux", isSelf: true } },
+  ], [
+    { deviceId: "devices/phone", displayName: "Garrux", status: 1, isCurrentUser: false },
+    { deviceId: "devices/mac", displayName: "Garrux", status: 1, isCurrentUser: true },
+  ]);
+  const detail = capturePolicy.rosterDetail(merged, "google_meet");
+  assert.equal(detail.participantCount, 2);
+  assert.deepEqual(detail.participants.map((person) => person.displayName), ["Garrux", "Garrux"]);
+  assert.deepEqual(detail.participants.map((person) => person.isSelf), [false, true]);
+  assert.notEqual(detail.participants[0].participantId, detail.participants[1].participantId);
+});
+
 test("Meet microphone capture follows the current device disabled state", () => {
   const users = [
     { deviceId: "self-device", isCurrentUser: true },
