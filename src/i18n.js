@@ -159,11 +159,32 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "← Atrás": "← Back",
   "Siguiente →": "Next →",
   "Opción 2": "Option 2",
-  "Extensión manual": "Manual extension",
-  "Paso 1 de 5": "Step 1 of 5",
-  "Elige tu navegador": "Choose your browser",
+  "Chrome Web Store": "Chrome Web Store",
+  "Paso 1 de 3": "Step 1 of 3",
+  "Instala la extensión": "Install the extension",
   "Progreso de configuración de la extensión": "Extension setup progress",
   Navegador: "Browser",
+  "Instala Kuali desde Chrome Web Store": "Install Kuali from the Chrome Web Store",
+  "Elige el navegador donde usarás Meet, Teams o Zoom. Kuali abrirá su ficha oficial para que solo tengas que pulsar":
+    "Choose the browser where you use Meet, Teams, or Zoom. Kuali will open its official listing so you only need to select",
+  Instalar: "Install",
+  "Instalar la extensión de Kuali": "Install the Kuali extension",
+  "Instalar en Chrome": "Install in Chrome",
+  "Instalar en Edge": "Install in Edge",
+  "Instalar en Brave": "Install in Brave",
+  "Instalar en Arc": "Install in Arc",
+  "Chrome Web Store también permite instalar extensiones en Edge, Brave y Arc.":
+    "The Chrome Web Store also supports installing extensions in Edge, Brave, and Arc.",
+  "Instalación manual": "Manual installation",
+  "Úsala solamente si la tienda no está disponible. Abre el administrador del navegador, activa":
+    "Use this only when the store is unavailable. Open the browser's extension manager, enable",
+  "y pulsa": "and select",
+  "Abrir el administrador de extensiones": "Open the extensions manager",
+  "Abrir en Chrome": "Open in Chrome",
+  "Abrir en Edge": "Open in Edge",
+  "Abrir en Brave": "Open in Brave",
+  "Abrir en Arc": "Open in Arc",
+  ", pega esta ruta y confirma.": ", paste this path, and confirm.",
   "Abre la página de extensiones": "Open the extensions page",
   "Elige el navegador donde usarás Meet, Teams o Zoom. Kuali abrirá directamente su administrador de extensiones.":
     "Choose the browser where you use Meet, Teams, or Zoom. Kuali will open its extension manager directly.",
@@ -193,6 +214,12 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "El puerto predeterminado es": "The default port is",
   "Solo necesitas tocarlo si lo cambiaste en Ajustes → Integraciones.":
     "You only need to change it if you changed it under Settings → Integrations.",
+  Enlace: "Link",
+  Dirección: "Address",
+  "No pude abrir {browser}. Pega el enlace copiado en ese navegador.":
+    "I could not open {browser}. Paste the copied link into that browser.",
+  "No pude abrir {browser}. Pega la dirección copiada en ese navegador.":
+    "I could not open {browser}. Paste the copied address into that browser.",
   Reunión: "Meeting",
   "Sacar de la llamada": "Leave the call",
   "Rehacer resumen": "Regenerate summary",

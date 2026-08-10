@@ -463,19 +463,36 @@ pub fn open_setup_destination(app: tauri::AppHandle, destination: String) -> Res
     app.opener().open_url(url, None::<&str>).map_err(fail)
 }
 
-/// Opens the extensions page in the selected browser rather than the default
-/// one. Internal schemes such as `chrome://` and `edge://` are not reliable
-/// through ordinary web links.
-#[tauri::command]
-pub fn open_browser_extensions(app: tauri::AppHandle, browser: String) -> Result<(), String> {
-    let (application, url) = match browser.as_str() {
-        "chrome" => ("Google Chrome", "chrome://extensions"),
-        "edge" => ("Microsoft Edge", "edge://extensions"),
-        "brave" => ("Brave Browser", "brave://extensions"),
-        // Arc accepts Chromium's internal extensions page.
-        "arc" => ("Arc", "chrome://extensions"),
+const CHROME_WEB_STORE_URL: &str =
+    "https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp";
+
+fn browser_destination(browser: &str, store: bool) -> Result<(&'static str, &'static str), String> {
+    let application = match browser {
+        "chrome" => "Google Chrome",
+        "edge" => "Microsoft Edge",
+        "brave" => "Brave Browser",
+        "arc" => "Arc",
         _ => return Err("Ese navegador no forma parte de la guía de Kuali".into()),
     };
+    let url = if store {
+        CHROME_WEB_STORE_URL
+    } else {
+        match browser {
+            "chrome" | "arc" => "chrome://extensions",
+            "edge" => "edge://extensions",
+            "brave" => "brave://extensions",
+            _ => unreachable!("the browser was validated above"),
+        }
+    };
+    Ok((application, url))
+}
+
+fn open_browser_destination(
+    app: tauri::AppHandle,
+    browser: &str,
+    store: bool,
+) -> Result<(), String> {
+    let (application, url) = browser_destination(browser, store)?;
 
     #[cfg(target_os = "macos")]
     {
@@ -496,6 +513,54 @@ pub fn open_browser_extensions(app: tauri::AppHandle, browser: String) -> Result
         use tauri_plugin_opener::OpenerExt;
         let _ = application;
         app.opener().open_url(url, None::<&str>).map_err(fail)
+    }
+}
+
+/// Opens Kuali's Chrome Web Store listing in the browser selected by the user.
+#[tauri::command]
+pub fn open_browser_extension_store(app: tauri::AppHandle, browser: String) -> Result<(), String> {
+    open_browser_destination(app, &browser, true)
+}
+
+/// Opens the extension manager for manual and development installations.
+#[tauri::command]
+pub fn open_browser_extensions(app: tauri::AppHandle, browser: String) -> Result<(), String> {
+    open_browser_destination(app, &browser, false)
+}
+
+#[cfg(test)]
+mod browser_destination_tests {
+    use super::{browser_destination, CHROME_WEB_STORE_URL};
+
+    #[test]
+    fn every_supported_browser_uses_the_same_verified_store_listing() {
+        for browser in ["chrome", "edge", "brave", "arc"] {
+            assert_eq!(
+                browser_destination(browser, true).unwrap().1,
+                CHROME_WEB_STORE_URL
+            );
+        }
+    }
+
+    #[test]
+    fn manual_installation_keeps_each_browsers_internal_manager() {
+        assert_eq!(
+            browser_destination("chrome", false).unwrap().1,
+            "chrome://extensions"
+        );
+        assert_eq!(
+            browser_destination("edge", false).unwrap().1,
+            "edge://extensions"
+        );
+        assert_eq!(
+            browser_destination("brave", false).unwrap().1,
+            "brave://extensions"
+        );
+        assert_eq!(
+            browser_destination("arc", false).unwrap().1,
+            "chrome://extensions"
+        );
+        assert!(browser_destination("safari", true).is_err());
     }
 }
 

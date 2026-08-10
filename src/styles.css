@@ -3265,10 +3265,19 @@ html[lang="en"] [data-language-only="es"] { display: none; }
 @keyframes guide-step-enter { from { opacity: 0; transform: translateX(5px); } }
 .browser-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 7px; margin-top: 10px; }
 .browser-action { min-width: 0; display: grid; grid-template-columns: 24px minmax(0, 1fr) auto; align-items: center; gap: 7px; padding: 7px 9px; font-size: 11px; text-align: left; }
-.browser-action > span { width: 24px; height: 24px; display: grid; place-items: center; background: var(--surface-3); border-radius: 7px; color: var(--text); font-size: 9px; font-weight: 800; }
+.browser-action > span:first-child { width: 24px; height: 24px; display: grid; place-items: center; background: var(--surface-3); border-radius: 7px; color: var(--text); font-size: 9px; font-weight: 800; }
 .browser-action small { color: var(--muted); font-size: 9px; }
 .browser-action.unavailable { opacity: .48; }
+.store-action { box-shadow: 0 6px 18px color-mix(in srgb, var(--accent) 16%, transparent); }
+.store-action > span:first-child { background: color-mix(in srgb, var(--bg) 18%, transparent); color: inherit; }
+.store-action small { color: inherit; opacity: .72; }
 .browser-support-note { margin-top: 9px !important; padding: 8px 10px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 9px; }
+.manual-install-fallback { margin-top: 12px; overflow: hidden; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; }
+.manual-install-fallback summary { padding: 9px 11px; color: var(--muted-strong); font-size: 10.5px; font-weight: 730; cursor: pointer; }
+.manual-install-fallback summary:hover { background: var(--surface-2); color: var(--text); }
+.manual-install-fallback > div { padding: 0 11px 12px; border-top: 1px solid var(--line); }
+.manual-install-fallback > div > p:first-child { margin-top: 10px; }
+.manual-install-fallback .guide-action { margin-top: 8px; }
 .guide-illustration { margin-top: 10px; padding: 10px; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 10px; }
 .developer-mode { display: flex; align-items: center; justify-content: space-between; color: var(--muted-strong); font-size: 11px; }
 .developer-mode i { width: 30px; height: 17px; position: relative; background: var(--accent); border-radius: 999px; }

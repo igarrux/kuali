@@ -1998,10 +1998,11 @@ const DISCORD_GUIDE_TITLES = [
   "Empieza a usar Kuali",
 ];
 
+const KUALI_EXTENSION_STORE_URL =
+  "https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp";
+
 const MEET_GUIDE_TITLES = [
-  "Elige tu navegador",
-  "Activa el modo desarrollador",
-  "Carga la extensión",
+  "Instala la extensión",
   "Fija Kuali",
   "Haz una prueba",
 ];
@@ -2117,7 +2118,7 @@ async function renderGuide() {
   renderMeetGuideStep();
   $("guide-meet-state").textContent = state.webMeetings.listening
     ? t("Kuali disponible")
-    : t("Extensión manual");
+    : t("Chrome Web Store");
   $("guide-meet-state").classList.toggle("ready", state.webMeetings.listening);
   if (!state.extensionPath) {
     try {
@@ -3523,6 +3524,20 @@ function wireUp() {
   $("btn-open-discord-portal").addEventListener("click", () =>
     invoke("open_setup_destination", { destination: "discord-developers" })
       .catch((error) => toast(String(error), "guía", true)));
+  for (const button of document.querySelectorAll("[data-browser-store]")) {
+    button.addEventListener("click", async () => {
+      const browser = button.dataset.browserStore;
+      try {
+        await invoke("open_browser_extension_store", { browser });
+        if (state.meetGuideStep === 0) setMeetGuideStep(1);
+      } catch (error) {
+        await copyText(KUALI_EXTENSION_STORE_URL, t("Enlace"));
+        toast(t("No pude abrir {browser}. Pega el enlace copiado en ese navegador.", {
+          browser,
+        }), t("guía"), true);
+      }
+    });
+  }
   for (const button of document.querySelectorAll("[data-browser]")) {
     button.addEventListener("click", async () => {
       const browser = button.dataset.browser;
@@ -3536,8 +3551,10 @@ function wireUp() {
           brave: "brave://extensions",
           arc: "chrome://extensions",
         };
-        await copyText(urls[browser], "Dirección");
-        toast(`No pude abrir ${browser}. Pega la dirección copiada en ese navegador.`, "guía", true);
+        await copyText(urls[browser], t("Dirección"));
+        toast(t("No pude abrir {browser}. Pega la dirección copiada en ese navegador.", {
+          browser,
+        }), t("guía"), true);
       }
     });
   }

@@ -486,65 +486,61 @@
               <div class="guide-card-head">
                 <span class="integration-logo meet" aria-hidden="true">M</span>
                 <div><span class="eyebrow">Opción 2</span><h3 id="guide-meet-title">Meet, Teams y Zoom</h3></div>
-                <span class="guide-state" id="guide-meet-state">Extensión manual</span>
+                <span class="guide-state" id="guide-meet-state">Chrome Web Store</span>
               </div>
               <div class="guide-stepper" id="meet-guide-stepper">
                 <div class="guide-progress-head">
-                  <span id="meet-guide-progress-label">Paso 1 de 5</span>
-                  <span id="meet-guide-progress-title">Elige tu navegador</span>
+                  <span id="meet-guide-progress-label">Paso 1 de 3</span>
+                  <span id="meet-guide-progress-title">Instala la extensión</span>
                 </div>
-                <div class="guide-progress-track" role="progressbar" aria-label="Progreso de configuración de la extensión" aria-valuemin="1" aria-valuemax="5" aria-valuenow="1" id="meet-guide-progress"><span id="meet-guide-progress-bar"></span></div>
+                <div class="guide-progress-track" role="progressbar" aria-label="Progreso de configuración de la extensión" aria-valuemin="1" aria-valuemax="3" aria-valuenow="1" id="meet-guide-progress"><span id="meet-guide-progress-bar"></span></div>
 
                 <div class="guide-step-pages">
                   <section class="guide-step-page" data-meet-guide-step="0" aria-labelledby="meet-step-1-title">
                     <span class="guide-step-number" aria-hidden="true">1</span>
                     <div>
                       <span class="eyebrow">Navegador</span>
-                      <h4 id="meet-step-1-title">Abre la página de extensiones</h4>
-                      <p>Elige el navegador donde usarás Meet, Teams o Zoom. Kuali abrirá directamente su administrador de extensiones.</p>
-                      <div class="browser-actions" role="group" aria-label="Abrir extensiones del navegador">
-                        <button type="button" class="ghost browser-action" data-browser="chrome"><span aria-hidden="true">C</span>Chrome</button>
-                        <button type="button" class="ghost browser-action" data-browser="edge"><span aria-hidden="true">E</span>Edge</button>
-                        <button type="button" class="ghost browser-action" data-browser="brave"><span aria-hidden="true">B</span>Brave</button>
-                        <button type="button" class="ghost browser-action" data-browser="arc"><span aria-hidden="true">A</span>Arc</button>
+                      <h4 id="meet-step-1-title">Instala Kuali desde Chrome Web Store</h4>
+                      <p>Elige el navegador donde usarás Meet, Teams o Zoom. Kuali abrirá su ficha oficial para que solo tengas que pulsar <strong>Instalar</strong>.</p>
+                      <div class="browser-actions store-actions" role="group" aria-label="Instalar la extensión de Kuali">
+                        <button type="button" class="primary browser-action store-action" data-browser-store="chrome"><span aria-hidden="true">C</span><span>Instalar en Chrome</span><small aria-hidden="true">↗</small></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="edge"><span aria-hidden="true">E</span><span>Instalar en Edge</span><small aria-hidden="true">↗</small></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="brave"><span aria-hidden="true">B</span><span>Instalar en Brave</span><small aria-hidden="true">↗</small></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="arc"><span aria-hidden="true">A</span><span>Instalar en Arc</span><small aria-hidden="true">↗</small></button>
                       </div>
+                      <p class="browser-support-note">Chrome Web Store también permite instalar extensiones en Edge, Brave y Arc.</p>
+                      <details class="manual-install-fallback">
+                        <summary>Instalación manual</summary>
+                        <div>
+                          <p>Úsala solamente si la tienda no está disponible. Abre el administrador del navegador, activa <strong>Modo desarrollador</strong> y pulsa <strong>Cargar descomprimida</strong>.</p>
+                          <div class="browser-actions" role="group" aria-label="Abrir el administrador de extensiones">
+                            <button type="button" class="ghost browser-action" data-browser="chrome"><span aria-hidden="true">C</span><span>Abrir en Chrome</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="edge"><span aria-hidden="true">E</span><span>Abrir en Edge</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="brave"><span aria-hidden="true">B</span><span>Abrir en Brave</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="arc"><span aria-hidden="true">A</span><span>Abrir en Arc</span></button>
+                          </div>
+                          <p>En el selector de carpetas presiona <kbd>⌘ Shift G</kbd>, pega esta ruta y confirma.</p>
+                          <div class="copy-path"><code id="extension-path">Buscando carpeta…</code><button type="button" class="ghost" id="btn-copy-extension-path">Copiar ruta</button></div>
+                          <button type="button" class="ghost guide-action" id="btn-reveal-extension">Mostrar carpeta en Finder</button>
+                        </div>
+                      </details>
                     </div>
                   </section>
 
                   <section class="guide-step-page" data-meet-guide-step="1" aria-labelledby="meet-step-2-title" hidden>
                     <span class="guide-step-number" aria-hidden="true">2</span>
                     <div>
-                      <span class="eyebrow">Administrador de extensiones</span>
-                      <h4 id="meet-step-2-title">Activa “Modo desarrollador”</h4>
-                      <p>Busca el interruptor <strong>Modo desarrollador</strong> en la página que se abrió y actívalo. Al hacerlo aparecerá el botón <strong>Cargar descomprimida</strong>.</p>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-meet-guide-step="2" aria-labelledby="meet-step-3-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">3</span>
-                    <div>
-                      <span class="eyebrow">Carpeta de Kuali</span>
-                      <h4 id="meet-step-3-title">Carga la extensión</h4>
-                      <p>Pulsa <strong>Cargar descomprimida</strong>. En el selector de carpetas presiona <kbd>⌘ Shift G</kbd>, pega la ruta y confirma.</p>
-                      <div class="copy-path"><code id="extension-path">Buscando carpeta…</code><button type="button" class="ghost" id="btn-copy-extension-path">Copiar ruta</button></div>
-                      <button type="button" class="ghost guide-action" id="btn-reveal-extension">Mostrar carpeta en Finder</button>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-meet-guide-step="3" aria-labelledby="meet-step-4-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">4</span>
-                    <div>
                       <span class="eyebrow">Barra del navegador</span>
-                      <h4 id="meet-step-4-title">Fija Kuali para tenerlo a mano</h4>
+                      <h4 id="meet-step-2-title">Fija Kuali para tenerlo a mano</h4>
                       <p>Abre el menú de extensiones del navegador y fija <strong>Kuali</strong>. Así podrás iniciar o detener una grabación desde cualquier reunión.</p>
                     </div>
                   </section>
 
-                  <section class="guide-step-page" data-meet-guide-step="4" aria-labelledby="meet-step-5-title" hidden>
+                  <section class="guide-step-page" data-meet-guide-step="2" aria-labelledby="meet-step-3-title" hidden>
                     <span class="guide-step-number complete" aria-hidden="true">✓</span>
                     <div>
                       <span class="eyebrow">Prueba rápida</span>
-                      <h4 id="meet-step-5-title">Comprueba que Kuali está disponible</h4>
+                      <h4 id="meet-step-3-title">Comprueba que Kuali está disponible</h4>
                       <p>Mantén abierta la aplicación, entra a una reunión y pulsa el icono de Kuali. La extensión debe indicar que la app está conectada y permitirte grabar.</p>
                       <p class="guide-success-note">El puerto predeterminado es <code>9099</code>. Solo necesitas tocarlo si lo cambiaste en Ajustes → Integraciones.</p>
                     </div>

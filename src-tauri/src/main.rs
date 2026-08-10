@@ -219,6 +219,7 @@ fn main() {
             commands::browser_extension_path,
             commands::reveal_browser_extension,
             commands::open_setup_destination,
+            commands::open_browser_extension_store,
             commands::open_browser_extensions,
             commands::autostart_enabled,
             commands::set_autostart_enabled,

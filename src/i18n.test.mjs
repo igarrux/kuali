@@ -74,6 +74,21 @@ test("signed updates are periodic, controllable, and deferred during active work
   ]);
 });
 
+test("browser onboarding prefers the verified store and keeps manual installation as a fallback", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  const storeId = "cgojkmdggflcggedmapamcmkelgaahhp";
+
+  assert.equal((html.match(/data-browser-store=/g) ?? []).length, 4);
+  assert.equal((html.match(/data-meet-guide-step=/g) ?? []).length, 3);
+  assert.match(html, /aria-valuemax="3"/);
+  assert.match(html, /<summary>Instalación manual<\/summary>/);
+  assert.match(app, /invoke\("open_browser_extension_store", \{ browser \}\)/);
+  assert.match(app, new RegExp(storeId));
+  assert.match(commands, new RegExp(storeId));
+});
+
 test("visible placeholders do not contain a contributor's personal examples", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.doesNotMatch(html, /@garrux|WaitingRoom/);
