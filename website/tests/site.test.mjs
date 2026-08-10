@@ -39,7 +39,7 @@ test("all public pages contain complete SEO metadata", () => {
     assert.ok(title.length >= 30 && title.length <= 70, `${page} title length is ${title.length}`);
     assert.ok(description.length >= 110 && description.length <= 180, `${page} description length is ${description.length}`);
     assert.match(html, /<meta name="robots" content="index, follow, max-image-preview:large">/);
-    assert.match(html, /<link rel="canonical" href="https:\/\/igarrux\.github\.io\/kuali\//);
+    assert.match(html, /<link rel="canonical" href="https:\/\/kuali\.garrux\.dev\//);
     assert.equal((html.match(/rel="alternate" hreflang=/g) ?? []).length, 3, `${page} hreflang count`);
     assert.match(html, /<meta property="og:title"/);
     assert.match(html, /<meta property="og:description"/);
@@ -151,7 +151,7 @@ test("both guides document model weights and Standard Webhooks", () => {
 test("deployment metadata and security policy are present", () => {
   assert.ok(existsSync(join(websiteRoot, ".nojekyll")));
   assert.doesNotThrow(() => JSON.parse(read("site.webmanifest")));
-  assert.match(read("robots.txt"), /Sitemap: https:\/\/igarrux\.github\.io\/kuali\/sitemap\.xml/);
+  assert.match(read("robots.txt"), /Sitemap: https:\/\/kuali\.garrux\.dev\/sitemap\.xml/);
   assert.equal((read("sitemap.xml").match(/<url>/g) ?? []).length, pages.length);
   assert.match(read("_headers"), /Content-Security-Policy:/);
   assert.match(read("_headers"), /frame-ancestors 'none'/);

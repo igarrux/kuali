@@ -51,7 +51,6 @@ npx wrangler pages deploy website --project-name=kuali-site
 
 ## Canonical URL
 
-SEO metadata currently uses `https://igarrux.github.io/kuali/` as the canonical
-site. If a custom domain becomes the primary deployment, replace that origin in
-the four HTML files, `website/robots.txt`, and `website/sitemap.xml` before
-indexing the new domain.
+SEO metadata uses `https://kuali.garrux.dev/` as the canonical site. Keep this
+origin in the four HTML files, `website/robots.txt`, and `website/sitemap.xml`
+even when deploying the same static output through GitHub or Cloudflare Pages.

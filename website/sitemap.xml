@@ -2,27 +2,27 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
         xmlns:xhtml="http://www.w3.org/1999/xhtml">
   <url>
-    <loc>https://igarrux.github.io/kuali/</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://igarrux.github.io/kuali/"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://igarrux.github.io/kuali/es/"/>
-    <lastmod>2026-08-08</lastmod>
+    <loc>https://kuali.garrux.dev/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kuali.garrux.dev/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://kuali.garrux.dev/es/"/>
+    <lastmod>2026-08-10</lastmod>
   </url>
   <url>
-    <loc>https://igarrux.github.io/kuali/es/</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://igarrux.github.io/kuali/"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://igarrux.github.io/kuali/es/"/>
-    <lastmod>2026-08-08</lastmod>
+    <loc>https://kuali.garrux.dev/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kuali.garrux.dev/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://kuali.garrux.dev/es/"/>
+    <lastmod>2026-08-10</lastmod>
   </url>
   <url>
-    <loc>https://igarrux.github.io/kuali/guides/</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://igarrux.github.io/kuali/guides/"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://igarrux.github.io/kuali/es/guides/"/>
-    <lastmod>2026-08-08</lastmod>
+    <loc>https://kuali.garrux.dev/guides/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kuali.garrux.dev/guides/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://kuali.garrux.dev/es/guides/"/>
+    <lastmod>2026-08-10</lastmod>
   </url>
   <url>
-    <loc>https://igarrux.github.io/kuali/es/guides/</loc>
-    <xhtml:link rel="alternate" hreflang="en" href="https://igarrux.github.io/kuali/guides/"/>
-    <xhtml:link rel="alternate" hreflang="es" href="https://igarrux.github.io/kuali/es/guides/"/>
-    <lastmod>2026-08-08</lastmod>
+    <loc>https://kuali.garrux.dev/es/guides/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://kuali.garrux.dev/guides/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://kuali.garrux.dev/es/guides/"/>
+    <lastmod>2026-08-10</lastmod>
   </url>
 </urlset>
