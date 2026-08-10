@@ -161,14 +161,14 @@ fn main() {
                 }
             });
 
-            // Consolidate weights from previous locations, start any required
-            // download, and connect Discord. Cross-volume moves must not block
-            // the window or browser receiver.
+            // Consolidate weights from previous locations and connect Discord.
+            // A fresh installation chooses its first model in the guide, so
+            // startup must not silently commit it to the default Q5 download.
+            // Cross-volume moves must not block the window or browser receiver.
             tauri::async_runtime::spawn(async move {
                 if let Err(error) = engine.prepare_model_storage().await {
                     tracing::warn!(%error, "no se pudieron consolidar los modelos de Whisper");
                 }
-                engine.download_configured_model_if_missing();
 
                 // A configured instance connects automatically so opening Kuali
                 // is enough to make it ready for calls.

@@ -169,6 +169,11 @@ pub struct Engine {
     inner: Arc<Inner>,
 }
 
+fn configured_model_target_changed(previous: &KualiConfig, next: &KualiConfig) -> bool {
+    previous.whisper.model != next.whisper.model
+        || previous.whisper.resolved_models_directory() != next.whisper.resolved_models_directory()
+}
+
 impl Engine {
     /// Creates the engine and returns the event receiver consumed by the interface.
     pub fn new(config: KualiConfig) -> (Self, UnboundedReceiver<KualiEvent>) {
@@ -409,8 +414,10 @@ impl Engine {
         let previous = self.config();
         let previous_models = previous.whisper.resolved_models_directory();
         let next_models = config.whisper.resolved_models_directory();
+        let model_storage_changed = previous_models != next_models;
+        let download_configured_model = configured_model_target_changed(&previous, &config);
 
-        if previous_models != next_models {
+        if model_storage_changed {
             let _download_guard = self.inner.model_download.lock().await;
             self.inner.set_model_state(ModelState::Verifying);
             let relocation = async {
@@ -472,7 +479,12 @@ impl Engine {
         if reconnect && config.is_ready() {
             self.connect().await?;
         }
-        self.download_configured_model_if_missing();
+        // Configuration unrelated to transcription must not choose and start a
+        // large model download during first-run onboarding. Changing the model
+        // or its storage location still guarantees the selected weight exists.
+        if download_configured_model {
+            self.download_configured_model_if_missing();
+        }
         Ok(())
     }
 
@@ -1737,6 +1749,26 @@ mod tests {
         let (engine, _rx) = Engine::new(KualiConfig::default());
         assert_eq!(engine.status(), EngineStatus::Offline);
         assert!(engine.current_meeting().is_none());
+    }
+
+    #[test]
+    fn only_transcription_target_changes_request_an_automatic_download() {
+        let original = KualiConfig::default();
+
+        let mut discord_only = original.clone();
+        discord_only.discord.bot_token = "configured".into();
+        assert!(!configured_model_target_changed(&original, &discord_only));
+
+        let mut another_model = original.clone();
+        another_model.whisper.model = WhisperModel::Tiny;
+        assert!(configured_model_target_changed(&original, &another_model));
+
+        let mut another_directory = original.clone();
+        another_directory.whisper.models_directory = Some("/tmp/kuali-models".into());
+        assert!(configured_model_target_changed(
+            &original,
+            &another_directory
+        ));
     }
 
     #[tokio::test]
