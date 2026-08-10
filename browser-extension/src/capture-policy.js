@@ -69,8 +69,23 @@
     const normalizedId = String(deviceId || "").trim().toLocaleLowerCase();
     if (normalizedId && normalized === normalizedId) return "";
     if (/^(?:spaces\/[^/]+\/)?devices(?:\/[^/]+)?$/i.test(name)) return "";
-    if (/^(?:device|devices|participant|participants)$/i.test(name)) return "";
+    if (/^(?:device|devices|participant|participants|participante|participantes|participante sin identificar|unknown participant)$/i.test(name)) return "";
     return name;
+  }
+
+  /** Keep the best metadata learned for one stable Meet device ID. */
+  function mergeMeetParticipantIdentity(previous, incoming) {
+    const id = String(incoming?.id || previous?.id || "").trim();
+    const incomingName = usableMeetParticipantName(incoming?.name, id);
+    const previousName = usableMeetParticipantName(previous?.name, id);
+    return {
+      ...previous,
+      ...incoming,
+      id,
+      name: incomingName || previousName || "Participante sin identificar",
+      avatarUrl: incoming?.avatarUrl || previous?.avatarUrl || null,
+      isSelf: !!incoming?.isSelf || !!previous?.isSelf,
+    };
   }
 
   /** Resolve a Meet identity with protocol metadata as the authority. */
@@ -193,6 +208,7 @@
     rosterDetail,
     connectedTrackDetail,
     usableMeetParticipantName,
+    mergeMeetParticipantIdentity,
     meetParticipantIdentity,
     mergeMeetRoster,
     localMeetAudioDisabled,

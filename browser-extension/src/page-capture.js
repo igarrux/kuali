@@ -48,6 +48,7 @@
   let lastActiveFingerprint = "";
   const observedActive = new Map();
   const meetUsers = new Map();
+  const meetIdentities = new Map();
   const meetOutputsBySource = new Map();
   const meetRoutesBySource = new Map();
   const meetChannelsByDevice = new Map();
@@ -80,17 +81,26 @@
     return String(value);
   }
 
+  function rememberMeetIdentity(identity) {
+    if (platform !== "google_meet" || !identity) return identity;
+    const id = clean(identity.id);
+    if (!id) return identity;
+    const remembered = capturePolicy.mergeMeetParticipantIdentity(meetIdentities.get(id), identity);
+    meetIdentities.set(id, remembered);
+    return remembered;
+  }
+
   function meetIdentityForDevice(deviceId, source) {
     const user = meetUsers.get(deviceId);
     const rosterIdentity = identitySnapshot().roster
       .map(({ identity }) => identity)
       .find((identity) => identity.id === deviceId);
-    return capturePolicy.meetParticipantIdentity({
+    return rememberMeetIdentity(capturePolicy.meetParticipantIdentity({
       deviceId,
       source,
       user,
       domIdentity: rosterIdentity,
-    });
+    }));
   }
 
   function canonicalMeetDeviceId(deviceId) {
@@ -198,14 +208,14 @@
       const rosterIdentity = identitySnapshot(true).roster
         .map(({ identity }) => identity)
         .find((identity) => identity.id === currentUser.deviceId);
-      localIdentity = {
+      localIdentity = rememberMeetIdentity({
         ...capturePolicy.meetParticipantIdentity({
           deviceId: currentUser.deviceId,
           user: currentUser,
           domIdentity: rosterIdentity,
         }),
         isSelf: true,
-      };
+      });
       if (running && bindings.has(MIC_CHANNEL)) bind(MIC_CHANNEL, localIdentity);
       sendRosterState(identitySnapshot(true));
     }
@@ -537,7 +547,8 @@
       ? capturePolicy.usableMeetParticipantName(rawName, id)
       : rawName;
     if (!name && !id) return null;
-    return { id, name: name || "Participante", avatarUrl: avatarFrom(tile), isSelf: isSelf(tile, name) };
+    const identity = { id, name: name || "Participante", avatarUrl: avatarFrom(tile), isSelf: isSelf(tile, name) };
+    return platform === "google_meet" ? rememberMeetIdentity(identity) : identity;
   }
 
   function participantTiles() {
@@ -626,6 +637,12 @@
       cachedRoster = platform === "google_meet"
         ? capturePolicy.mergeMeetRoster(cachedDomRoster, meetUsers.values())
         : cachedDomRoster;
+      if (platform === "google_meet") {
+        cachedRoster = cachedRoster.map((entry) => ({
+          ...entry,
+          identity: rememberMeetIdentity(entry.identity),
+        }));
+      }
       cachedActive = readActiveIdentities();
       const rosterById = new Map(cachedRoster.map(({ identity }) => [identity.id, identity]));
       cachedActive = cachedActive.map((identity) => rosterById.get(identity.id) || identity);

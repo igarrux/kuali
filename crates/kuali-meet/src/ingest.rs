@@ -531,6 +531,7 @@ fn upsert_roster(
         speaker.avatar_url = detail_string(participant, &["avatarUrl", "avatar_url", "avatar"])
             .filter(|url| !url.trim().is_empty());
         speaker.color = color_for(user_id).to_string();
+        let speaker = session.remember_identity(&source_id, speaker);
 
         if session.roster.get(&source_id) == Some(&speaker) {
             continue;
@@ -616,9 +617,15 @@ fn upsert_participant(
         .and_then(|value| value.as_bool())
         .unwrap_or(false);
 
+    if let Some(source_id) = speaker.source_id.clone() {
+        speaker = session.remember_identity(&source_id, speaker);
+    }
+
     if let Some(previous) = session.channels.get(&index) {
         if previous.speaker.user_id != speaker.user_id {
             let _ = events.send(VoiceEvent::ParticipantLeft(previous.speaker.user_id));
+        } else if previous.speaker == speaker && previous.audio_kind == audio_kind {
+            return;
         }
     }
     session.channels.insert(
@@ -693,6 +700,8 @@ struct Session {
     channels: HashMap<u32, ChannelBinding>,
     /// Participants announced by the page before they speak.
     roster: HashMap<String, Speaker>,
+    /// Best metadata learned for each stable platform participant ID.
+    identities: HashMap<String, Speaker>,
     /// Latest platform activity snapshot, used to avoid UI flicker from repeated
     /// events every 250 ms.
     active_speakers: HashSet<DiscordUserId>,
@@ -706,6 +715,7 @@ impl Session {
             meeting,
             channels: HashMap::new(),
             roster: HashMap::new(),
+            identities: HashMap::new(),
             active_speakers: HashSet::new(),
             last_microphone_gate: None,
         }
@@ -741,6 +751,43 @@ impl Session {
         }
         speaker
     }
+
+    fn remember_identity(&mut self, source_id: &str, mut speaker: Speaker) -> Speaker {
+        if let Some(previous) = self.identities.get(source_id) {
+            if generic_participant_name(&speaker.display_name)
+                && !generic_participant_name(&previous.display_name)
+            {
+                speaker.display_name.clone_from(&previous.display_name);
+            }
+            if speaker.username.trim().is_empty() {
+                speaker.username.clone_from(&previous.username);
+            }
+            if speaker.avatar_url.is_none() {
+                speaker.avatar_url.clone_from(&previous.avatar_url);
+            }
+            speaker.is_bot |= previous.is_bot;
+        }
+        self.identities
+            .insert(source_id.to_string(), speaker.clone());
+        speaker
+    }
+}
+
+fn generic_participant_name(name: &str) -> bool {
+    let normalized = name.trim().to_lowercase();
+    normalized.is_empty()
+        || matches!(
+            normalized.as_str(),
+            "device"
+                | "devices"
+                | "participant"
+                | "participants"
+                | "participante"
+                | "participantes"
+                | "participante sin identificar"
+                | "unknown participant"
+        )
+        || normalized.starts_with("desconocido (")
 }
 
 /// FNV-1a reproduces the same ID across runs without persistent tables. A `WEB`
@@ -1354,6 +1401,82 @@ mod tests {
             Some("https://example.test/delphys.jpg")
         );
         assert_eq!(speakers[1].user_id, test_participant_id("meet-device-2"));
+    }
+
+    #[test]
+    fn stable_participant_ids_keep_names_across_placeholder_updates() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = test_session();
+        on_text(
+            r#"{"kind":"roster-state","ts":1,"detail":{"participants":[{"participantId":"meet-device-2","displayName":"Pivel","avatarUrl":"https://example.test/pivel.jpg"}]}}"#,
+            &mut session,
+            &tx,
+        );
+        let learned = match rx.try_recv() {
+            Ok(VoiceEvent::ParticipantPresent(speaker)) => speaker,
+            other => panic!("expected the initial participant, got {other:?}"),
+        };
+        assert_eq!(learned.display_name, "Pivel");
+
+        on_text(
+            r#"{"kind":"roster-state","ts":2,"detail":{"participants":[{"participantId":"meet-device-2","displayName":"Participante"}]}}"#,
+            &mut session,
+            &tx,
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "a placeholder must not replace known metadata"
+        );
+        let remembered = session.roster.get("meet-device-2").unwrap();
+        assert_eq!(remembered.display_name, "Pivel");
+        assert_eq!(
+            remembered.avatar_url.as_deref(),
+            Some("https://example.test/pivel.jpg")
+        );
+
+        on_text(
+            r#"{"kind":"roster-state","ts":3,"detail":{"participants":[{"participantId":"meet-device-2","displayName":"Pivel JG"}]}}"#,
+            &mut session,
+            &tx,
+        );
+        let renamed = match rx.try_recv() {
+            Ok(VoiceEvent::ParticipantPresent(speaker)) => speaker,
+            other => panic!("expected the valid rename, got {other:?}"),
+        };
+        assert_eq!(renamed.display_name, "Pivel JG");
+        assert_eq!(
+            renamed.avatar_url.as_deref(),
+            Some("https://example.test/pivel.jpg")
+        );
+    }
+
+    #[test]
+    fn channel_identity_cannot_downgrade_a_known_name_for_the_same_source_id() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = test_session();
+        on_text(
+            r#"{"kind":"participant-upsert","ts":1,"detail":{"channel":3,"participantId":"meet-device-2","displayName":"Pivel","audioKind":"separate"}}"#,
+            &mut session,
+            &tx,
+        );
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(VoiceEvent::ParticipantPresent(speaker)) if speaker.display_name == "Pivel"
+        ));
+
+        on_text(
+            r#"{"kind":"participant-upsert","ts":2,"detail":{"channel":3,"participantId":"meet-device-2","displayName":"Devices","audioKind":"separate"}}"#,
+            &mut session,
+            &tx,
+        );
+        assert!(
+            rx.try_recv().is_err(),
+            "the unchanged identity must not be announced again"
+        );
+        assert_eq!(
+            session.channels.get(&3).unwrap().speaker.display_name,
+            "Pivel"
+        );
     }
 
     #[test]

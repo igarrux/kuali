@@ -136,6 +136,36 @@ test("Meet protocol names survive background-tab DOM placeholders", () => {
   assert.equal(identity.name, "Ana");
   assert.equal(identity.avatarUrl, "https://example.test/ana.jpg");
   assert.equal(capturePolicy.usableMeetParticipantName("devices"), "");
+  assert.equal(capturePolicy.usableMeetParticipantName("Participante"), "");
+});
+
+test("Meet remembers valid names by device ID across partial background updates", () => {
+  const learned = capturePolicy.mergeMeetParticipantIdentity(null, {
+    id: "devices/remote",
+    name: "Pivel",
+    avatarUrl: "https://example.test/pivel.jpg",
+    isSelf: false,
+  });
+  const backgroundUpdate = capturePolicy.mergeMeetParticipantIdentity(learned, {
+    id: "devices/remote",
+    name: "Participante",
+    avatarUrl: null,
+    isSelf: false,
+  });
+  assert.equal(backgroundUpdate.name, "Pivel");
+  assert.equal(backgroundUpdate.avatarUrl, "https://example.test/pivel.jpg");
+
+  const renamed = capturePolicy.mergeMeetParticipantIdentity(backgroundUpdate, {
+    id: "devices/remote",
+    name: "Pivel JG",
+  });
+  assert.equal(renamed.name, "Pivel JG");
+
+  const unrelated = capturePolicy.mergeMeetParticipantIdentity(null, {
+    id: "devices/other",
+    name: "Participante",
+  });
+  assert.equal(unrelated.name, "Participante sin identificar");
 });
 
 test("Meet roster includes active protocol users hidden by tile virtualization", () => {
