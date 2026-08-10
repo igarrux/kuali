@@ -20,7 +20,17 @@ Open <http://localhost:4173>.
 
 The workflow uploads `website/` without a build step.
 
-## Cloudflare Pages
+## Cloudflare
+
+The production custom domain is served by the `kuali-site` Worker with static
+assets. Deploy the current website with:
+
+```sh
+npx wrangler deploy website --name=kuali-site --compatibility-date 2026-08-10
+```
+
+Cloudflare Pages remains an alternative deployment target. To use it, connect
+the repository from the dashboard:
 
 Connect `igarrux/kuali` from **Workers & Pages → Create → Pages → Connect to
 Git** and use:
@@ -33,10 +43,10 @@ Git** and use:
 | Build output directory | `website` |
 | Root directory | Repository root |
 
-For a direct upload, run:
+For a direct Pages upload after creating a Pages project, run:
 
 ```sh
-npx wrangler pages deploy website --project-name=kuali
+npx wrangler pages deploy website --project-name=kuali-site
 ```
 
 ## Canonical URL
