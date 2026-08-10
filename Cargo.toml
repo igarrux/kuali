@@ -28,13 +28,13 @@ kuali-store = { path = "crates/kuali-store" }
 kuali-engine = { path = "crates/kuali-engine" }
 
 anyhow = "1"
+base64 = "0.22"
 thiserror = "2"
 async-trait = "0.1"
 chrono = { version = "0.4", features = ["serde"] }
 directories = "6"
 futures = "0.3"
 hmac = "0.12"
-hex = "0.4"
 parking_lot = "0.12"
 reqwest = { version = "0.12", default-features = false, features = [
     "json",

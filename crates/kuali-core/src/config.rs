@@ -149,7 +149,7 @@ pub struct WebhookSubscription {
     pub name: String,
     /// HTTP(S) endpoint to which Kuali sends POST requests.
     pub url: String,
-    /// Shared secret used to sign the body with HMAC-SHA256.
+    /// Standard Webhooks HMAC-SHA256 secret serialized with the `whsec_` prefix.
     pub secret: String,
     pub enabled: bool,
     pub scope: WebhookScope,
@@ -192,9 +192,9 @@ impl WebhookSubscription {
         if self.url.trim().is_empty() {
             return Err(format!("{} no tiene URL", self.name));
         }
-        if self.secret.len() < 16 {
+        if !self.secret.trim().starts_with("whsec_") {
             return Err(format!(
-                "el secreto de {} debe tener al menos 16 caracteres",
+                "el secreto de {} debe usar el formato whsec_ de Standard Webhooks",
                 self.name
             ));
         }
@@ -619,7 +619,7 @@ mod tests {
             id: "hook-1".into(),
             name: "Mi app".into(),
             url: "http://localhost:3000/kuali".into(),
-            secret: "1234567890abcdef".into(),
+            secret: "whsec_MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=".into(),
             enabled: true,
             scope: WebhookScope::Channel {
                 guild_id: "123456789012345678".into(),

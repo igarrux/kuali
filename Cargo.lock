@@ -2863,9 +2863,9 @@ name = "kuali-engine"
 version = "0.1.7"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "chrono",
  "futures-util",
- "hex",
  "hmac",
  "kuali-core",
  "kuali-discord",
