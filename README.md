@@ -83,10 +83,10 @@ Kuali never captures its own announcement.
 
 ### Browser meetings
 
-The extension source lives in [`browser-extension/`](browser-extension/README.md).
-Until a store release is available, open the extensions page in Chrome, Edge,
-Brave, or Arc, enable developer mode, and load that directory as an unpacked
-extension. The desktop guide provides the same process step by step.
+Install the extension from its official
+[Chrome Web Store listing](https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp)
+in Chrome, Edge, Brave, or Arc. Its source and unpacked development instructions
+live in [`browser-extension/`](browser-extension/README.md).
 
 The extension connects only to Kuali's loopback listener. It preserves separate
 speaker tracks and participant identity when the meeting service exposes them,

@@ -16,7 +16,7 @@ created by `npm run package:store`; do not ZIP the whole repository.
 3. Register a Chrome Web Store developer account and pay Google's one-time
    registration fee.
 4. Run `npm test` and `npm run package:store` in `browser-extension`.
-5. Upload `dist/kuali-chrome-0.1.0.zip` in the Developer Dashboard.
+5. Upload `dist/kuali-chrome-0.1.4.zip` in the Developer Dashboard.
 
 ## Dashboard fields
 
@@ -32,8 +32,9 @@ created by `npm run package:store`; do not ZIP the whole repository.
 - **In-app purchases:** No
 
 Paste the English and Spanish store copy from `listing.en.md` and
-`listing.es-419.md`. Upload the PNGs from `assets`; replace the explanatory
-screenshots with current real-product captures whenever the UI changes.
+`listing.es-419.md`. Upload the PNGs from `assets`; the three selected 1280×800
+screenshots can be regenerated from `video/storyboard.html` whenever the UI
+changes.
 
 ## Privacy tab
 

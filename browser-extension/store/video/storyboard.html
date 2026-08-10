@@ -1,0 +1,609 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Kuali extension promotional video</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #0b0e13;
+      --bg-soft: #0f141c;
+      --surface: #121821;
+      --surface-2: #171f2b;
+      --surface-3: #1d2734;
+      --line: rgba(207, 224, 238, .11);
+      --line-strong: rgba(207, 224, 238, .2);
+      --text: #f2f5f7;
+      --muted: #8b97a8;
+      --muted-strong: #b2bcc8;
+      --accent: #7ddab9;
+      --accent-strong: #49c99d;
+      --accent-soft: rgba(125, 218, 185, .12);
+      --violet: #aaa7ff;
+      --danger: #ff7a83;
+      --shadow: 0 36px 110px rgba(0, 0, 0, .5);
+      --sans: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      --display: ui-rounded, "SF Pro Rounded", -apple-system, BlinkMacSystemFont, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { width: 1920px; height: 1080px; margin: 0; overflow: hidden; }
+    body {
+      background:
+        radial-gradient(circle at 78% 12%, rgba(38, 144, 119, .14), transparent 34%),
+        radial-gradient(circle at 16% 88%, rgba(114, 109, 235, .08), transparent 30%),
+        var(--bg);
+      color: var(--text);
+      font-family: var(--sans);
+      -webkit-font-smoothing: antialiased;
+    }
+
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      opacity: .28;
+      background-image:
+        linear-gradient(var(--line) 1px, transparent 1px),
+        linear-gradient(90deg, var(--line) 1px, transparent 1px);
+      background-size: 72px 72px;
+      mask-image: linear-gradient(to bottom, rgba(0,0,0,.8), transparent 92%);
+    }
+
+    .scene {
+      display: none;
+      width: 100%;
+      height: 100%;
+      position: relative;
+      padding: 78px 92px;
+      isolation: isolate;
+    }
+    body.store-shot { width: 1280px; height: 800px; }
+    body.store-shot .scene {
+      width: 1920px;
+      height: 1080px;
+      padding: 78px 92px;
+      transform: translateY(40px) scale(0.6666667);
+      transform-origin: top left;
+    }
+    body[data-scene="intro"] .intro,
+    body[data-scene="suggest"] .suggest,
+    body[data-scene="consent"] .consent,
+    body[data-scene="live-one"] .live-one,
+    body[data-scene="live-two"] .live-two,
+    body[data-scene="summary"] .summary-scene,
+    body[data-scene="tasks"] .tasks-scene,
+    body[data-scene="local"] .local,
+    body[data-scene="privacy"] .privacy,
+    body[data-scene="outro"] .outro { display: flex; }
+
+    .ambient {
+      position: absolute;
+      border: 1px solid rgba(125, 218, 185, .12);
+      border-radius: 50%;
+      z-index: -1;
+    }
+    .ambient.a { width: 620px; height: 620px; right: -120px; top: -190px; }
+    .ambient.b { width: 390px; height: 390px; right: 42px; top: -75px; }
+    .ambient.c { width: 220px; height: 220px; left: -70px; bottom: 30px; border-color: rgba(170,167,255,.1); }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 17px;
+      font-weight: 800;
+      letter-spacing: .18em;
+      text-transform: uppercase;
+    }
+    h1, h2, h3, p { margin-top: 0; }
+    h1, h2, h3 { font-family: var(--display); letter-spacing: -.045em; }
+    h1 { margin-bottom: 24px; font-size: 88px; line-height: .98; }
+    h2 { margin: 16px 0 18px; font-size: 64px; line-height: 1.02; }
+    .lead { max-width: 820px; color: var(--muted-strong); font-size: 27px; line-height: 1.46; }
+    .mint { color: var(--accent); }
+    .violet { color: var(--violet); }
+
+    .brand {
+      display: inline-flex;
+      align-items: center;
+      gap: 16px;
+      font-family: var(--display);
+      font-size: 27px;
+      font-weight: 800;
+      letter-spacing: -.03em;
+    }
+    .brand img { width: 48px; height: 48px; }
+    .brand.large { gap: 25px; font-size: 46px; }
+    .brand.large img { width: 86px; height: 86px; }
+
+    .intro, .outro {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+    }
+    .intro-content, .outro-content { width: 100%; max-width: 1450px; }
+    .intro-logo {
+      width: 210px;
+      height: 210px;
+      padding: 34px;
+      margin-bottom: 36px;
+      border: 1px solid rgba(125, 218, 185, .28);
+      border-radius: 58px;
+      background: rgba(125, 218, 185, .08);
+      box-shadow: 0 0 90px rgba(73, 201, 157, .16), inset 0 1px rgba(255,255,255,.08);
+    }
+    .intro h1 { font-size: 106px; }
+    .intro .lead { max-width: none; font-size: 32px; }
+    .platform-line {
+      display: flex;
+      justify-content: center;
+      gap: 28px;
+      margin-top: 44px;
+      color: var(--muted);
+      font-size: 18px;
+      font-weight: 700;
+    }
+    .platform-line span { display: flex; align-items: center; gap: 28px; }
+    .platform-line span:not(:last-child)::after { content: ""; width: 5px; height: 5px; background: var(--accent); border-radius: 50%; opacity: .7; }
+
+    .split-scene { align-items: center; gap: 72px; }
+    .scene-copy { width: 570px; flex: none; }
+    .scene-copy h2 { max-width: 620px; }
+    .scene-copy .lead { font-size: 23px; }
+    .feature-line {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin-top: 32px;
+      color: var(--muted-strong);
+      font-size: 18px;
+      font-weight: 650;
+    }
+    .feature-line i { width: 9px; height: 9px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 18px var(--accent); }
+
+    .browser {
+      width: 1160px;
+      height: 760px;
+      overflow: hidden;
+      position: relative;
+      border: 1px solid var(--line-strong);
+      border-radius: 28px;
+      background: #11151c;
+      box-shadow: var(--shadow);
+    }
+    .browser-top {
+      height: 58px;
+      display: flex;
+      align-items: center;
+      gap: 17px;
+      padding: 0 20px;
+      background: #171c25;
+      border-bottom: 1px solid var(--line);
+    }
+    .browser-dots { display: flex; gap: 9px; }
+    .browser-dots i { width: 12px; height: 12px; border-radius: 50%; background: #4d5563; }
+    .browser-dots i:first-child { background: #ff6b71; }
+    .browser-dots i:nth-child(2) { background: #f2bd5e; }
+    .browser-dots i:last-child { background: #6fd3aa; }
+    .address {
+      flex: 1;
+      height: 34px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border: 1px solid rgba(255,255,255,.07);
+      border-radius: 10px;
+      background: rgba(0,0,0,.18);
+      color: #aab4c0;
+      font-size: 13px;
+    }
+    .meet-stage { position: absolute; inset: 58px 0 0; padding: 34px 42px 88px; background: #0f1218; }
+    .meet-grid { height: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+    .meet-tile {
+      position: relative;
+      display: grid;
+      place-items: center;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,.06);
+      border-radius: 18px;
+      background: linear-gradient(145deg, #1c2330, #141923);
+    }
+    .meet-tile.speaking { border: 3px solid var(--accent); box-shadow: inset 0 0 0 2px #0f1218, 0 0 24px rgba(125,218,185,.18); }
+    .meet-avatar {
+      width: 116px;
+      height: 116px;
+      display: grid;
+      place-items: center;
+      border-radius: 50%;
+      background: linear-gradient(145deg, #28594c, #163d35);
+      color: #c8f4e4;
+      font-size: 36px;
+      font-weight: 800;
+    }
+    .meet-tile:nth-child(2) .meet-avatar { background: linear-gradient(145deg, #45447d, #2a2b56); color: #d9d8ff; }
+    .meet-tile:nth-child(3) .meet-avatar { background: linear-gradient(145deg, #684454, #482a39); color: #ffd9e7; }
+    .meet-tile:nth-child(4) .meet-avatar { background: linear-gradient(145deg, #4b5869, #303945); color: #dde7f4; }
+    .meet-name { position: absolute; left: 16px; bottom: 13px; font-size: 14px; font-weight: 700; }
+    .mute { position: absolute; right: 14px; top: 14px; width: 28px; height: 28px; display: grid; place-items: center; border-radius: 50%; background: rgba(0,0,0,.5); color: #cbd3dc; font-size: 12px; }
+    .meet-controls { position: absolute; left: 0; right: 0; bottom: 18px; display: flex; justify-content: center; gap: 13px; }
+    .control { width: 46px; height: 46px; display: grid; place-items: center; border-radius: 50%; background: #2a303a; color: #d7dde5; font-size: 16px; }
+    .control.end { width: 64px; border-radius: 24px; background: #c94e57; }
+
+    .record-toast {
+      position: absolute;
+      z-index: 5;
+      top: 80px;
+      left: 50%;
+      width: 600px;
+      min-height: 92px;
+      display: grid;
+      grid-template-columns: 58px 1fr auto;
+      align-items: center;
+      gap: 16px;
+      padding: 15px 17px;
+      transform: translateX(-50%);
+      border: 1px solid rgba(125, 218, 185, .24);
+      border-radius: 20px;
+      background: rgba(18, 24, 33, .96);
+      box-shadow: 0 24px 70px rgba(0,0,0,.52);
+    }
+    .record-toast img { width: 46px; height: 46px; padding: 8px; border-radius: 13px; background: var(--accent-soft); }
+    .record-toast strong { display: block; margin-bottom: 5px; font-size: 17px; }
+    .record-toast small { color: var(--muted); font-size: 13px; }
+    .record-toast button, .consent-card button {
+      border: 0;
+      border-radius: 12px;
+      background: var(--accent);
+      color: #08130f;
+      font: 800 14px/1 var(--sans);
+    }
+    .record-toast button { height: 42px; padding: 0 20px; }
+
+    .browser.recording .record-toast { width: 205px; min-height: 48px; top: 80px; left: auto; right: 25px; grid-template-columns: 10px 1fr; padding: 12px 16px; transform: none; border-color: rgba(255,122,131,.26); }
+    .browser.recording .record-toast::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--danger); box-shadow: 0 0 14px rgba(255,122,131,.7); }
+    .browser.recording .record-toast strong { margin: 0; font-size: 13px; }
+    .browser.recording .record-toast img,
+    .browser.recording .record-toast small,
+    .browser.recording .record-toast button { display: none; }
+
+    .consent-overlay { position: absolute; inset: 58px 0 0; z-index: 4; display: grid; place-items: center; background: rgba(5,7,10,.76); backdrop-filter: blur(5px); }
+    .consent-card {
+      width: 650px;
+      padding: 32px;
+      border: 1px solid rgba(125,218,185,.2);
+      border-radius: 24px;
+      background: #171621;
+      box-shadow: var(--shadow);
+    }
+    .consent-heading { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; }
+    .consent-heading img { width: 54px; height: 54px; padding: 8px; border-radius: 15px; background: rgba(125,218,185,.13); }
+    .consent-heading h3 { margin: 0; font-size: 25px; }
+    .consent-card p { color: #c0c8d2; font-size: 16px; line-height: 1.55; }
+    .consent-card .fine { color: var(--muted); font-size: 14px; }
+    .check-row { display: flex; align-items: flex-start; gap: 14px; margin: 23px 0; padding: 17px; border: 1px solid rgba(125,218,185,.2); border-radius: 14px; background: #1a2130; color: #edf4f1; font-size: 14px; line-height: 1.45; }
+    .check-box { width: 21px; height: 21px; display: grid; place-items: center; flex: none; border-radius: 5px; background: var(--accent); color: #092117; font-weight: 900; }
+    .consent-actions { display: flex; justify-content: space-between; align-items: center; }
+    .consent-actions a { color: var(--accent); font-size: 14px; font-weight: 700; }
+    .consent-card button { padding: 15px 22px; }
+
+    .app-window {
+      width: 100%;
+      height: 850px;
+      overflow: hidden;
+      display: grid;
+      grid-template-columns: 320px 1fr;
+      position: relative;
+      border: 1px solid var(--line-strong);
+      border-radius: 30px;
+      background: var(--bg);
+      box-shadow: var(--shadow);
+    }
+    .app-top {
+      position: absolute;
+      z-index: 3;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 78px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 26px;
+      border-bottom: 1px solid var(--line);
+      background: var(--surface);
+    }
+    .app-top .brand { font-size: 18px; gap: 10px; }
+    .app-top .brand img { width: 34px; height: 34px; }
+    .status-pill { display: flex; align-items: center; gap: 10px; padding: 10px 15px; border: 1px solid rgba(125,218,185,.22); border-radius: 999px; background: var(--accent-soft); font-size: 13px; font-weight: 750; }
+    .status-pill i { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 14px var(--accent); }
+    .top-actions { display: flex; gap: 9px; }
+    .top-actions span { padding: 9px 13px; border: 1px solid var(--line); border-radius: 10px; color: var(--muted-strong); font-size: 12px; }
+    .sidebar { padding: 102px 18px 20px; border-right: 1px solid var(--line); background: var(--surface); }
+    .nav-item { margin-bottom: 8px; padding: 13px 14px; border-radius: 11px; color: var(--muted-strong); font-size: 14px; font-weight: 700; }
+    .nav-item.active { background: var(--accent-soft); color: var(--text); border: 1px solid rgba(125,218,185,.24); }
+    .side-label { margin: 34px 9px 12px; color: var(--accent); font-size: 10px; font-weight: 850; letter-spacing: .17em; }
+    .folder { margin: 5px 0; padding: 12px 11px; border-radius: 11px; }
+    .folder strong { display: block; font-size: 13px; }
+    .folder small { color: var(--muted); font-size: 10px; }
+    .folder.selected { background: var(--surface-2); }
+    .meeting-item { margin: 5px 0 0 16px; padding: 12px 13px; border-left: 2px solid var(--accent); color: var(--text); font-size: 12px; }
+    .meeting-item small { display: block; margin-top: 5px; color: var(--muted); font-size: 9px; }
+    .app-main { padding: 108px 35px 30px; }
+    .meeting-head { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
+    .meeting-head .eyebrow { font-size: 10px; }
+    .meeting-head h3 { margin: 7px 0 6px; font-size: 31px; }
+    .meeting-head p { margin: 0; color: var(--muted); font-size: 12px; }
+    .participant-stack { display: flex; align-items: center; }
+    .participant-stack i { width: 34px; height: 34px; display: grid; place-items: center; margin-left: -7px; border: 3px solid var(--bg); border-radius: 50%; background: #2c6756; font-style: normal; font-size: 10px; font-weight: 850; }
+    .participant-stack i:first-child { margin-left: 0; }
+    .participant-stack i:nth-child(2) { background: #4a477f; }
+    .participant-stack i:nth-child(3) { background: #714555; }
+    .meeting-grid { height: 680px; display: grid; grid-template-columns: 1.08fr .92fr; gap: 19px; }
+    .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 17px; background: var(--surface); }
+    .panel-head { height: 58px; display: flex; align-items: center; justify-content: space-between; padding: 0 19px; border-bottom: 1px solid var(--line); }
+    .panel-head strong { font-size: 13px; }
+    .live-pill { display: flex; align-items: center; gap: 7px; padding: 7px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 9px; font-weight: 850; letter-spacing: .06em; text-transform: uppercase; }
+    .live-pill i { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+    .transcript-list { padding: 17px 19px; }
+    .utterance { display: grid; grid-template-columns: 38px 1fr; gap: 12px; padding: 14px 0; border-bottom: 1px solid rgba(207,224,238,.07); }
+    .utterance:last-child { border-bottom: 0; }
+    .avatar { width: 34px; height: 34px; display: grid; place-items: center; border-radius: 50%; background: #2b6555; color: #c9f7e7; font-size: 10px; font-weight: 850; }
+    .utterance:nth-child(2) .avatar { background: #474777; color: #dedcff; }
+    .utterance:nth-child(3) .avatar { background: #704758; color: #ffe0eb; }
+    .utterance-meta { display: flex; align-items: baseline; gap: 9px; margin-bottom: 5px; }
+    .utterance-meta strong { font-size: 12px; }
+    .utterance-meta time { color: var(--muted); font-size: 9px; }
+    .utterance p { margin: 0; color: #c4cdd7; font-size: 12px; line-height: 1.55; }
+    .utterance.current { margin: 0 -9px; padding: 14px 9px; border-radius: 12px; background: rgba(125,218,185,.06); }
+    .wave { display: inline-flex; align-items: center; gap: 2px; margin-left: 7px; }
+    .wave i { width: 2px; border-radius: 2px; background: var(--accent); }
+    .wave i:nth-child(1) { height: 6px; } .wave i:nth-child(2) { height: 11px; } .wave i:nth-child(3) { height: 8px; }
+    .insight-tabs { height: 58px; display: flex; align-items: end; gap: 5px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+    .insight-tabs span { padding: 15px 14px 13px; color: var(--muted); font-size: 11px; font-weight: 750; }
+    .insight-tabs span.active { color: var(--text); border-bottom: 2px solid var(--accent); }
+    .insight-body { padding: 21px; }
+    .empty-insight { height: 520px; display: grid; place-items: center; text-align: center; color: var(--muted); }
+    .empty-insight strong { display: block; margin-bottom: 8px; color: var(--muted-strong); font-size: 16px; }
+    .empty-insight small { font-size: 11px; }
+    .summary-block { margin-bottom: 21px; }
+    .summary-block h4 { margin: 0 0 9px; color: var(--accent); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+    .summary-block p, .summary-block li { color: #c2ccd6; font-size: 11px; line-height: 1.55; }
+    .summary-block ul { margin: 0; padding-left: 18px; }
+    .summary-block li { margin-bottom: 7px; }
+    .decision { padding: 13px; border: 1px solid rgba(170,167,255,.18); border-radius: 11px; background: rgba(170,167,255,.07); }
+    .task-card { display: grid; grid-template-columns: 19px 34px 1fr; gap: 11px; align-items: start; margin-bottom: 11px; padding: 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface-2); }
+    .task-check { width: 17px; height: 17px; border: 1px solid var(--muted); border-radius: 5px; }
+    .task-card strong { display: block; margin-bottom: 5px; font-size: 11px; line-height: 1.4; }
+    .task-card small { color: var(--muted); font-size: 9px; }
+
+    .app-scene { align-items: center; }
+    .app-scene .app-window { transform: scale(.94); }
+    .callout {
+      position: absolute;
+      z-index: 8;
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 14px 18px;
+      border: 1px solid rgba(125,218,185,.22);
+      border-radius: 14px;
+      background: rgba(18,24,33,.96);
+      box-shadow: 0 18px 55px rgba(0,0,0,.42);
+      color: var(--muted-strong);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .callout i { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 15px var(--accent); }
+    .callout.top-right { top: 64px; right: 115px; }
+    .callout.bottom-right { right: 115px; bottom: 48px; }
+
+    .local { align-items: center; justify-content: center; flex-direction: column; text-align: center; }
+    .local h2 { font-size: 68px; }
+    .local .lead { max-width: none; }
+    .flow { width: 1510px; display: grid; grid-template-columns: 1fr 150px 1fr 150px 1fr; align-items: center; margin-top: 65px; }
+    .flow-card { min-height: 300px; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 30px; border: 1px solid var(--line-strong); border-radius: 28px; background: var(--surface); box-shadow: var(--shadow); }
+    .flow-card.primary { border-color: rgba(125,218,185,.33); background: color-mix(in srgb, var(--surface) 80%, #15372e); }
+    .flow-icon { width: 92px; height: 92px; display: grid; place-items: center; margin-bottom: 24px; border-radius: 26px; background: var(--accent-soft); color: var(--accent); font-size: 33px; font-weight: 800; }
+    .flow-icon img { width: 70px; height: 70px; }
+    .flow-card h3 { margin: 0 0 10px; font-size: 27px; }
+    .flow-card p { margin: 0; color: var(--muted); font-size: 15px; line-height: 1.5; }
+    .flow-line { height: 3px; background: repeating-linear-gradient(90deg, var(--accent) 0 10px, transparent 10px 20px); opacity: .9; }
+    .local-note { margin-top: 54px; color: var(--muted); font-size: 16px; }
+
+    .privacy { align-items: center; justify-content: center; }
+    .privacy-card { width: 1500px; display: grid; grid-template-columns: 1.05fr .95fr; gap: 80px; align-items: center; padding: 72px 78px; border: 1px solid var(--line-strong); border-radius: 36px; background: rgba(18,24,33,.94); box-shadow: var(--shadow); }
+    .privacy-card h2 { font-size: 76px; }
+    .privacy-list { display: grid; gap: 18px; }
+    .privacy-item { display: grid; grid-template-columns: 48px 1fr; gap: 16px; align-items: center; padding: 20px; border: 1px solid var(--line); border-radius: 15px; background: var(--surface-2); }
+    .privacy-item i { width: 43px; height: 43px; display: grid; place-items: center; border-radius: 13px; background: var(--accent-soft); color: var(--accent); font-style: normal; font-size: 20px; font-weight: 850; }
+    .privacy-item strong { display: block; margin-bottom: 4px; font-size: 16px; }
+    .privacy-item small { color: var(--muted); font-size: 12px; line-height: 1.4; }
+
+    .outro h2 { margin: 36px auto 20px; max-width: 1300px; font-size: 86px; }
+    .outro .lead { max-width: none; font-size: 27px; }
+    .cta { display: inline-flex; align-items: center; gap: 13px; margin-top: 42px; padding: 18px 27px; border: 1px solid rgba(125,218,185,.28); border-radius: 15px; background: var(--accent); color: #08130f; font-size: 18px; font-weight: 850; box-shadow: 0 18px 50px rgba(73,201,157,.16); }
+    .outro-note { margin-top: 25px; color: var(--muted); font-size: 14px; }
+  </style>
+</head>
+<body data-scene="intro">
+  <div class="ambient a"></div><div class="ambient b"></div><div class="ambient c"></div>
+
+  <section class="scene intro">
+    <div class="intro-content">
+      <img class="intro-logo" src="../../kuali-logo.svg" alt="" />
+      <div class="eyebrow">Kuali for browser meetings</div>
+      <h1>Your conversations.<br><span class="mint">Useful at last.</span></h1>
+      <p class="lead">Live transcription, clear speaker attribution, and notes that stay with you.</p>
+      <div class="platform-line"><span>Google Meet</span><span>Microsoft Teams</span><span>Zoom</span></div>
+    </div>
+  </section>
+
+  <section class="scene split-scene suggest">
+    <div class="scene-copy">
+      <div class="eyebrow">Ready when you are</div>
+      <h2>Start from the meeting you already joined.</h2>
+      <p class="lead">Kuali appears inside your browser and waits for your decision.</p>
+      <div class="feature-line"><i></i>No meeting bot joining the room</div>
+    </div>
+    <div class="browser">
+      <div class="browser-top"><div class="browser-dots"><i></i><i></i><i></i></div><div class="address">meet.google.com/launch-review</div></div>
+      <div class="meet-stage">
+        <div class="meet-grid">
+          <div class="meet-tile speaking"><div class="meet-avatar">MC</div><span class="meet-name">Maya Chen</span></div>
+          <div class="meet-tile"><div class="meet-avatar">AR</div><span class="meet-name">Alex Rivera</span></div>
+          <div class="meet-tile"><div class="meet-avatar">JL</div><span class="meet-name">Jordan Lee</span><span class="mute">/</span></div>
+          <div class="meet-tile"><div class="meet-avatar">You</div><span class="meet-name">You</span></div>
+        </div>
+        <div class="meet-controls"><span class="control">●</span><span class="control">▣</span><span class="control end">—</span><span class="control">⋯</span></div>
+      </div>
+      <div class="record-toast">
+        <img src="../../kuali-logo.svg" alt="" />
+        <div><strong>Record this meeting with Kuali?</strong><small>Live transcription and a useful recap when it ends</small></div>
+        <button type="button">Record</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene split-scene consent">
+    <div class="scene-copy">
+      <div class="eyebrow">Visible consent</div>
+      <h2>You stay in control.</h2>
+      <p class="lead">Recording cannot begin until you confirm that participants have been informed.</p>
+      <div class="feature-line"><i></i>Clear disclosure before capture</div>
+    </div>
+    <div class="browser">
+      <div class="browser-top"><div class="browser-dots"><i></i><i></i><i></i></div><div class="address">meet.google.com/launch-review</div></div>
+      <div class="meet-stage"><div class="meet-grid"><div class="meet-tile"><div class="meet-avatar">MC</div></div><div class="meet-tile"><div class="meet-avatar">AR</div></div><div class="meet-tile"><div class="meet-avatar">JL</div></div><div class="meet-tile"><div class="meet-avatar">You</div></div></div></div>
+      <div class="consent-overlay">
+        <div class="consent-card">
+          <div class="consent-heading"><img src="../../kuali-logo.svg" alt="" /><h3>Before recording this meeting</h3></div>
+          <p>Kuali will capture participant audio and identity and send them to the local Kuali app for transcription.</p>
+          <p class="fine">Configured AI providers or webhooks may receive the transcript.</p>
+          <div class="check-row"><span class="check-box">✓</span><span>I informed the participants and have permission to record and transcribe this meeting.</span></div>
+          <div class="consent-actions"><a>Read the privacy policy</a><button type="button">Record and transcribe</button></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene app-scene live-one">
+    <div class="app-window">
+      <div class="app-top"><div class="brand"><img src="../../kuali-logo.svg" alt="" />Kuali</div><div class="status-pill"><i></i>Transcribing now</div><div class="top-actions"><span>Guide</span><span>Settings</span></div></div>
+      <aside class="sidebar"><div class="nav-item">Home</div><div class="nav-item active">Live meetings</div><div class="nav-item">Tasks</div><div class="side-label">LIBRARY</div><div class="folder selected"><strong>Google Meet</strong><small>Browser meetings</small><div class="meeting-item">Launch review<small>Live now · 4 participants</small></div></div><div class="folder"><strong>Product</strong><small>Discord · 3 meetings</small></div></aside>
+      <main class="app-main">
+        <div class="meeting-head"><div><div class="eyebrow">TRANSCRIBING NOW</div><h3>Launch review</h3><p>Google Meet · Started 10:04 AM</p></div><div class="participant-stack"><i>MC</i><i>AR</i><i>JL</i></div></div>
+        <div class="meeting-grid">
+          <section class="panel"><div class="panel-head"><strong>Live transcript</strong><span class="live-pill"><i></i>Live</span></div><div class="transcript-list">
+            <div class="utterance"><div class="avatar">MC</div><div><div class="utterance-meta"><strong>Maya Chen</strong><time>00:14</time></div><p>Let’s ship the onboarding update on Friday, after the final checks are complete.</p></div></div>
+            <div class="utterance current"><div class="avatar">AR</div><div><div class="utterance-meta"><strong>Alex Rivera</strong><span class="wave"><i></i><i></i><i></i></span><time>00:22</time></div><p>I’ll verify the release build and update the installation guide before Thursday.</p></div></div>
+          </div></section>
+          <section class="panel"><div class="insight-tabs"><span class="active">Summary</span><span>Tasks</span></div><div class="empty-insight"><div><strong>Listening to the conversation</strong><small>The recap will be ready when the meeting ends.</small></div></div></section>
+        </div>
+      </main>
+    </div>
+    <div class="callout top-right"><i></i>Every speaker keeps their own identity</div>
+  </section>
+
+  <section class="scene app-scene live-two">
+    <div class="app-window">
+      <div class="app-top"><div class="brand"><img src="../../kuali-logo.svg" alt="" />Kuali</div><div class="status-pill"><i></i>Transcribing now</div><div class="top-actions"><span>Guide</span><span>Settings</span></div></div>
+      <aside class="sidebar"><div class="nav-item">Home</div><div class="nav-item active">Live meetings</div><div class="nav-item">Tasks</div><div class="side-label">LIBRARY</div><div class="folder selected"><strong>Google Meet</strong><small>Browser meetings</small><div class="meeting-item">Launch review<small>Live now · 4 participants</small></div></div><div class="folder"><strong>Product</strong><small>Discord · 3 meetings</small></div></aside>
+      <main class="app-main">
+        <div class="meeting-head"><div><div class="eyebrow">TRANSCRIBING NOW</div><h3>Launch review</h3><p>Google Meet · Started 10:04 AM</p></div><div class="participant-stack"><i>MC</i><i>AR</i><i>JL</i></div></div>
+        <div class="meeting-grid">
+          <section class="panel"><div class="panel-head"><strong>Live transcript</strong><span class="live-pill"><i></i>Live</span></div><div class="transcript-list">
+            <div class="utterance"><div class="avatar">MC</div><div><div class="utterance-meta"><strong>Maya Chen</strong><time>00:14</time></div><p>Let’s ship the onboarding update on Friday, after the final checks are complete.</p></div></div>
+            <div class="utterance"><div class="avatar">AR</div><div><div class="utterance-meta"><strong>Alex Rivera</strong><time>00:22</time></div><p>I’ll verify the release build and update the installation guide before Thursday.</p></div></div>
+            <div class="utterance current"><div class="avatar">JL</div><div><div class="utterance-meta"><strong>Jordan Lee</strong><span class="wave"><i></i><i></i><i></i></span><time>00:31</time></div><p>I can run the final transcription checks and post the results in the project channel.</p></div></div>
+          </div></section>
+          <section class="panel"><div class="insight-tabs"><span class="active">Summary</span><span>Tasks</span></div><div class="empty-insight"><div><strong>Still listening</strong><small>Live words stay visible while everyone speaks.</small></div></div></section>
+        </div>
+      </main>
+    </div>
+    <div class="callout bottom-right"><i></i>See the transcript while the meeting is happening</div>
+  </section>
+
+  <section class="scene app-scene summary-scene">
+    <div class="app-window">
+      <div class="app-top"><div class="brand"><img src="../../kuali-logo.svg" alt="" />Kuali</div><div class="status-pill"><i></i>Meeting saved</div><div class="top-actions"><span>Export</span><span>Settings</span></div></div>
+      <aside class="sidebar"><div class="nav-item">Home</div><div class="nav-item active">Meetings</div><div class="nav-item">Tasks</div><div class="side-label">LIBRARY</div><div class="folder selected"><strong>Google Meet</strong><small>Browser meetings</small><div class="meeting-item">Friday launch readiness<small>Today · 37 minutes</small></div></div><div class="folder"><strong>Product</strong><small>Discord · 3 meetings</small></div></aside>
+      <main class="app-main">
+        <div class="meeting-head"><div><div class="eyebrow">SAVED MEETING</div><h3>Friday launch readiness</h3><p>Google Meet · Today, 10:04 AM · 4 participants</p></div><div class="participant-stack"><i>MC</i><i>AR</i><i>JL</i></div></div>
+        <div class="meeting-grid">
+          <section class="panel"><div class="panel-head"><strong>Transcript</strong><span class="live-pill">37 min</span></div><div class="transcript-list">
+            <div class="utterance"><div class="avatar">MC</div><div><div class="utterance-meta"><strong>Maya Chen</strong><time>00:14</time></div><p>Let’s ship the onboarding update on Friday, after the final checks are complete.</p></div></div>
+            <div class="utterance"><div class="avatar">AR</div><div><div class="utterance-meta"><strong>Alex Rivera</strong><time>00:22</time></div><p>I’ll verify the release build and update the installation guide before Thursday.</p></div></div>
+            <div class="utterance"><div class="avatar">JL</div><div><div class="utterance-meta"><strong>Jordan Lee</strong><time>00:31</time></div><p>I can run the final transcription checks and post the results in the project channel.</p></div></div>
+          </div></section>
+          <section class="panel"><div class="insight-tabs"><span class="active">Summary</span><span>Tasks · 3</span></div><div class="insight-body">
+            <div class="summary-block"><h4>Overview</h4><p>The team confirmed a Friday release after completing build verification, documentation updates, and final transcription checks.</p></div>
+            <div class="summary-block"><h4>Key points</h4><ul><li>The onboarding update is ready for final validation.</li><li>The installation guide must be updated before Thursday.</li><li>Results will be shared in the project channel.</li></ul></div>
+            <div class="summary-block"><h4>Decision</h4><p class="decision">Release the onboarding update on Friday once all three checks pass.</p></div>
+          </div></section>
+        </div>
+      </main>
+    </div>
+    <div class="callout top-right"><i></i>Clear outcomes, without replaying the call</div>
+  </section>
+
+  <section class="scene app-scene tasks-scene">
+    <div class="app-window">
+      <div class="app-top"><div class="brand"><img src="../../kuali-logo.svg" alt="" />Kuali</div><div class="status-pill"><i></i>3 open tasks</div><div class="top-actions"><span>Export</span><span>Settings</span></div></div>
+      <aside class="sidebar"><div class="nav-item">Home</div><div class="nav-item">Meetings</div><div class="nav-item active">Tasks</div><div class="side-label">FILTERS</div><div class="folder selected"><strong>All people</strong><small>3 open tasks</small></div><div class="folder"><strong>This week</strong><small>Friday release</small></div></aside>
+      <main class="app-main">
+        <div class="meeting-head"><div><div class="eyebrow">WORK TO DO</div><h3>Tasks</h3><p>Everything agreed on, with the right person attached.</p></div><span class="live-pill">Friday launch readiness</span></div>
+        <section class="panel" style="height: 610px"><div class="panel-head"><strong>Assigned in this meeting</strong><span style="color:var(--muted);font-size:11px">3 pending</span></div><div class="insight-body">
+          <div class="task-card"><span class="task-check"></span><span class="avatar">AR</span><div><strong>Verify the signed release build before Thursday</strong><small>Alex Rivera · Friday launch readiness</small></div></div>
+          <div class="task-card"><span class="task-check"></span><span class="avatar" style="background:#474777">AR</span><div><strong>Update the installation guide with the final screenshots</strong><small>Alex Rivera · Friday launch readiness</small></div></div>
+          <div class="task-card"><span class="task-check"></span><span class="avatar" style="background:#704758">JL</span><div><strong>Run final transcription checks and post the results</strong><small>Jordan Lee · Friday launch readiness</small></div></div>
+        </div></section>
+      </main>
+    </div>
+    <div class="callout bottom-right"><i></i>Every action item stays connected to its owner</div>
+  </section>
+
+  <section class="scene local">
+    <div class="eyebrow">Local-first workflow</div>
+    <h2>Meeting audio goes straight to Kuali.</h2>
+    <p class="lead">No Kuali cloud account. Whisper transcription runs on your computer.</p>
+    <div class="flow">
+      <div class="flow-card"><div class="flow-icon">◖</div><h3>Your meeting</h3><p>Meet · Teams · Zoom</p></div>
+      <div class="flow-line"></div>
+      <div class="flow-card primary"><div class="flow-icon"><img src="../../kuali-logo.svg" alt="" /></div><h3>Kuali desktop</h3><p><span class="mint">127.0.0.1</span><br>Whisper runs locally</p></div>
+      <div class="flow-line"></div>
+      <div class="flow-card"><div class="flow-icon">≡</div><h3>Your notes</h3><p>Transcript · Tasks · Search</p></div>
+    </div>
+    <p class="local-note">Optional AI providers and webhooks are used only when you configure them.</p>
+  </section>
+
+  <section class="scene privacy">
+    <div class="privacy-card">
+      <div><div class="eyebrow">Built around your data</div><h2>Your meetings stay <span class="mint">on your computer.</span></h2><p class="lead">Kuali keeps the transcript, participant history, and recordings local by default.</p></div>
+      <div class="privacy-list">
+        <div class="privacy-item"><i>1</i><div><strong>Local transcription</strong><small>Whisper processes meeting audio on your machine.</small></div></div>
+        <div class="privacy-item"><i>2</i><div><strong>Local meeting library</strong><small>Transcripts and tasks remain in Kuali’s local storage.</small></div></div>
+        <div class="privacy-item"><i>3</i><div><strong>Your integrations, your choice</strong><small>Data leaves only through providers or webhooks you configure.</small></div></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="scene outro">
+    <div class="outro-content">
+      <div class="brand large"><img src="../../kuali-logo.svg" alt="" />Kuali</div>
+      <h2>Remember the meeting.<br><span class="mint">Keep the useful parts.</span></h2>
+      <p class="lead">Open source, local-first meeting transcription.</p>
+      <div class="cta">Add Kuali to your browser <span>→</span></div>
+      <p class="outro-note">Requires the Kuali desktop app.</p>
+    </div>
+  </section>
+
+  <script>
+    const params = new URLSearchParams(location.search);
+    const scene = params.get("scene") || "intro";
+    if (params.get("format") === "store") document.body.classList.add("store-shot");
+    document.body.dataset.scene = scene;
+    document.documentElement.dataset.ready = "true";
+  </script>
+</body>
+</html>

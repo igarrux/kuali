@@ -6,6 +6,12 @@ This unpacked Chrome/Chromium extension connects Google Meet, Microsoft Teams,
 and Zoom meetings to the Kuali desktop app. You remain a normal participant in
 the meeting; no external bot account joins it.
 
+## Install
+
+Install Kuali from its official
+[Chrome Web Store listing](https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp).
+The same listing works in Chrome, Edge, Brave, and Arc.
+
 ## Install for development
 
 1. Open `chrome://extensions` (or `edge://extensions`).
@@ -87,8 +93,7 @@ before treating it as a guarantee.
 Run `npm run package:store` to create the minimal upload ZIP and SHA-256 under
 `dist`. The descriptions, privacy declarations, reviewer instructions, promo
 graphics, and dashboard checklist live in [`store`](store/README.md). Manual
-unpacked installation remains supported for development and while a store
-version is under review.
+unpacked installation remains supported for development and as a fallback.
 
 ## Privacy
 

@@ -1,6 +1,6 @@
 # Chrome Web Store privacy answers
 
-These answers describe version `0.1.0`.
+These answers describe version `0.1.4`.
 
 ## Single purpose
 

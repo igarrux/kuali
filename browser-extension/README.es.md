@@ -6,6 +6,12 @@ Conecta reuniones de Google Meet, Microsoft Teams y Zoom con la aplicación
 local de Kuali. Tú sigues siendo un participante normal; no entra una cuenta de
 bot externa.
 
+## Instalar
+
+Instala Kuali desde su ficha oficial en
+[Chrome Web Store](https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp).
+La misma ficha funciona en Chrome, Edge, Brave y Arc.
+
 ## Instalar para probar
 
 1. Abre `chrome://extensions` (o `edge://extensions`).
@@ -70,8 +76,7 @@ se valida con el E2E real.
 Ejecuta `npm run package:store` para crear en `dist` el ZIP mínimo y su
 SHA-256. Los textos, declaraciones de privacidad, instrucciones para revisión,
 gráficos y checklist del panel están en [`store`](store/README.es.md). La
-instalación manual seguirá disponible para desarrollo y mientras Google revisa
-la versión de tienda.
+instalación manual seguirá disponible para desarrollo y como alternativa.
 
 ## Privacidad
 

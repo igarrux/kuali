@@ -3,8 +3,8 @@
 Kuali is an open-source extension with a required desktop companion. It does
 not use a Kuali cloud account and no reviewer credentials are required.
 
-1. Download and open the current signed desktop release:
-   `REPLACE_WITH_DIRECT_PUBLIC_RELEASE_URL`.
+1. Download and open the current public desktop release from
+   `https://kuali.garrux.dev/`.
 2. Keep the default local browser-bridge port (`9099`) in Kuali.
 3. Join a meeting you are authorized to record at Google Meet, Microsoft Teams,
    or Zoom and remain on the meeting page.

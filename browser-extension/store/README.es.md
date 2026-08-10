@@ -15,7 +15,7 @@ gráficos necesarios para publicar la extensión Kuali. El ZIP se crea con
 3. Registra una cuenta de desarrollador de Chrome Web Store y paga la cuota
    única de Google.
 4. Ejecuta `npm test` y `npm run package:store` dentro de `browser-extension`.
-5. Sube `dist/kuali-chrome-0.1.0.zip` en el panel de desarrolladores.
+5. Sube `dist/kuali-chrome-0.1.4.zip` en el panel de desarrolladores.
 
 ## Campos del panel
 
@@ -32,8 +32,8 @@ gráficos necesarios para publicar la extensión Kuali. El ZIP se crea con
 - **Compras integradas:** No
 
 Copia las fichas de `listing.en.md` y `listing.es-419.md`, y sube los PNG de
-`assets`. Si la interfaz cambia, reemplaza las capturas explicativas por
-capturas reales de la versión actual.
+`assets`. Las tres capturas seleccionadas de 1280×800 se pueden regenerar desde
+`video/storyboard.html` cuando cambie la interfaz.
 
 Usa las declaraciones exactas de `privacy-answers.md` y las instrucciones de
 `reviewer-notes.md`. Antes de enviar, reemplaza el enlace de descarga indicado

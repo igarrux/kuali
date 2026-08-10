@@ -85,10 +85,11 @@ Kuali nunca transcribe su propio aviso.
 
 ### Reuniones del navegador
 
-La extensión está en [`browser-extension/`](browser-extension/README.es.md).
-Hasta que exista una publicación en la tienda, abre la página de extensiones de
-Chrome, Edge, Brave o Arc, activa el modo desarrollador y carga esa carpeta como
-extensión descomprimida. La guía de Kuali explica el proceso paso a paso.
+Instala la extensión desde su ficha oficial en
+[Chrome Web Store](https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp)
+con Chrome, Edge, Brave o Arc. El código y las instrucciones para cargarla
+manualmente durante el desarrollo están en
+[`browser-extension/`](browser-extension/README.es.md).
 
 La extensión se comunica únicamente con el receptor local de Kuali. Mantiene
 separadas las pistas y la identidad de los participantes cuando el servicio de
