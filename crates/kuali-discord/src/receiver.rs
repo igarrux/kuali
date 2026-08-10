@@ -7,7 +7,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use kuali_core::DiscordUserId;
 use parking_lot::RwLock;
@@ -27,6 +27,9 @@ const EXPECTED_CONCURRENT_SPEAKERS: usize = 64;
 /// join transition. Six seconds comfortably exceeds jitter-buffer delays while
 /// allowing prompt automatic recovery.
 const AUDIO_DECODE_TIMEOUT: Duration = Duration::from_secs(6);
+/// Avoid repeated transport resets when several participants expose the same
+/// DAVE epoch problem in quick succession.
+const RECOVERY_COOLDOWN: Duration = Duration::from_secs(30);
 const MAX_RECOVERY_ATTEMPTS: u8 = 3;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -37,11 +40,17 @@ enum RecoveryRequestOutcome {
     Unavailable,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ReceiveRecoveryCause {
+    Participant(DiscordUserId),
+    Driver,
+}
+
 #[derive(Debug)]
 pub(crate) struct ReceiveRecoveryRequest {
     pub guild_id: u64,
     pub channel_id: u64,
-    pub user_id: DiscordUserId,
+    pub cause: ReceiveRecoveryCause,
     pub attempt: u8,
     pub control: ReceiveRecoveryControl,
 }
@@ -63,8 +72,14 @@ pub(crate) struct ReceiveRecoveryControl {
 #[derive(Debug, Default)]
 struct ReceiveRecoveryState {
     in_progress: AtomicBool,
-    suppress_requested_disconnect: AtomicBool,
-    attempts: RwLock<HashMap<DiscordUserId, u8>>,
+    participant_cooldown_until: RwLock<Option<Instant>>,
+    attempts: RwLock<ReceiveRecoveryAttempts>,
+}
+
+#[derive(Debug, Default)]
+struct ReceiveRecoveryAttempts {
+    participants: HashMap<DiscordUserId, u8>,
+    driver: u8,
 }
 
 impl ReceiveRecoveryControl {
@@ -73,8 +88,18 @@ impl ReceiveRecoveryControl {
         tx: &UnboundedSender<ReceiveRecoveryRequest>,
         guild_id: u64,
         channel_id: u64,
-        user_id: DiscordUserId,
+        cause: ReceiveRecoveryCause,
     ) -> RecoveryRequestOutcome {
+        if cause != ReceiveRecoveryCause::Driver
+            && self
+                .inner
+                .participant_cooldown_until
+                .read()
+                .is_some_and(|until| Instant::now() < until)
+        {
+            return RecoveryRequestOutcome::AlreadyRecovering;
+        }
+
         if self
             .inner
             .in_progress
@@ -86,7 +111,12 @@ impl ReceiveRecoveryControl {
 
         let attempt = {
             let mut attempts = self.inner.attempts.write();
-            let attempt = attempts.entry(user_id).or_default();
+            let attempt = match cause {
+                ReceiveRecoveryCause::Participant(user_id) => {
+                    attempts.participants.entry(user_id).or_default()
+                }
+                ReceiveRecoveryCause::Driver => &mut attempts.driver,
+            };
             *attempt = attempt.saturating_add(1);
             *attempt
         };
@@ -94,11 +124,15 @@ impl ReceiveRecoveryControl {
             self.inner.in_progress.store(false, Ordering::Release);
             return RecoveryRequestOutcome::Exhausted;
         }
+        if cause != ReceiveRecoveryCause::Driver {
+            *self.inner.participant_cooldown_until.write() =
+                Some(Instant::now() + RECOVERY_COOLDOWN);
+        }
 
         let request = ReceiveRecoveryRequest {
             guild_id,
             channel_id,
-            user_id,
+            cause,
             attempt,
             control: self.clone(),
         };
@@ -109,44 +143,22 @@ impl ReceiveRecoveryControl {
         RecoveryRequestOutcome::Queued
     }
 
-    pub(crate) fn prepare_disconnect(&self) {
-        self.inner
-            .suppress_requested_disconnect
-            .store(true, Ordering::Release);
-    }
-
     pub(crate) fn finish(&self) {
         self.inner.in_progress.store(false, Ordering::Release);
     }
 
     pub(crate) fn cancel(&self) {
-        self.inner
-            .suppress_requested_disconnect
-            .store(false, Ordering::Release);
         self.finish();
     }
 
-    pub(crate) fn expire_disconnect_suppression(&self) {
-        self.inner
-            .suppress_requested_disconnect
-            .store(false, Ordering::Release);
-    }
-
     fn mark_healthy(&self, user_id: DiscordUserId) {
-        self.inner.attempts.write().remove(&user_id);
+        let mut attempts = self.inner.attempts.write();
+        attempts.participants.remove(&user_id);
+        attempts.driver = 0;
     }
 
     fn forget(&self, user_id: DiscordUserId) {
-        self.inner.attempts.write().remove(&user_id);
-    }
-
-    fn should_suppress(&self, disconnect: &DisconnectData<'_>) -> bool {
-        if disconnect.reason != Some(DisconnectReason::Requested) {
-            return false;
-        }
-        self.inner
-            .suppress_requested_disconnect
-            .swap(false, Ordering::AcqRel)
+        self.inner.attempts.write().participants.remove(&user_id);
     }
 }
 
@@ -197,6 +209,10 @@ fn speaking_changes(
 
 fn should_capture_user(user_id: DiscordUserId, kuali_user_id: DiscordUserId) -> bool {
     user_id != kuali_user_id
+}
+
+fn is_requested_disconnect(reason: Option<DisconnectReason>) -> bool {
+    reason == Some(DisconnectReason::Requested)
 }
 
 /// SSRC-to-user table populated by `SpeakingStateUpdate` and read on each `VoiceTick`.
@@ -340,7 +356,12 @@ impl VoiceReceiver {
                             user_id,
                             "Discord anunció voz pero DAVE no entregó PCM; renovando la conexión"
                         );
-                        match recovery.request(&recovery_tx, guild_id, channel_id, user_id) {
+                        match recovery.request(
+                            &recovery_tx,
+                            guild_id,
+                            channel_id,
+                            ReceiveRecoveryCause::Participant(user_id),
+                        ) {
                             RecoveryRequestOutcome::Exhausted => {
                                 let _ = voice_tx.send(VoiceEvent::Warning(format!(
                                     "Discord sigue sin entregar el audio del usuario {user_id} después de {MAX_RECOVERY_ATTEMPTS} intentos"
@@ -438,10 +459,36 @@ impl VoiceReceiver {
         self.ssrc_map.clear();
         self.decode_watchdog.clear();
 
-        // Deliberate renewal belongs to the same meeting and must not close it,
-        // save a partial summary, or unload Whisper.
-        if !self.recovery.should_suppress(disconnect) {
+        // User-initiated departures are terminal. Handler-driven departures
+        // also emit a session-scoped event, but the engine treats duplicates as
+        // idempotent and this preserves the desktop "Leave call" path.
+        if is_requested_disconnect(disconnect.reason) {
             self.send(VoiceEvent::Disconnected);
+            return;
+        }
+
+        // Songbird can exhaust its internal reconnects after a DAVE/MLS state
+        // failure. Rebuild the complete call instead of ending a healthy Kuali
+        // meeting just because the transport session died.
+        match self.recovery.request(
+            &self.recovery_tx,
+            self.guild_id,
+            self.channel_id,
+            ReceiveRecoveryCause::Driver,
+        ) {
+            RecoveryRequestOutcome::Queued | RecoveryRequestOutcome::AlreadyRecovering => {}
+            RecoveryRequestOutcome::Exhausted => {
+                self.send(VoiceEvent::Warning(format!(
+                    "Discord sigue desconectando el audio después de {MAX_RECOVERY_ATTEMPTS} intentos"
+                )));
+                self.send(VoiceEvent::Disconnected);
+            }
+            RecoveryRequestOutcome::Unavailable => {
+                self.send(VoiceEvent::Warning(
+                    "el recuperador de audio de Discord dejó de estar disponible".to_string(),
+                ));
+                self.send(VoiceEvent::Disconnected);
+            }
         }
     }
 }
@@ -504,6 +551,13 @@ mod tests {
     }
 
     #[test]
+    fn requested_departures_end_instead_of_triggering_recovery() {
+        assert!(is_requested_disconnect(Some(DisconnectReason::Requested)));
+        assert!(!is_requested_disconnect(Some(DisconnectReason::Io)));
+        assert!(!is_requested_disconnect(None));
+    }
+
+    #[test]
     fn clearing_between_meetings_leaves_nothing_behind() {
         let map = SsrcMap::default();
         map.insert(1, 42);
@@ -561,24 +615,63 @@ mod tests {
 
         for expected in 1..=MAX_RECOVERY_ATTEMPTS {
             assert_eq!(
-                recovery.request(&tx, 1, 2, 42),
+                recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Participant(42)),
                 RecoveryRequestOutcome::Queued
             );
             let request = rx.try_recv().expect("recovery should be requested");
             assert_eq!(request.attempt, expected);
             request.control.finish();
+            recovery.inner.participant_cooldown_until.write().take();
         }
         assert_eq!(
-            recovery.request(&tx, 1, 2, 42),
+            recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Participant(42)),
             RecoveryRequestOutcome::Exhausted
         );
         assert!(rx.try_recv().is_err());
 
         recovery.mark_healthy(42);
+        recovery.inner.participant_cooldown_until.write().take();
         assert_eq!(
-            recovery.request(&tx, 1, 2, 42),
+            recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Participant(42)),
             RecoveryRequestOutcome::Queued
         );
         assert_eq!(rx.try_recv().unwrap().attempt, 1);
+    }
+
+    #[test]
+    fn driver_recovery_has_its_own_bounded_attempts() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let recovery = ReceiveRecoveryControl::default();
+
+        assert_eq!(
+            recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Driver),
+            RecoveryRequestOutcome::Queued
+        );
+        assert_eq!(rx.try_recv().unwrap().attempt, 1);
+        recovery.finish();
+
+        recovery.mark_healthy(42);
+        assert_eq!(
+            recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Driver),
+            RecoveryRequestOutcome::Queued
+        );
+        assert_eq!(rx.try_recv().unwrap().attempt, 1);
+    }
+
+    #[test]
+    fn participant_recovery_has_a_global_cooldown() {
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let recovery = ReceiveRecoveryControl::default();
+
+        assert_eq!(
+            recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Participant(42)),
+            RecoveryRequestOutcome::Queued
+        );
+        rx.try_recv().unwrap().control.finish();
+        assert_eq!(
+            recovery.request(&tx, 1, 2, ReceiveRecoveryCause::Participant(99)),
+            RecoveryRequestOutcome::AlreadyRecovering
+        );
+        assert!(rx.try_recv().is_err());
     }
 }

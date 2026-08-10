@@ -60,7 +60,7 @@ serenity = { version = "0.12", default-features = false, features = [
     "model",
     "cache",
 ] }
-songbird = { version = "0.6", features = ["serenity", "driver", "receive", "rustls", "builtin-queue"] }
+songbird = { git = "https://github.com/igarrux/songbird", rev = "102a995408cd10637e127fb08eaaf805d934b433", features = ["serenity", "driver", "receive", "rustls", "builtin-queue"] }
 symphonia = { version = "0.5", default-features = false, features = ["mp3"] }
 whisper-rs = "0.16"
 

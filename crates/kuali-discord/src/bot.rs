@@ -27,7 +27,8 @@ use crate::audit::{
 };
 use crate::identity::MemberResolver;
 use crate::receiver::{
-    ReceiveRecoveryControl, ReceiveRecoveryRequest, SsrcMap, VoiceChannelContext, VoiceReceiver,
+    ReceiveRecoveryCause, ReceiveRecoveryControl, ReceiveRecoveryRequest, SsrcMap,
+    VoiceChannelContext, VoiceReceiver,
 };
 use crate::speech::load_consent_audio;
 use kuali_core::{CallInfo, VoiceEvent, VoiceSessionId};
@@ -368,13 +369,7 @@ impl Handler {
         // Songbird may deliver initial SSRC state during `join`; registering later
         // used to leave the first speaker unknown and discard their PCM.
         let call = manager.get_or_insert(guild_id);
-        {
-            let mut handler = call.lock().await;
-            handler.add_global_event(CoreEvent::SpeakingStateUpdate.into(), receiver.clone());
-            handler.add_global_event(CoreEvent::VoiceTick.into(), receiver.clone());
-            handler.add_global_event(CoreEvent::ClientDisconnect.into(), receiver.clone());
-            handler.add_global_event(CoreEvent::DriverDisconnect.into(), receiver);
-        }
+        register_receiver_events(&call, &receiver).await;
 
         let call = match manager.join(guild_id, channel_id).await {
             Ok(call) => call,
@@ -1043,10 +1038,28 @@ impl DiscordHandle {
     }
 }
 
-/// Songbird 0.6 can miss the key for a participant joining after the bot during
-/// a DAVE/MLS transition. The receiver detects announced speech without PCM and
-/// this loop renews the voice session. `leave` preserves Songbird handlers, so
-/// the meeting, Whisper instance, and transcript remain unchanged.
+async fn register_receiver_events(
+    call: &Arc<tokio::sync::Mutex<songbird::Call>>,
+    receiver: &VoiceReceiver,
+) {
+    let mut handler = call.lock().await;
+    handler.add_global_event(CoreEvent::SpeakingStateUpdate.into(), receiver.clone());
+    handler.add_global_event(CoreEvent::VoiceTick.into(), receiver.clone());
+    handler.add_global_event(CoreEvent::ClientDisconnect.into(), receiver.clone());
+    handler.add_global_event(CoreEvent::DriverDisconnect.into(), receiver.clone());
+}
+
+fn recovery_subject(cause: ReceiveRecoveryCause) -> String {
+    match cause {
+        ReceiveRecoveryCause::Participant(user_id) => format!("usuario {user_id}"),
+        ReceiveRecoveryCause::Driver => "conexión completa".to_string(),
+    }
+}
+
+/// Songbird 0.6 can lose DAVE/MLS state when membership changes. Rebuild only
+/// the media transport for a stalled participant so Discord keeps Kuali inside
+/// the channel and users hear no departure or arrival sounds. A terminated
+/// driver is resumed against the existing gateway voice membership.
 async fn run_receive_recovery(
     songbird: Arc<Songbird>,
     current: Arc<RwLock<Option<CurrentCall>>>,
@@ -1065,57 +1078,56 @@ async fn run_receive_recovery(
         }
 
         tracing::warn!(
-            user_id = request.user_id,
+            cause = %recovery_subject(request.cause),
             attempt = request.attempt,
-            "renovando la conexión de voz para recuperar audio DAVE"
+            "reiniciando silenciosamente el transporte de voz para recuperar DAVE"
         );
-        request.control.prepare_disconnect();
-        if let Err(error) = songbird.leave(guild_id).await {
-            request.control.cancel();
-            let _ = tx.send(VoiceEvent::Warning(format!(
-                "no pude renovar la escucha de Discord: {error}"
-            )));
-            continue;
-        }
 
-        // Give the gateway time to confirm departure before reconnecting, avoiding
-        // reuse of the DAVE session just identified as inconsistent.
-        tokio::time::sleep(Duration::from_millis(500)).await;
-        match songbird.join(guild_id, channel_id).await {
-            Ok(_) => {
+        match request.cause {
+            ReceiveRecoveryCause::Participant(_) => {
+                let Some(call) = songbird.get(guild_id) else {
+                    request.control.cancel();
+                    let _ = tx.send(VoiceEvent::Warning(
+                        "Discord perdió el controlador de la llamada".to_string(),
+                    ));
+                    continue;
+                };
+                call.lock().await.reconnect_voice_session();
                 request.control.finish();
-                let control = request.control.clone();
-                tokio::spawn(async move {
-                    // DriverDisconnect normally consumes this guard. If it did
-                    // not, the guard must not hide a later manual departure.
-                    tokio::time::sleep(Duration::from_secs(2)).await;
-                    control.expire_disconnect_suppression();
-                });
                 tracing::info!(
-                    user_id = request.user_id,
+                    cause = %recovery_subject(request.cause),
                     attempt = request.attempt,
-                    "conexión de voz renovada; esperando PCM"
+                    "transporte de voz reiniciado sin salir del canal"
                 );
             }
-            Err(error) => {
-                request.control.cancel();
-                let removed = {
-                    let mut active = current.write();
-                    if active.is_some_and(|call| {
-                        call.guild_id == guild_id && call.channel_id == channel_id
-                    }) {
-                        active.take()
-                    } else {
-                        None
-                    }
-                };
-                let _ = tx.send(VoiceEvent::Warning(format!(
-                    "Discord no permitió restaurar la escucha de la llamada: {error}"
-                )));
-                if let Some(call) = removed {
-                    send_session(&tx, call.session_id, VoiceEvent::Disconnected);
+            ReceiveRecoveryCause::Driver => match songbird.join(guild_id, channel_id).await {
+                Ok(_) => {
+                    request.control.finish();
+                    tracing::info!(
+                        attempt = request.attempt,
+                        "controlador de voz restaurado sin salir del canal"
+                    );
                 }
-            }
+                Err(error) => {
+                    request.control.cancel();
+                    let removed = {
+                        let mut active = current.write();
+                        if active.is_some_and(|call| {
+                            call.guild_id == guild_id && call.channel_id == channel_id
+                        }) {
+                            active.take()
+                        } else {
+                            None
+                        }
+                    };
+                    let _ = tx.send(VoiceEvent::Warning(format!(
+                        "Discord no permitió restaurar la escucha de la llamada: {error}"
+                    )));
+                    if let Some(call) = removed {
+                        send_session(&tx, call.session_id, VoiceEvent::Disconnected);
+                    }
+                }
+            },
         }
     }
 }
