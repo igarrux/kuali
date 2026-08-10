@@ -89,6 +89,30 @@ test("browser onboarding prefers the verified store and keeps manual installatio
   assert.match(commands, new RegExp(storeId));
 });
 
+test("a persistent model notice handles downloads and gates initial setup", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const main = readFileSync(new URL("../src-tauri/src/main.rs", import.meta.url), "utf8");
+  const engine = readFileSync(
+    new URL("../crates/kuali-engine/src/engine.rs", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(html, /id="model-required"/);
+  assert.match(html, /id="required-model-select"/);
+  assert.match(html, /id="btn-required-model"/);
+  assert.match(html, /id="required-model-progress-bar"/);
+  assert.ok(html.indexOf('id="model-required"') < html.indexOf('id="pane-setup"'));
+  assert.match(app, /\$\("model-required"\)\.hidden = !missingWeights && !downloading/);
+  assert.match(app, /Kuali sigue capturando el audio de la llamada/);
+  assert.match(app, /La descarga continúa aunque cambies de sección dentro de Kuali/);
+  assert.match(app, /if \(!model\?\.downloaded\) \{/);
+  assert.match(app, /await invoke\("download_model", \{ model: model\.id \}\)/);
+  assert.equal((app.match(/localStorage\.setItem\("kuali\.onboarding\.completed"/g) ?? []).length, 1);
+  assert.doesNotMatch(main, /download_configured_model_if_missing/);
+  assert.match(engine, /if download_configured_model \{/);
+});
+
 test("visible placeholders do not contain a contributor's personal examples", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.doesNotMatch(html, /@garrux|WaitingRoom/);

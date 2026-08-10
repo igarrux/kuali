@@ -73,6 +73,38 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Conecta Kuali a tus reuniones": "Connect Kuali to your meetings",
   "Completa una integración o ambas. Puedes volver aquí en cualquier momento.":
     "Complete either integration or both. You can return here at any time.",
+  "Prepara Kuali para tus reuniones": "Prepare Kuali for your meetings",
+  "Descarga un modelo local y conecta una integración o ambas. Puedes volver aquí en cualquier momento.":
+    "Download a local model and connect either integration or both. You can return here at any time.",
+  Obligatorio: "Required",
+  "Modelo de transcripción": "Transcription model",
+  Recomendado: "Recommended",
+  "Large v3 Turbo Q5 es el recomendado por su equilibrio entre calidad y memoria.":
+    "Large v3 Turbo Q5 is recommended for its balance of quality and memory use.",
+  "Modelo listo": "Model ready",
+  "Usar este modelo": "Use this model",
+  "Descargar · {size}": "Download · {size}",
+  "Se descargarán {size} en {directory}.": "{size} will be downloaded to {directory}.",
+  "Este modelo está listo. Ya puedes completar la configuración inicial.":
+    "This model is ready. You can now complete initial setup.",
+  "Volver al inicio": "Return home",
+  "Descarga un modelo para poder terminar.": "Download a model before finishing.",
+  "Descarga el modelo elegido antes de completar la configuración.":
+    "Download the selected model before completing setup.",
+  "Descargando…": "Downloading…",
+  "Transcripción local": "Local transcription",
+  "Descarga un modelo para transcribir": "Download a model to transcribe",
+  "No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.":
+    "No Whisper weights are downloaded. Choose one to enable local transcription.",
+  "Kuali sigue capturando el audio de la llamada. Cuando termine la descarga, transcribirá todo lo pendiente; no se perderá nada.":
+    "Kuali is still capturing the call audio. Once the download finishes, it will transcribe everything waiting; nothing will be lost.",
+  "Necesitas al menos un modelo descargado para transcribir.":
+    "You need at least one downloaded model to transcribe.",
+  "La descarga continúa aunque cambies de sección dentro de Kuali.":
+    "The download continues even if you switch sections in Kuali.",
+  "Descarga fallida": "Download failed",
+  "No se pudo completar la descarga. Puedes intentarlo nuevamente.":
+    "The download could not be completed. You can try again.",
   "Terminar por ahora": "Finish for now",
   "Opción 1": "Option 1",
   "Sin configurar": "Not configured",

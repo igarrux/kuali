@@ -2007,6 +2007,192 @@ const MEET_GUIDE_TITLES = [
   "Haz una prueba",
 ];
 
+function initialSetupCompleted() {
+  return localStorage.getItem("kuali.onboarding.completed") === "true";
+}
+
+function selectedRequiredModel() {
+  return state.models.find((model) => model.id === $("required-model-select").value);
+}
+
+function hasDownloadedWhisperWeight() {
+  return state.models.some((model) => model.downloaded);
+}
+
+function audioIsWaitingForWhisper() {
+  return state.liveMeetings.size > 0
+    || ["joining", "recording", "finalizing"].includes(state.status);
+}
+
+function renderRequiredModelProgress() {
+  const downloading = state.modelState.state === "downloading";
+  const row = $("required-model-download-row");
+  row.hidden = !downloading;
+  if (!downloading) return;
+
+  const total = state.modelState.totalBytes;
+  const downloaded = state.modelState.downloadedBytes;
+  const percentage = total ? Math.round((downloaded / total) * 100) : 0;
+  $("required-model-progress-bar").style.width = `${percentage}%`;
+  $("required-model-progress-text").textContent = `${percentage}% · ${humanBytes(downloaded)}`;
+}
+
+function renderRequiredModelActivity() {
+  const selected = selectedRequiredModel();
+  const configured = state.config?.whisper?.model;
+  const downloading = state.modelState.state === "downloading";
+  const missingWeights = !hasDownloadedWhisperWeight();
+  $("model-required").hidden = !missingWeights && !downloading;
+  $("required-model-select").disabled = state.models.length === 0 || downloading;
+
+  const stateBadge = $("model-required-state");
+  stateBadge.className = "guide-state";
+  if (downloading) {
+    stateBadge.textContent = t("Descargando…");
+    stateBadge.classList.add("downloading");
+  } else if (state.modelState.state === "failed") {
+    stateBadge.textContent = t("Descarga fallida");
+    stateBadge.classList.add("failed");
+  } else if (selected?.downloaded) {
+    stateBadge.textContent = t("Modelo listo");
+    stateBadge.classList.add("ready");
+  } else {
+    stateBadge.textContent = t("Obligatorio");
+  }
+
+  const button = $("btn-required-model");
+  const selectedIsConfigured = selected?.id === configured;
+  button.disabled = !selected || downloading || (selected.downloaded && selectedIsConfigured);
+  button.textContent = downloading
+    ? t("Descargando…")
+    : selected?.downloaded
+      ? selectedIsConfigured
+        ? t("Modelo listo")
+        : t("Usar este modelo")
+      : t("Descargar · {size}", { size: humanBytes(selected?.approxBytes ?? 0) });
+  renderRequiredModelProgress();
+}
+
+function renderRequiredModelNotice(requestedModel = "") {
+  const select = $("required-model-select");
+  const configured = state.config?.whisper?.model;
+  const requested = state.models.find((model) => model.id === requestedModel);
+  const configuredModel = state.models.find((model) => model.id === configured);
+  const installedFallback = state.models.find((model) => model.downloaded);
+  const recommended = state.models.find((model) => model.id === "large-v3-turbo-q5");
+  const chosen = requested
+    ?? (configuredModel?.downloaded ? configuredModel : null)
+    ?? installedFallback
+    ?? configuredModel
+    ?? recommended
+    ?? state.models[0];
+
+  select.replaceChildren(
+    ...state.models.map((model) => {
+      const option = document.createElement("option");
+      option.value = model.id;
+      const recommendation = model.id === "large-v3-turbo-q5"
+        ? ` · ${t("Recomendado")}`
+        : "";
+      option.textContent = `${t(model.label)} — ${humanBytes(model.approxBytes)}${recommendation}${model.downloaded ? " ✓" : ""}`;
+      return option;
+    }),
+  );
+  if (chosen) select.value = chosen.id;
+
+  const selected = selectedRequiredModel();
+  $("model-required-message").textContent = audioIsWaitingForWhisper()
+    ? t("Kuali sigue capturando el audio de la llamada. Cuando termine la descarga, transcribirá todo lo pendiente; no se perderá nada.")
+    : t("No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.");
+
+  $("required-model-hint").textContent = selected?.downloaded
+    ? t("Ya está descargado en {directory}.", { directory: state.modelsDirectory })
+    : t("Se descargarán {size} en {directory}.", {
+        size: humanBytes(selected?.approxBytes ?? 0),
+        directory: state.modelsDirectory,
+      });
+  $("required-model-note").textContent = selected?.downloaded
+    ? t("Este modelo está listo. Ya puedes completar la configuración inicial.")
+    : state.modelState.state === "downloading"
+      ? t("La descarga continúa aunque cambies de sección dentro de Kuali.")
+      : state.modelState.state === "failed"
+        ? t("No se pudo completar la descarga. Puedes intentarlo nuevamente.")
+      : t("Necesitas al menos un modelo descargado para transcribir.");
+
+  const finish = $("btn-finish-guide");
+  finish.textContent = initialSetupCompleted()
+    ? t("Volver al inicio")
+    : t("Completar configuración");
+  finish.title = !initialSetupCompleted() && !hasDownloadedWhisperWeight()
+    ? t("Descarga un modelo para poder terminar.")
+    : "";
+  renderRequiredModelActivity();
+}
+
+async function refreshRequiredModelNotice(requestedModel = $("required-model-select").value) {
+  [state.models, state.modelsDirectory] = await Promise.all([
+    invoke("whisper_models"),
+    invoke("resolved_models_directory"),
+  ]);
+  renderRequiredModelNotice(requestedModel);
+}
+
+async function downloadRequiredModel() {
+  const model = selectedRequiredModel();
+  if (!model || state.modelState.state === "downloading") return;
+
+  const button = $("btn-required-model");
+  button.disabled = true;
+  try {
+    const config = structuredClone(state.config);
+    config.whisper.model = model.id;
+    await invoke("set_config", { config });
+    state.config = config;
+    // Calling this even for an existing weight also ensures that the small
+    // Silero VAD model is present before setup is considered complete.
+    await invoke("download_model", { model: model.id });
+    await refreshRequiredModelNotice(model.id);
+    const snapshot = await invoke("get_snapshot");
+    state.modelState = snapshot.modelState;
+    renderRequiredModelNotice(model.id);
+    renderStatus();
+    toast(t("Modelo descargado"), "Whisper");
+  } catch (error) {
+    toast(String(error), "Whisper", true);
+    renderRequiredModelNotice(model.id);
+  }
+}
+
+async function finishInitialSetup() {
+  if (initialSetupCompleted()) {
+    await goHome();
+    return true;
+  }
+
+  await refreshRequiredModelNotice();
+  const model = selectedRequiredModel();
+  if (!model?.downloaded) {
+    toast(
+      t("Descarga el modelo elegido antes de completar la configuración."),
+      t("Configuración inicial"),
+      true,
+    );
+    $("model-required").scrollIntoView({ behavior: "smooth", block: "start" });
+    $("required-model-select").focus();
+    return false;
+  }
+
+  if (state.config.whisper.model !== model.id) {
+    const config = structuredClone(state.config);
+    config.whisper.model = model.id;
+    await invoke("set_config", { config });
+    state.config = config;
+  }
+  localStorage.setItem("kuali.onboarding.completed", "true");
+  await goHome();
+  return true;
+}
+
 function renderDiscordGuideStep({ focus = false } = {}) {
   const lastStep = DISCORD_GUIDE_TITLES.length - 1;
   state.discordGuideStep = Math.max(0, Math.min(lastStep, state.discordGuideStep));
@@ -2079,8 +2265,7 @@ function setMeetGuideStep(step, { focus = true } = {}) {
 
 async function advanceMeetGuide() {
   if (state.meetGuideStep === MEET_GUIDE_TITLES.length - 1) {
-    localStorage.setItem("kuali.onboarding.completed", "true");
-    await goHome();
+    await finishInitialSetup();
     return;
   }
   setMeetGuideStep(state.meetGuideStep + 1);
@@ -2096,14 +2281,18 @@ async function advanceDiscordGuide() {
     }
   }
   if (state.discordGuideStep === DISCORD_GUIDE_TITLES.length - 1) {
-    localStorage.setItem("kuali.onboarding.completed", "true");
-    await goHome();
+    await finishInitialSetup();
     return;
   }
   setDiscordGuideStep(state.discordGuideStep + 1);
 }
 
 async function renderGuide() {
+  [state.models, state.modelsDirectory] = await Promise.all([
+    invoke("whisper_models"),
+    invoke("resolved_models_directory"),
+  ]);
+  renderRequiredModelNotice($("required-model-select").value);
   const discordReady = Boolean(state.config?.discord?.["bot-token"]);
   const following = isAutomaticFollowEnabled();
   $("guide-discord-state").textContent = following
@@ -2209,6 +2398,7 @@ function handleEvent(event) {
   switch (event.type) {
     case "statusChanged":
       state.status = event.status;
+      renderRequiredModelNotice($("required-model-select").value);
       renderStatus();
       renderUpdateState();
       maybeInstallUpdateAutomatically();
@@ -2218,6 +2408,11 @@ function handleEvent(event) {
     case "modelStateChanged":
       state.modelState = event.state;
       renderModelProgress();
+      renderRequiredModelActivity();
+      if (!["downloading", "verifying"].includes(event.state.state)) {
+        refreshRequiredModelNotice().catch((error) =>
+          toast(String(error), "Whisper", true));
+      }
       renderStatus();
       if (["idle", "setup"].includes(state.currentPane)) renderRoot();
       break;
@@ -2255,6 +2450,7 @@ function handleEvent(event) {
         summary: null,
       };
       state.liveMeetings.set(event.meeting.id, liveMeeting);
+      renderRequiredModelNotice($("required-model-select").value);
       talkingFor(event.meeting.id).clear();
       state.taskAssigneeFilter = "all";
       if (["idle", "setup"].includes(state.currentPane) && !state.viewing) {
@@ -2271,6 +2467,7 @@ function handleEvent(event) {
     case "meetingEnded": {
       const endedWasOpen = state.viewing?.meta.id === event.meetingId;
         state.liveMeetings.delete(event.meetingId);
+        renderRequiredModelNotice($("required-model-select").value);
         state.talking.delete(event.meetingId);
         for (const [id, draft] of state.liveDrafts) {
           if (draft.meetingId === event.meetingId) state.liveDrafts.delete(id);
@@ -2424,6 +2621,7 @@ async function openSettings() {
     invoke("whisper_models"),
     invoke("resolved_models_directory"),
   ]);
+  renderRequiredModelNotice(state.config.whisper.model);
   try {
     state.providers = await invoke("provider_catalog");
   } catch {
@@ -3183,6 +3381,7 @@ async function saveSettings() {
     setLanguagePreference(c.application.language);
     state.modelsDirectory = await invoke("resolved_models_directory");
     state.models = await invoke("whisper_models");
+    renderRequiredModelNotice(c.whisper.model);
     // Do not rely on the state event winning a race with modal closure. Fetch
     // the engine's current truth before rendering.
     const snapshot = await invoke("get_snapshot");
@@ -3271,6 +3470,7 @@ async function deleteModel(model, button) {
   try {
     const removedBytes = await invoke("delete_model", { model: model.id });
     state.models = await invoke("whisper_models");
+    renderRequiredModelNotice(selected);
     renderWhisperModelOptions(selected);
     const snapshot = await invoke("get_snapshot");
     state.modelState = snapshot.modelState;
@@ -3502,10 +3702,10 @@ function wireUp() {
   $("nav-home").addEventListener("click", goHome);
   $("nav-tasks").addEventListener("click", showTasks);
   $("btn-guide").addEventListener("click", showGuide);
-  $("btn-finish-guide").addEventListener("click", () => {
-    localStorage.setItem("kuali.onboarding.completed", "true");
-    goHome();
-  });
+  $("btn-finish-guide").addEventListener("click", finishInitialSetup);
+  $("required-model-select").addEventListener("change", (event) =>
+    renderRequiredModelNotice(event.currentTarget.value));
+  $("btn-required-model").addEventListener("click", downloadRequiredModel);
   $("btn-discord-guide-back").addEventListener("click", () =>
     setDiscordGuideStep(state.discordGuideStep - 1));
   $("btn-discord-guide-next").addEventListener("click", advanceDiscordGuide);
@@ -3715,6 +3915,7 @@ function wireUp() {
       state.modelsDirectory = await invoke("resolved_models_directory");
       await invoke("download_model", { model });
       state.models = await invoke("whisper_models");
+      renderRequiredModelNotice(model);
       renderWhisperModelOptions(model);
       updateModelHint();
       renderInstalledModels();
@@ -3848,6 +4049,26 @@ function wireUp() {
   });
 }
 
+async function resumeConfiguredModelAfterSetup() {
+  await refreshRequiredModelNotice(state.config.whisper.model);
+  if (!initialSetupCompleted()) return;
+  const configured = state.models.find((model) => model.id === state.config.whisper.model);
+  if (configured?.downloaded) return;
+
+  // Completed installations retain the previous automatic recovery behavior:
+  // an interrupted or manually removed configured weight is fetched again on
+  // launch. Fresh installations are excluded so the user can choose first.
+  invoke("download_model", { model: state.config.whisper.model })
+    .then(async () => {
+      await refreshRequiredModelNotice(state.config.whisper.model);
+      const snapshot = await invoke("get_snapshot");
+      state.modelState = snapshot.modelState;
+      renderStatus();
+      renderRequiredModelNotice(state.config.whisper.model);
+    })
+    .catch((error) => toast(String(error), "Whisper", true));
+}
+
 async function boot() {
   const resetCompleted = await invoke("take_factory_reset_completed").catch(() => false);
   if (resetCompleted) localStorage.clear();
@@ -3862,6 +4083,7 @@ async function boot() {
     state.config = await invoke("get_config");
     setLanguagePreference(state.config.application?.language ?? "auto");
     scheduleAutomaticUpdateChecks();
+    await refreshRequiredModelNotice(state.config.whisper.model);
     renderStatus();
     if (["idle", "setup"].includes(state.currentPane)) await renderRoot();
     else if (state.currentPane === "guide") await renderGuide();
@@ -3878,16 +4100,16 @@ async function boot() {
   state.modelState = snapshot.modelState;
   state.webMeetings = snapshot.webMeetings;
   state.config = config;
-  scheduleAutomaticUpdateChecks();
-
   applyLiveSnapshot(snapshot, true);
+  scheduleAutomaticUpdateChecks();
+  await resumeConfiguredModelAfterSetup();
 
   await refreshMeetings();
   refreshTasks().catch(() => {});
   renderStatus();
   renderUpdateState();
   const destination = location.hash.slice(1);
-  if (!localStorage.getItem("kuali.onboarding.completed")) await showGuide();
+  if (!initialSetupCompleted()) await showGuide();
   else if (destination === "tasks") await showTasks();
   else if (destination === "guide") await showGuide();
   else if (destination.startsWith("meeting=")) await openMeeting(decodeURIComponent(destination.slice(8)));

@@ -132,6 +132,33 @@
       </aside>
 
       <section class="content" id="content">
+        <section class="model-required" id="model-required" aria-labelledby="model-required-title" hidden>
+          <div class="model-required-copy">
+            <span class="integration-logo whisper" aria-hidden="true">W</span>
+            <div>
+              <span class="eyebrow">Transcripción local</span>
+              <h2 id="model-required-title">Descarga un modelo para transcribir</h2>
+              <p id="model-required-message">No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.</p>
+            </div>
+            <span class="guide-state" id="model-required-state">Obligatorio</span>
+          </div>
+          <div class="model-required-controls">
+            <label class="guide-model-field" for="required-model-select">
+              <span>Modelo de transcripción</span>
+              <select id="required-model-select" name="required-whisper-model"></select>
+              <small id="required-model-hint">Large v3 Turbo Q5 es el recomendado por su equilibrio entre calidad y memoria.</small>
+            </label>
+            <div class="guide-model-action">
+              <div class="download guide-model-download" id="required-model-download-row" aria-live="polite" hidden>
+                <div class="progress"><div class="progress-bar" id="required-model-progress-bar"></div></div>
+                <span class="progress-text" id="required-model-progress-text"></span>
+              </div>
+              <button type="button" class="primary" id="btn-required-model">Descargar modelo</button>
+              <p id="required-model-note">Necesitas al menos un modelo descargado para transcribir.</p>
+            </div>
+          </div>
+        </section>
+
         <!-- Incomplete configuration -->
         <div class="pane setup" id="pane-setup" hidden>
           <div class="setup-card">
@@ -263,10 +290,10 @@
           <div class="page-head guide-head">
             <div>
               <span class="eyebrow">Configuración guiada</span>
-              <h2>Conecta Kuali a tus reuniones</h2>
-              <p>Completa una integración o ambas. Puedes volver aquí en cualquier momento.</p>
+              <h2>Prepara Kuali para tus reuniones</h2>
+              <p>Descarga un modelo local y conecta una integración o ambas. Puedes volver aquí en cualquier momento.</p>
             </div>
-            <button type="button" class="ghost" id="btn-finish-guide">Terminar por ahora</button>
+            <button type="button" class="ghost" id="btn-finish-guide">Completar configuración</button>
           </div>
 
           <div class="guide-grid">
