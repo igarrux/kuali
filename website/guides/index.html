@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Install and configure Kuali — Complete setup guide</title>
-    <meta name="description" content="Install Kuali on macOS, connect a Discord bot with the minimum permissions, load the browser extension, and start your first local transcription.">
+    <meta name="description" content="Install Kuali on macOS, download Whisper weights, connect Discord and browser meetings, and configure signed Standard Webhooks step by step.">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="canonical" href="https://igarrux.github.io/kuali/guides/">
@@ -68,6 +68,7 @@
           <a href="#model">Choose a model</a>
           <a href="#discord">Connect Discord</a>
           <a href="#browser">Browser meetings</a>
+          <a href="#webhooks">Standard Webhooks</a>
           <a href="#first-call">First call</a>
         </nav>
 
@@ -87,11 +88,14 @@
           <section class="guide-section" id="model" data-reveal>
             <span class="eyebrow">02 · Transcription</span>
             <h2>Download a Whisper model</h2>
-            <p>Model weights are separate from the application. Open <strong>Settings → Transcription models</strong> and choose one. Kuali verifies the download before using it.</p>
+            <p>Kuali includes the transcription engine, but model weights are downloaded separately. At least one model must be ready before initial setup can finish. If none is installed, Kuali keeps a model panel visible throughout the app instead of leaving transcription silently unavailable.</p>
             <div class="guide-steps">
-              <article class="guide-step"><div><h3>Start with Large v3 Turbo Q5</h3><p>It is the recommended balance for most Apple Silicon Macs: multilingual, accurate, and much lighter than the full model.</p></div></article>
-              <article class="guide-step"><div><h3>Use Large v3 Turbo for maximum quality</h3><p>Choose the full model when your Mac has enough memory and accuracy matters more than download size.</p></div></article>
-              <article class="guide-step"><div><h3>Add product names to terminology</h3><p>In <strong>Settings → Transcription → Special terminology</strong>, add names such as internal products, acronyms, or people that Whisper should preserve.</p></div></article>
+              <article class="guide-step"><div><h3>Choose the model that fits your Mac</h3><p><strong>Large v3 Turbo Q5</strong> is recommended for most Apple Silicon Macs: multilingual, accurate, and much lighter than the full model. Choose <strong>Large v3 Turbo</strong> when maximum quality matters more than memory and download size.</p></div></article>
+              <article class="guide-step"><div><h3>Start the download</h3><p>Select a model from the persistent model panel or open <strong>Settings → Transcription → Storage</strong> and choose <strong>Download selected model</strong>. The progress indicator remains visible while you use other parts of Kuali. Keep the app open until verification finishes.</p></div></article>
+              <article class="guide-step"><div><h3>You can join a call while it downloads</h3><p>If a meeting starts before the model is ready, Kuali keeps the captured audio queued in memory and transcribes it when the download completes. Nothing already captured is discarded.</p></div></article>
+              <article class="guide-step"><div><h3>Choose where weights live</h3><p>The default models folder is <code>~/.kuali</code>. Use <strong>Models folder → Choose…</strong> to move downloaded or partial weights elsewhere. Kuali preserves the selected language and special terminology when moving them.</p></div></article>
+              <article class="guide-step"><div><h3>Manage downloaded weights</h3><p>Under <strong>Downloaded weights</strong>, delete only the models you no longer need. If you remove the last one, the persistent model panel appears again until another model is ready.</p></div></article>
+              <article class="guide-step"><div><h3>Add product names to the vocabulary</h3><p>In <strong>Settings → Transcription → Custom vocabulary</strong>, add names such as internal products, acronyms, or people that Whisper should preserve.</p></div></article>
             </div>
           </section>
 
@@ -124,8 +128,30 @@
             <p>For development or when the store is unavailable, the desktop guide still provides the manual unpacked-install option.</p>
           </section>
 
+          <section class="guide-section" id="webhooks" data-reveal>
+            <span class="eyebrow">05 · Integrations</span>
+            <h2>Send completed meetings with Standard Webhooks</h2>
+            <p>Kuali can deliver a completed meeting to applications you explicitly subscribe. These deliveries follow the <a href="https://www.standardwebhooks.com/">Standard Webhooks</a> specification, so existing verification libraries can validate them. The payload contains the transcript, participants, summary, and tasks available for the meeting; it never contains the original audio.</p>
+            <div class="guide-steps">
+              <article class="guide-step"><div><h3>Create a subscription</h3><p>Open <strong>Settings → Integrations → Subscribed applications</strong>, select <strong>Add application</strong>, and enter a name plus the endpoint URL that will receive the request. Use HTTPS for endpoints outside your computer.</p></div></article>
+              <article class="guide-step"><div><h3>Choose its scope</h3><p>Subscribe the application to every completed meeting or limit it to one channel. Kuali sends <code>meeting.completed</code> only after that matching meeting and its optional AI processing finish.</p></div></article>
+              <article class="guide-step"><div><h3>Store the signing secret</h3><p>Kuali generates a secret beginning with <code>whsec_</code>. Copy it into the receiving application and keep it private. Use <strong>Send test</strong> to receive a <code>webhook.test</code> event before relying on the integration.</p></div></article>
+              <article class="guide-step"><div><h3>Verify the raw request</h3><p>Validate the signature before parsing the JSON. Standard Webhooks signs the exact bytes in <code>webhook-id.webhook-timestamp.body</code> using HMAC-SHA256.</p></div></article>
+            </div>
+            <div class="terminal">
+              <div class="terminal-head"><span>Abbreviated webhook request</span><button class="copy-button" type="button" data-copy-target="guide-webhook-example" data-copied-label="Copied" data-error-label="Select and copy">Copy</button></div>
+              <pre id="guide-webhook-example">webhook-id: msg_01HXYZ
+webhook-timestamp: 1786339200
+webhook-signature: v1,BASE64_SIGNATURE
+
+{"type":"meeting.completed","timestamp":"2026-08-10T16:00:00Z","data":{"id":"meeting-id","participants":[],"transcript":[],"summary":null}}</pre>
+            </div>
+            <div class="notice">Verify against the raw request body, reject stale timestamps, compare signatures in constant time, and deduplicate deliveries by <code>webhook-id</code>. Return any <code>2xx</code> response only after accepting the event.</div>
+            <p>Each request uses <code>type</code>, <code>timestamp</code>, and <code>data</code> at the top level. Failed deliveries are retried with backoff and jitter; a numeric <code>Retry-After</code> response is honored when present. Receivers must therefore be idempotent.</p>
+          </section>
+
           <section class="guide-section" id="first-call" data-reveal>
-            <span class="eyebrow">05 · Verification</span>
+            <span class="eyebrow">06 · Verification</span>
             <h2>Check your first call</h2>
             <p>Start with two participants if possible. Speak one at a time, then overlap briefly to confirm that activity and attribution react as expected.</p>
             <ul class="check-list">
@@ -147,6 +173,6 @@
       <img data-lightbox-image alt="">
     </dialog>
 
-    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Private, local-first meeting transcription with real speaker attribution.</p></div><div class="footer-column"><strong>Product</strong><a href="../#features">Features</a><a href="../#privacy">Privacy</a><a href="https://github.com/igarrux/kuali/releases/latest">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="./">Setup guide</a><a href="https://github.com/igarrux/kuali/blob/main/README.md">Documentation</a><a href="../#faq">FAQ</a></div><div class="footer-column"><strong>Project</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.md">Privacy policy</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Built in the open. Your meetings stay yours.</span></div></div></footer>
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Private, local-first meeting transcription with real speaker attribution.</p></div><div class="footer-column"><strong>Product</strong><a href="../#features">Features</a><a href="../#privacy">Privacy</a><a href="./#install">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="./">Setup guide</a><a href="https://github.com/igarrux/kuali/blob/main/README.md">Documentation</a><a href="../#faq">FAQ</a></div><div class="footer-column"><strong>Project</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.md">Privacy policy</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Built in the open. Your meetings stay yours.</span></div></div></footer>
   </body>
 </html>

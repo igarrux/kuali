@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Instalar y configurar Kuali — Guía completa</title>
-    <meta name="description" content="Instala Kuali en macOS, conecta un bot de Discord con los permisos mínimos, carga la extensión del navegador e inicia tu primera transcripción local.">
+    <meta name="description" content="Instala Kuali en macOS, descarga pesos de Whisper, conecta Discord y reuniones web, y configura Standard Webhooks firmados paso a paso.">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="canonical" href="https://igarrux.github.io/kuali/es/guides/">
@@ -58,7 +58,7 @@
       <header class="guide-hero container" data-reveal><span class="eyebrow">Guía completa</span><h1>Desde la descarga hasta tu <span class="text-gradient">primera transcripción en vivo.</span></h1><p>Elige Discord, reuniones del navegador o ambas opciones. La aplicación repite esta guía y puede guardar la configuración mientras avanzas.</p></header>
 
       <div class="guide-layout container" id="contenido-guia">
-        <nav class="guide-toc" aria-label="Secciones de la guía"><strong>En esta página</strong><a href="#instalar">Instalar Kuali</a><a href="#modelo">Elegir modelo</a><a href="#discord">Conectar Discord</a><a href="#navegador">Reuniones web</a><a href="#primera-llamada">Primera llamada</a></nav>
+        <nav class="guide-toc" aria-label="Secciones de la guía"><strong>En esta página</strong><a href="#instalar">Instalar Kuali</a><a href="#modelo">Elegir modelo</a><a href="#discord">Conectar Discord</a><a href="#navegador">Reuniones web</a><a href="#webhooks">Standard Webhooks</a><a href="#primera-llamada">Primera llamada</a></nav>
 
         <div class="guide-content">
           <section class="guide-section" id="instalar" data-reveal>
@@ -69,8 +69,15 @@
           </section>
 
           <section class="guide-section" id="modelo" data-reveal>
-            <span class="eyebrow">02 · Transcripción</span><h2>Descarga un modelo de Whisper</h2><p>Los pesos se distribuyen por separado de la aplicación. Abre <strong>Ajustes → Modelos de transcripción</strong> y elige uno. Kuali verifica la descarga antes de usarla.</p>
-            <div class="guide-steps"><article class="guide-step"><div><h3>Empieza con Large v3 Turbo Q5</h3><p>Es el equilibrio recomendado para la mayoría de Macs con Apple Silicon: multilingüe, preciso y mucho más ligero que el modelo completo.</p></div></article><article class="guide-step"><div><h3>Usa Large v3 Turbo para la máxima calidad</h3><p>Elige el modelo completo cuando tengas suficiente memoria y la precisión importe más que el tamaño.</p></div></article><article class="guide-step"><div><h3>Añade nombres propios al vocabulario</h3><p>En <strong>Ajustes → Transcripción → Terminología especial</strong>, agrega productos, siglas o personas que Whisper deba conservar.</p></div></article></div>
+            <span class="eyebrow">02 · Transcripción</span><h2>Descarga un modelo de Whisper</h2><p>Kuali incluye el motor de transcripción, pero descarga los pesos por separado. Debe haber al menos un modelo listo para terminar la configuración inicial. Si no hay ninguno, Kuali mantiene un panel de modelos visible en toda la aplicación en lugar de dejar la transcripción inactiva sin avisar.</p>
+            <div class="guide-steps">
+              <article class="guide-step"><div><h3>Elige el modelo adecuado para tu Mac</h3><p><strong>Large v3 Turbo Q5</strong> es el recomendado para la mayoría de Macs con Apple Silicon: multilingüe, preciso y mucho más ligero que el modelo completo. Elige <strong>Large v3 Turbo</strong> cuando la máxima calidad importe más que la memoria y el tamaño de descarga.</p></div></article>
+              <article class="guide-step"><div><h3>Inicia la descarga</h3><p>Selecciona un modelo en el panel persistente o abre <strong>Ajustes → Transcripción → Almacenamiento</strong> y pulsa <strong>Descargar el modelo seleccionado</strong>. El progreso permanece visible mientras usas otras partes de Kuali. Mantén abierta la aplicación hasta que termine la verificación.</p></div></article>
+              <article class="guide-step"><div><h3>Puedes entrar a una llamada durante la descarga</h3><p>Si la reunión empieza antes de que el modelo esté listo, Kuali conserva en memoria el audio capturado y lo transcribe al terminar la descarga. Nada de lo que ya se capturó se descarta.</p></div></article>
+              <article class="guide-step"><div><h3>Elige dónde guardar los pesos</h3><p>La carpeta predeterminada es <code>~/.kuali</code>. Usa <strong>Carpeta de los modelos → Elegir…</strong> para mover a otra ubicación los pesos completos o parciales. Kuali conserva el idioma y el vocabulario personalizado al moverlos.</p></div></article>
+              <article class="guide-step"><div><h3>Administra los pesos descargados</h3><p>En <strong>Pesos descargados</strong>, elimina solamente los modelos que ya no necesites. Si borras el último, el panel persistente vuelve a aparecer hasta que otro modelo esté listo.</p></div></article>
+              <article class="guide-step"><div><h3>Añade nombres propios al vocabulario</h3><p>En <strong>Ajustes → Transcripción → Vocabulario personalizado</strong>, agrega productos, siglas o personas que Whisper deba conservar.</p></div></article>
+            </div>
           </section>
 
           <section class="guide-section" id="discord" data-reveal>
@@ -94,8 +101,30 @@
             <p>Para desarrollo o si la tienda no está disponible, la guía de escritorio conserva la instalación manual como extensión descomprimida.</p>
           </section>
 
+          <section class="guide-section" id="webhooks" data-reveal>
+            <span class="eyebrow">05 · Integraciones</span>
+            <h2>Envía reuniones terminadas con Standard Webhooks</h2>
+            <p>Kuali puede entregar una reunión finalizada a las aplicaciones que tú suscribas expresamente. Los envíos siguen la especificación de <a href="https://www.standardwebhooks.com/">Standard Webhooks</a>, por lo que puedes validarlos con sus bibliotecas existentes. El contenido incluye la transcripción, participantes, resumen y tareas disponibles; nunca incluye el audio original.</p>
+            <div class="guide-steps">
+              <article class="guide-step"><div><h3>Crea una suscripción</h3><p>Abre <strong>Ajustes → Integraciones → Aplicaciones suscritas</strong>, pulsa <strong>Añadir aplicación</strong> y escribe un nombre junto con la URL que recibirá la solicitud. Usa HTTPS para endpoints fuera de tu computadora.</p></div></article>
+              <article class="guide-step"><div><h3>Elige su alcance</h3><p>Suscribe la aplicación a todas las reuniones terminadas o limítala a un canal. Kuali envía <code>meeting.completed</code> solamente cuando termina una reunión que coincide y finaliza su procesamiento opcional con IA.</p></div></article>
+              <article class="guide-step"><div><h3>Guarda el secreto de firma</h3><p>Kuali genera un secreto que empieza por <code>whsec_</code>. Cópialo en la aplicación receptora y mantenlo privado. Usa <strong>Enviar prueba</strong> para recibir un evento <code>webhook.test</code> antes de depender de la integración.</p></div></article>
+              <article class="guide-step"><div><h3>Verifica la solicitud sin modificar</h3><p>Valida la firma antes de interpretar el JSON. Standard Webhooks firma los bytes exactos de <code>webhook-id.webhook-timestamp.body</code> mediante HMAC-SHA256.</p></div></article>
+            </div>
+            <div class="terminal">
+              <div class="terminal-head"><span>Solicitud webhook abreviada</span><button class="copy-button" type="button" data-copy-target="guide-webhook-example" data-copied-label="Copiado" data-error-label="Selecciona y copia">Copiar</button></div>
+              <pre id="guide-webhook-example">webhook-id: msg_01HXYZ
+webhook-timestamp: 1786339200
+webhook-signature: v1,BASE64_SIGNATURE
+
+{"type":"meeting.completed","timestamp":"2026-08-10T16:00:00Z","data":{"id":"meeting-id","participants":[],"transcript":[],"summary":null}}</pre>
+            </div>
+            <div class="notice">Verifica el cuerpo original de la solicitud, rechaza timestamps antiguos, compara firmas en tiempo constante y evita procesar dos veces el mismo <code>webhook-id</code>. Devuelve una respuesta <code>2xx</code> solamente después de aceptar el evento.</div>
+            <p>Cada solicitud lleva <code>type</code>, <code>timestamp</code> y <code>data</code> en el nivel superior. Los envíos fallidos se reintentan con espera progresiva y variación aleatoria; Kuali respeta un <code>Retry-After</code> numérico cuando existe. Por eso el receptor debe ser idempotente.</p>
+          </section>
+
           <section class="guide-section" id="primera-llamada" data-reveal>
-            <span class="eyebrow">05 · Comprobación</span><h2>Comprueba tu primera llamada</h2><p>Si puedes, empieza con dos participantes. Hablen por turnos y luego superpongan la voz brevemente para confirmar que la actividad y atribución reaccionan correctamente.</p>
+            <span class="eyebrow">06 · Comprobación</span><h2>Comprueba tu primera llamada</h2><p>Si puedes, empieza con dos participantes. Hablen por turnos y luego superpongan la voz brevemente para confirmar que la actividad y atribución reaccionan correctamente.</p>
             <ul class="check-list"><li>Kuali muestra la reunión dentro de Reuniones en vivo.</li><li>El participante activo se ilumina cuando habla.</li><li>El texto aparece durante la llamada, no solamente al terminar.</li><li>Silenciar a un participante detiene su actividad.</li><li>Salir de la reunión la finaliza y libera el modelo de Whisper.</li></ul>
             <h3>Comandos de Discord</h3><ul class="command-list"><li><code>/grabar · /record</code><span>Invita a Kuali al canal de voz en el que estás.</span></li></ul>
           </section>
@@ -105,6 +134,6 @@
 
     <dialog class="lightbox" data-lightbox aria-label="Imagen ampliada de la guía"><div class="lightbox-head"><strong data-lightbox-title>Imagen de la guía</strong><button class="lightbox-close" type="button" data-lightbox-close aria-label="Cerrar imagen">×</button></div><img data-lightbox-image alt=""></dialog>
 
-    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="../#funciones">Funciones</a><a href="../#privacidad">Privacidad</a><a href="https://github.com/igarrux/kuali/releases/latest">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="../#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div></footer>
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="../#funciones">Funciones</a><a href="../#privacidad">Privacidad</a><a href="./#instalar">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="../#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div></footer>
   </body>
 </html>

@@ -120,6 +120,34 @@ test("the landing pages show the real app and state the local data boundary", ()
   }
 });
 
+test("download actions lead to installation while the secondary hero action opens GitHub", () => {
+  const english = read("index.html");
+  const spanish = read("es/index.html");
+
+  assert.match(english, /href="https:\/\/kuali\.garrux\.dev\/guides\/#install">Download for macOS/);
+  assert.match(english, /href="https:\/\/github\.com\/igarrux\/kuali">View on GitHub/);
+  assert.match(spanish, /href="https:\/\/kuali\.garrux\.dev\/es\/guides\/#instalar">Descargar para macOS/);
+  assert.match(spanish, /href="https:\/\/github\.com\/igarrux\/kuali">Ver en GitHub/);
+});
+
+test("both guides document model weights and Standard Webhooks", () => {
+  for (const page of ["guides/index.html", "es/guides/index.html"]) {
+    const html = read(page);
+    assert.match(html, /id="(?:model|modelo)"/);
+    assert.match(html, /Large v3 Turbo Q5/);
+    assert.match(html, /~\/\.kuali/);
+    assert.match(html, /id="webhooks"/);
+    assert.match(html, /Standard Webhooks/);
+    assert.match(html, /meeting\.completed/);
+    assert.match(html, /webhook\.test/);
+    assert.match(html, /whsec_/);
+    assert.match(html, /webhook-id/);
+    assert.match(html, /webhook-timestamp/);
+    assert.match(html, /webhook-signature/);
+    assert.match(html, /<code>type<\/code>[\s\S]*<code>timestamp<\/code>[\s\S]*<code>data<\/code>/);
+  }
+});
+
 test("deployment metadata and security policy are present", () => {
   assert.ok(existsSync(join(websiteRoot, ".nojekyll")));
   assert.doesNotThrow(() => JSON.parse(read("site.webmanifest")));
