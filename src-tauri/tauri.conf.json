@@ -1,7 +1,7 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "Kuali",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "identifier": "com.onwev.kuali",
   "build": {
     "frontendDist": "../src"
@@ -27,7 +27,22 @@
     "active": true,
     "createUpdaterArtifacts": true,
     "targets": "all",
-    "resources": ["../browser-extension/**/*"],
+    "resources": {
+      "../browser-extension/_locales": "browser-extension/_locales",
+      "../browser-extension/icons": "browser-extension/icons",
+      "../browser-extension/src": "browser-extension/src",
+      "../browser-extension/LICENSE": "browser-extension/LICENSE",
+      "../browser-extension/NOTICE": "browser-extension/NOTICE",
+      "../browser-extension/kuali-logo.svg": "browser-extension/kuali-logo.svg",
+      "../browser-extension/manifest.json": "browser-extension/manifest.json",
+      "../browser-extension/offscreen.html": "browser-extension/offscreen.html",
+      "../browser-extension/popup.css": "browser-extension/popup.css",
+      "../browser-extension/popup.html": "browser-extension/popup.html",
+      "../browser-extension/popup.js": "browser-extension/popup.js",
+      "../browser-extension/privacy.css": "browser-extension/privacy.css",
+      "../browser-extension/privacy.html": "browser-extension/privacy.html",
+      "../browser-extension/privacy.js": "browser-extension/privacy.js"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
