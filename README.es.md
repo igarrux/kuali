@@ -163,13 +163,15 @@ ajeno dentro de carpetas externas.
 Kuali puede enviar un evento `meeting.completed` para todas las reuniones o
 solo para un canal de Discord. El contenido incluye participantes, transcripción
 con tiempos, estado del resumen y—si está activado—los puntos clave y tareas.
-Las solicitudes se firman con HMAC-SHA256 y solo se reintentan ante fallos
-transitorios.
+Las entregas siguen [Standard Webhooks 1.0](https://www.standardwebhooks.com/):
+el sobre JSON contiene `type`, `timestamp` y `data`, y cada solicitud incluye
+`webhook-id`, `webhook-timestamp` y `webhook-signature`.
 
-La firma se calcula en hexadecimal minúsculo sobre los bytes exactos de
-`timestamp + "." + cuerpo`, usando el secreto de la suscripción. Cada petición
-incluye `X-Kuali-Event`, `X-Kuali-Delivery`, `X-Kuali-Timestamp`,
-`X-Kuali-Attempt` y `X-Kuali-Signature`.
+Los secretos usan el formato `whsec_`. La firma es un HMAC-SHA256 en Base64
+calculado sobre los bytes exactos de
+`webhook-id + "." + webhook-timestamp + "." + cuerpo`. Los fallos transitorios
+usan el calendario de reintentos recomendado durante varios días, conservando
+el identificador de entrega y renovando el timestamp de cada intento.
 
 ## Desarrollo
 

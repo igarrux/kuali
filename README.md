@@ -158,11 +158,15 @@ directories.
 Kuali can deliver a `meeting.completed` webhook for every meeting or for one
 specific Discord channel. The payload contains participants, the timestamped
 transcript, summary status, and—when enabled—the generated insights and tasks.
-Requests are signed with HMAC-SHA256 and retried only for transient failures.
+Deliveries follow [Standard Webhooks 1.0](https://www.standardwebhooks.com/):
+the JSON envelope contains `type`, `timestamp`, and `data`, while each request
+includes `webhook-id`, `webhook-timestamp`, and `webhook-signature`.
 
-Each request includes `X-Kuali-Event`, `X-Kuali-Delivery`,
-`X-Kuali-Timestamp`, `X-Kuali-Attempt`, and `X-Kuali-Signature`. Verify the
-lowercase hexadecimal HMAC-SHA256 over `timestamp + "." + body`.
+Endpoint secrets use the `whsec_` format. Verify the Base64 HMAC-SHA256
+signature over the exact bytes of
+`webhook-id + "." + webhook-timestamp + "." + body`. Transient failures use the
+recommended multi-day retry schedule while preserving the delivery ID and
+refreshing the attempt timestamp.
 
 ## Development
 

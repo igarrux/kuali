@@ -2701,12 +2701,31 @@ function randomHex(byteLength) {
   return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
 
+function randomWebhookSecret() {
+  const bytes = new Uint8Array(32);
+  crypto.getRandomValues(bytes);
+  const binary = String.fromCharCode(...bytes);
+  return `whsec_${btoa(binary)}`;
+}
+
+function isStandardWebhookSecret(secret) {
+  if (!secret?.startsWith("whsec_")) return false;
+  try {
+    const encoded = secret.slice("whsec_".length);
+    const padded = encoded.padEnd(encoded.length + ((4 - (encoded.length % 4)) % 4), "=");
+    const byteLength = atob(padded).length;
+    return byteLength >= 24 && byteLength <= 64;
+  } catch {
+    return false;
+  }
+}
+
 function newWebhook() {
   return {
     id: crypto.randomUUID?.() ?? `webhook-${Date.now()}-${randomHex(6)}`,
     name: t("Nueva aplicación"),
     url: "",
-    secret: randomHex(32),
+    secret: randomWebhookSecret(),
     enabled: true,
     scope: { kind: "all" },
   };
@@ -2906,11 +2925,20 @@ function webhookCard(webhook) {
       action: t("Generar secreto"),
     });
     if (!accepted) return;
-    webhook.secret = randomHex(32);
+    webhook.secret = randomWebhookSecret();
     renderWebhooks();
   });
   secretEntry.append(secret, reveal, copy, regenerate);
   secretField.append(secretLabel, secretEntry);
+  const standardSecret = isStandardWebhookSecret(webhook.secret);
+  if (!standardSecret) {
+    const warning = document.createElement("small");
+    warning.className = "webhook-secret-warning";
+    warning.textContent = t(
+      "Este secreto usa el formato anterior. Regénéralo y actualízalo en la aplicación receptora.",
+    );
+    secretField.append(warning);
+  }
 
   const actions = document.createElement("div");
   actions.className = "webhook-actions";
@@ -2918,6 +2946,7 @@ function webhookCard(webhook) {
   test.type = "button";
   test.className = "ghost";
   test.textContent = t("Enviar prueba");
+  test.disabled = !standardSecret;
   const result = document.createElement("span");
   result.className = "webhook-test-result";
   result.setAttribute("role", "status");

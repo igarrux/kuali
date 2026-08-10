@@ -355,6 +355,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
     "after the summary. It includes the full transcript with speakers and timestamps, participants, key points, decisions, tasks, and questions. Audio is never sent.",
   Firma: "Signature:",
   sobre: "over",
+  "webhook-id.webhook-timestamp.cuerpo": "webhook-id.webhook-timestamp.body",
+  "usando el secreto": "using the secret",
   "usando el secreto compartido.": "using the shared secret.",
   "Aplicaciones suscritas": "Subscribed applications",
   "Pueden escuchar todos los canales o solamente uno.": "They can listen to all channels or just one.",
@@ -607,6 +609,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "La aplicación rechazará los siguientes eventos hasta que actualices allí el secreto compartido.":
     "The application will reject future events until you update its shared secret.",
   "Generar secreto": "Generate secret",
+  "Este secreto usa el formato anterior. Regénéralo y actualízalo en la aplicación receptora.":
+    "This secret uses the previous format. Regenerate it and update it in the receiving application.",
   "Sesión local": "Local session",
   Configurado: "Configured",
   "Falta configurar": "Setup required",

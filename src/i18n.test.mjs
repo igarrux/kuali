@@ -113,6 +113,30 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.match(engine, /if download_configured_model \{/);
 });
 
+test("webhooks use Standard Webhooks without the legacy Kuali protocol", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const implementation = readFileSync(
+    new URL("../crates/kuali-engine/src/webhooks.rs", import.meta.url),
+    "utf8",
+  );
+  const documentation = ["../README.md", "../README.es.md"]
+    .map((path) => readFileSync(new URL(path, import.meta.url), "utf8"))
+    .join("\n");
+
+  for (const source of [html, implementation, documentation]) {
+    assert.doesNotMatch(source, /X-Kuali-(?:Event|Delivery|Timestamp|Attempt|Signature)/i);
+    assert.doesNotMatch(source, /sha256=/i);
+  }
+  assert.match(html, /webhook-signature: v1,…/);
+  assert.match(app, /return `whsec_\$\{btoa\(binary\)\}`/);
+  assert.match(implementation, /\.header\("webhook-id", &delivery\.id\)/);
+  assert.match(implementation, /\.header\("webhook-timestamp", &timestamp\)/);
+  assert.match(implementation, /"webhook-signature"/);
+  assert.match(implementation, /mac\.update\(message_id\.as_bytes\(\)\)/);
+  assert.match(documentation, /Standard Webhooks 1\.0/);
+});
+
 test("visible placeholders do not contain a contributor's personal examples", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   assert.doesNotMatch(html, /@garrux|WaitingRoom/);
