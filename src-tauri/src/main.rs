@@ -8,7 +8,7 @@ use kuali_engine::Engine;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::TrayIconBuilder,
-    Emitter, Manager,
+    Emitter, Listener, Manager,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -28,6 +28,32 @@ fn reveal_main_window(app: &tauri::AppHandle) {
 fn show_main_window(app: &tauri::AppHandle, destination: &str) {
     reveal_main_window(app);
     let _ = app.emit(NAVIGATION_CHANNEL, destination);
+}
+
+fn tray_follow_copy(enabled: bool, language: &str) -> (&'static str, &'static str) {
+    match (enabled, language == "en") {
+        (true, true) => ("🟢 Discord · Following enabled", "Pause Discord following"),
+        (false, true) => ("🟠 Discord · Following paused", "Enable Discord following"),
+        (true, false) => (
+            "🟢 Discord · Seguimiento activo",
+            "Pausar seguimiento de Discord",
+        ),
+        (false, false) => (
+            "🟠 Discord · Seguimiento pausado",
+            "Activar seguimiento de Discord",
+        ),
+    }
+}
+
+fn sync_tray_follow_items<R: tauri::Runtime>(
+    status_item: &MenuItem<R>,
+    action_item: &MenuItem<R>,
+    enabled: bool,
+    language: &str,
+) {
+    let (status, action) = tray_follow_copy(enabled, language);
+    let _ = status_item.set_text(status);
+    let _ = action_item.set_text(action);
 }
 
 #[cfg(any(target_os = "macos", test))]
@@ -72,27 +98,54 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(engine.clone())
         .setup(move |app| {
+            let tray_config = engine.config();
+            let (follow_status, follow_action) = tray_follow_copy(
+                tray_config.discord.follow_automatically,
+                &tray_config.application.language,
+            );
             let open_item = MenuItem::with_id(app, "open", "Abrir Kuali", true, None::<&str>)?;
             let tasks_item = MenuItem::with_id(app, "tasks", "Ver tareas", true, None::<&str>)?;
-            let follow_item = MenuItem::with_id(
+            let primary_separator = PredefinedMenuItem::separator(app)?;
+            let follow_status_item =
+                MenuItem::with_id(app, "follow-status", follow_status, false, None::<&str>)?;
+            let follow_item =
+                MenuItem::with_id(app, "toggle-follow", follow_action, true, None::<&str>)?;
+            let secondary_separator = PredefinedMenuItem::separator(app)?;
+            let version_item = MenuItem::with_id(
                 app,
-                "toggle-follow",
-                "Activar/desactivar seguimiento de Discord",
-                true,
+                "version",
+                format!("Kuali {}", app.package_info().version),
+                false,
                 None::<&str>,
             )?;
-            let separator = PredefinedMenuItem::separator(app)?;
             let quit_item = MenuItem::with_id(app, "quit", "Salir de Kuali", true, None::<&str>)?;
             let menu = Menu::with_items(
                 app,
                 &[
                     &open_item,
                     &tasks_item,
+                    &primary_separator,
+                    &follow_status_item,
                     &follow_item,
-                    &separator,
+                    &secondary_separator,
+                    &version_item,
                     &quit_item,
                 ],
             )?;
+
+            let status_item_for_config = follow_status_item.clone();
+            let action_item_for_config = follow_item.clone();
+            let engine_for_config = engine.clone();
+            app.listen(CONFIG_CHANGED_CHANNEL, move |_| {
+                let config = engine_for_config.config();
+                sync_tray_follow_items(
+                    &status_item_for_config,
+                    &action_item_for_config,
+                    config.discord.follow_automatically,
+                    &config.application.language,
+                );
+            });
+
             TrayIconBuilder::new()
                 .tooltip("Kuali")
                 .icon(
@@ -188,6 +241,7 @@ fn main() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_config,
+            commands::app_version,
             commands::set_config,
             commands::missing_requirements,
             commands::get_snapshot,
@@ -247,11 +301,26 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::should_restore_main_window;
+    use super::{should_restore_main_window, tray_follow_copy};
 
     #[test]
     fn dock_reopen_restores_only_when_every_window_is_hidden() {
         assert!(should_restore_main_window(false));
         assert!(!should_restore_main_window(true));
+    }
+
+    #[test]
+    fn tray_following_copy_always_exposes_state_and_next_action() {
+        assert_eq!(
+            tray_follow_copy(true, "es"),
+            (
+                "🟢 Discord · Seguimiento activo",
+                "Pausar seguimiento de Discord"
+            )
+        );
+        assert_eq!(
+            tray_follow_copy(false, "en"),
+            ("🟠 Discord · Following paused", "Enable Discord following")
+        );
     }
 }

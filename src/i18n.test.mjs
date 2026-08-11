@@ -52,6 +52,7 @@ test("summaries and tasks have an explicit privacy switch", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   assert.match(html, /id="cfg-summarize"/);
+  assert.match(html, /id="cfg-summarize"[^>]*checked/);
   assert.match(html, /ninguna transcripción se envía a un LLM/);
   assert.match(app, /btn-resummarize"\)\.hidden = live \|\| !summariesEnabled\(\)/);
 });
@@ -63,8 +64,11 @@ test("signed updates are checked at startup and deferred during active work", ()
     readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
   );
   assert.match(html, /id="cfg-automatic-updates"/);
+  assert.match(html, /id="cfg-automatic-updates"[^>]*checked/);
   assert.match(html, /id="btn-check-update"/);
   assert.match(html, /id="btn-install-update"/);
+  assert.match(html, /id="app-version"/);
+  assert.match(app, /invoke\("app_version"\)/);
   assert.match(app, /UPDATE_CHECK_INTERVAL_MS = 6 \* 60 \* 60 \* 1000/);
   assert.match(app, /scheduleUpdateChecks\(\);\s+void checkForUpdates\(\);/);
   assert.doesNotMatch(app, /UPDATE_BOOT_DELAY_MS|updateBootTimer/);

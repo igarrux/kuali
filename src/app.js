@@ -76,6 +76,7 @@ const state = {
   discordGuideStep: 0,
   meetGuideStep: 0,
   autostartEnabled: false,
+  appVersion: "",
   updateInfo: null,
   updateCurrentVersion: null,
   updateStatus: "idle",
@@ -177,6 +178,10 @@ function renderUpdateState() {
 
   const settingsStatus = $("update-settings-status");
   if (settingsStatus) settingsStatus.textContent = statusText;
+  const versionBadge = $("app-version");
+  if (versionBadge) {
+    versionBadge.textContent = state.appVersion ? `Kuali ${state.appVersion}` : "Kuali";
+  }
   const checkButton = $("btn-check-update");
   if (checkButton) {
     checkButton.disabled = busy;
@@ -2699,7 +2704,7 @@ async function openSettings() {
   renderProviders();
 
   $("cfg-output-language").value = c.llm["output-language"] ?? "español";
-  $("cfg-summarize").checked = c.llm["summarize-on-leave"];
+  $("cfg-summarize").checked = c.llm["summarize-on-leave"] !== false;
   updateSummarySettingsVisibility();
   $("cfg-ui-language").value = c.application?.language ?? "auto";
   $("cfg-autostart").checked = state.autostartEnabled;
@@ -4162,13 +4167,18 @@ async function boot() {
     if (state.updateStatus === "installing") renderUpdateState();
   });
 
-  const [snapshot, config] = await Promise.all([invoke("get_snapshot"), invoke("get_config")]);
+  const [snapshot, config, appVersion] = await Promise.all([
+    invoke("get_snapshot"),
+    invoke("get_config"),
+    invoke("app_version"),
+  ]);
   setLanguagePreference(config.application?.language ?? "auto", { notify: false });
   refreshGuideImages();
   state.status = snapshot.status;
   state.modelState = snapshot.modelState;
   state.webMeetings = snapshot.webMeetings;
   state.config = config;
+  state.appVersion = appVersion;
   applyLiveSnapshot(snapshot, true);
   scheduleUpdateChecks();
   void checkForUpdates();

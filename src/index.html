@@ -845,7 +845,7 @@
               </div>
 
               <label class="feature-toggle summary-feature-toggle">
-                <input type="checkbox" id="cfg-summarize" name="summarize-on-leave" />
+                <input type="checkbox" id="cfg-summarize" name="summarize-on-leave" checked />
                 <span class="feature-toggle-copy">
                   <strong>Resúmenes y tareas</strong>
                   <small>Al activarlo, Kuali usa el proveedor configurado cuando termina una reunión. Si está apagado, ninguna transcripción se envía a un LLM.</small>
@@ -1058,7 +1058,7 @@
                 </span>
               </label>
               <label class="check">
-                <input type="checkbox" id="cfg-automatic-updates" name="automatic-updates" />
+                <input type="checkbox" id="cfg-automatic-updates" name="automatic-updates" checked />
                 <span>
                   Actualizar Kuali automáticamente
                   <small>Instala las versiones firmadas cuando no hay reuniones ni resúmenes en curso.</small>
@@ -1066,7 +1066,10 @@
               </label>
               <div class="settings-update-card">
                 <div>
-                  <strong>Actualizaciones</strong>
+                  <div class="settings-update-heading">
+                    <strong>Actualizaciones</strong>
+                    <span class="app-version-badge" id="app-version">Kuali</span>
+                  </div>
                   <p id="update-settings-status">Kuali busca actualizaciones al iniciar y periódicamente.</p>
                 </div>
                 <div class="settings-update-actions">

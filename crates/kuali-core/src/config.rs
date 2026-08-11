@@ -561,6 +561,8 @@ mod tests {
     fn default_config_reports_what_is_missing() {
         let cfg = KualiConfig::default();
         assert_eq!(cfg.application.language, "auto");
+        assert!(cfg.application.automatic_updates);
+        assert!(cfg.llm.summarize_on_leave);
         assert!(!cfg.is_ready());
         assert_eq!(
             cfg.missing_requirements(),
@@ -583,6 +585,7 @@ mod tests {
         .expect("deserialize config written before UI languages existed");
         assert_eq!(old.application.language, "auto");
         assert!(old.application.automatic_updates);
+        assert!(old.llm.summarize_on_leave);
     }
 
     #[test]

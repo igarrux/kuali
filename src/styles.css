@@ -3331,6 +3331,8 @@ kbd { padding: 2px 5px; background: var(--surface-3); border: 1px solid var(--li
 .task-group h5 { display: flex; align-items: center; gap: 7px; }
 
 .settings-update-card { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding: 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }
+.settings-update-heading { display: flex; align-items: center; gap: 8px; }
+.app-version-badge { padding: 3px 7px; border: 1px solid rgba(125, 218, 185, .22); border-radius: 999px; background: rgba(125, 218, 185, .08); color: var(--accent); font: 700 9px/1.2 var(--font-mono); letter-spacing: .02em; }
 .settings-update-card p { margin: 3px 0 0; color: var(--muted); font-size: 11px; }
 .settings-update-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .settings-guide-link { display: flex; align-items: center; justify-content: space-between; gap: 18px; margin-top: 18px; padding: 14px; background: var(--surface-2); border: 1px solid var(--line); border-radius: 12px; }

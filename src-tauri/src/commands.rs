@@ -29,8 +29,19 @@ pub fn get_config(engine: State<'_, Engine>) -> KualiConfig {
 }
 
 #[tauri::command]
-pub async fn set_config(engine: State<'_, Engine>, config: KualiConfig) -> Result<(), String> {
-    engine.update_config(config).await.map_err(fail)
+pub async fn set_config(
+    app: tauri::AppHandle,
+    engine: State<'_, Engine>,
+    config: KualiConfig,
+) -> Result<(), String> {
+    engine.update_config(config).await.map_err(fail)?;
+    let _ = app.emit(crate::CONFIG_CHANGED_CHANNEL, ());
+    Ok(())
+}
+
+#[tauri::command]
+pub fn app_version(app: tauri::AppHandle) -> String {
+    app.package_info().version.to_string()
 }
 
 /// User-facing requirements that still prevent Kuali from operating.
