@@ -153,6 +153,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "@tu_usuario": "@your_username",
   "Usa el": "Use the",
   "no el nombre visible del perfil.": "not the visible profile name.",
+  "Abre tu perfil desde la esquina inferior izquierda de Discord y pulsa el icono de copiar junto a tu usuario.":
+    "Open your profile from the bottom-left corner of Discord and select the copy icon beside your username.",
   "Después podrás cambiar el token o el usuario en Ajustes → Discord.":
     "You can change the token or username later in Settings → Discord.",
   "Discord está conectado. Ya puedes terminar la guía.":
@@ -634,8 +636,12 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
     "New Application button in the Discord Developer Portal",
   "Botón Restablecer token en la sección Bot de Discord":
     "Reset Token button in Discord's Bot section",
+  "Pasos para copiar el usuario desde el perfil de Discord":
+    "Steps to copy the username from a Discord profile",
   "Ejemplo: botón “Nueva aplicación”.": "Example: “New Application” button.",
   "Ejemplo: Bot → “Restablecer token”.": "Example: Bot → “Reset Token”.",
+  "Ejemplo: abre tu perfil y pulsa el icono junto a tu usuario.":
+    "Example: open your profile and select the icon beside your username.",
   ", acepta las condiciones y confirma con": ", accept the terms, and confirm with",
   ", confirma y copia el valor que muestra Discord.": ", confirm, and copy the value Discord shows.",
   ", ábrelo, pulsa": ", open it, select",

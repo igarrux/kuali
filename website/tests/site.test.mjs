@@ -167,7 +167,8 @@ test("Discord setup is a three-step token-driven authorization flow", () => {
     const section = html.match(/<section class="guide-section" id="discord"[\s\S]*?<\/section>/)?.[0];
     assert.ok(section, `${page} is missing the Discord guide`);
     assert.equal((section.match(/<article class="guide-step">/g) ?? []).length, 3);
-    assert.equal((section.match(/data-lightbox-source/g) ?? []).length, 2);
+    assert.equal((section.match(/data-lightbox-source/g) ?? []).length, 3);
+    assert.match(section, /copy-username\.png/);
     assert.match(section, automaticCopy);
     assert.match(section, /applications\.commands/);
     assert.doesNotMatch(section, oldCopy);

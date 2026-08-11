@@ -8,11 +8,13 @@ Spanish filenames:
 
 1. `discord-02-new-application.png`
 2. `discord-03-reset-token.png`
+3. `discord-copy-username.png`
 
 English filenames use the same name with the `en-` prefix:
 
 1. `en-discord-02-new-application.png`
 2. `en-discord-03-reset-token.png`
+3. `en-discord-copy-username.png`
 
 Capture recommendations:
 
@@ -32,6 +34,8 @@ What each image should show:
 
 - `02`: the **Nueva aplicación** button in the Developer Portal.
 - `03`: **Bot → Restablecer token**. Do not show the resulting token.
+- `copy-username`: the bottom profile control and the copy icon beside the
+  username. It must not direct users to **Copy User ID**.
 
 Kuali derives the application ID from the token and prepares the Discord
 authorization URL automatically, so the guide does not need screenshots for

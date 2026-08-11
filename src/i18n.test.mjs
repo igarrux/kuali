@@ -168,11 +168,12 @@ test("English-only terminology hints are shown only in the Spanish interface", (
   );
 });
 
-test("the simplified Discord guide keeps only the two necessary screenshots", () => {
+test("the simplified Discord guide includes the three necessary examples", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const files = [
     "discord-02-new-application.png",
     "discord-03-reset-token.png",
+    "discord-copy-username.png",
   ];
   for (const file of files) {
     assert.match(html, new RegExp(`data-guide-src-es="assets/guides/discord/${file}"`));
@@ -180,7 +181,8 @@ test("the simplified Discord guide keeps only the two necessary screenshots", ()
   }
   assert.equal((html.match(/<summary>Ver ejemplo<\/summary>/g) ?? []).length, files.length);
   assert.equal((html.match(/class="guide-image-open"/g) ?? []).length, files.length);
-  assert.doesNotMatch(html, /discord-0[4-7][^"']*\.png/);
+  assert.match(html, /pulsa el icono de copiar junto a tu usuario/);
+  assert.doesNotMatch(html, /Copiar ID del usuario|Copy User ID/);
 });
 
 test("Discord onboarding opens an exact authorization flow in three steps", () => {
