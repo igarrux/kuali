@@ -42,8 +42,10 @@ const TRANSCRIPT_BUTTON_PREFIX: &str = "kuali:transcript:";
 const KUALI_WEBSITE: &str = "https://kuali.garrux.dev";
 const KUALI_ICON: &str = "https://kuali.garrux.dev/assets/icon.png";
 const KUALI_EMBED_COLOR: u32 = 0x7D_DA_B9;
+const KUALI_PENDING_COLOR: u32 = 0x7C_A6_DA;
+const KUALI_ATTENTION_COLOR: u32 = 0xE8_A2_3B;
+const KUALI_ERROR_COLOR: u32 = 0xDF_6D_73;
 const EMBED_FIELD_LIMIT: usize = 1_024;
-const EMBED_DESCRIPTION_LIMIT: usize = 4_096;
 const PUBLIC_TASK_LIMIT: usize = 6;
 const RECORD_COMMAND_ES: &str = "grabar";
 const RECORD_COMMAND_EN: &str = "record";
@@ -94,6 +96,15 @@ fn session_sender(
 enum MeetingAction {
     Summary,
     Transcript,
+}
+
+/// State rendered into the one persistent Discord card for a meeting.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DiscordSummaryState {
+    Preparing,
+    Ready,
+    Failed,
+    AttentionRequired,
 }
 
 impl MeetingAction {
@@ -302,71 +313,6 @@ fn task_preview(summary: &MeetingSummary, locale: DiscordLocale) -> String {
     truncate_text(&output, EMBED_FIELD_LIMIT)
 }
 
-fn list_preview(items: &[String], limit: usize, locale: DiscordLocale) -> String {
-    if items.is_empty() {
-        return locale.text("Ninguno.", "None.").to_string();
-    }
-
-    let mut output = String::new();
-    let mut included = 0;
-    for item in items {
-        let line = format!("- {}", one_line(item));
-        let separator = usize::from(!output.is_empty());
-        if char_count(&output) + separator + char_count(&line) > limit - 50 {
-            break;
-        }
-        if !output.is_empty() {
-            output.push('\n');
-        }
-        output.push_str(&line);
-        included += 1;
-    }
-    let omitted = items.len().saturating_sub(included);
-    if omitted > 0 {
-        let more = match locale {
-            DiscordLocale::Spanish => format!("… y {omitted} más en el archivo adjunto."),
-            DiscordLocale::English => format!("… and {omitted} more in the attached file."),
-        };
-        if !output.is_empty() {
-            output.push('\n');
-        }
-        output.push_str(&more);
-    }
-    truncate_text(&output, limit)
-}
-
-fn tasks_preview(items: &[ActionItem], limit: usize, locale: DiscordLocale) -> String {
-    if items.is_empty() {
-        return locale.text("Ninguna.", "None.").to_string();
-    }
-    let mut output = String::new();
-    let mut included = 0;
-    for item in items {
-        let line = task_line(item, locale);
-        let separator = usize::from(!output.is_empty());
-        if char_count(&output) + separator + char_count(&line) > limit - 50 {
-            break;
-        }
-        if !output.is_empty() {
-            output.push('\n');
-        }
-        output.push_str(&line);
-        included += 1;
-    }
-    let omitted = items.len().saturating_sub(included);
-    if omitted > 0 {
-        let more = match locale {
-            DiscordLocale::Spanish => format!("… y {omitted} más en el archivo adjunto."),
-            DiscordLocale::English => format!("… and {omitted} more in the attached file."),
-        };
-        if !output.is_empty() {
-            output.push('\n');
-        }
-        output.push_str(&more);
-    }
-    truncate_text(&output, limit)
-}
-
 fn completion_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
     let summary = meeting.summary.as_ref();
     let tasks = summary
@@ -412,71 +358,199 @@ fn completion_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
         .color(KUALI_EMBED_COLOR)
 }
 
-fn completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
-    CreateMessage::new()
-        .allowed_mentions(CreateAllowedMentions::new())
-        .embed(completion_embed(meeting, locale))
-        .button(
+fn summary_state_embed(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> CreateEmbed {
+    if state == DiscordSummaryState::Ready {
+        return completion_embed(meeting, locale);
+    }
+
+    let (author, description, next_step, color) = match state {
+        DiscordSummaryState::Preparing => (
+            locale.text("Kuali · Preparando notas", "Kuali · Preparing notes"),
+            locale.text(
+                "La transcripción ya está guardada. Kuali está preparando el resumen, las decisiones y las tareas.",
+                "The transcript is already saved. Kuali is preparing the summary, decisions, and action items.",
+            ),
+            locale.text(
+                "Este mismo mensaje se actualizará al terminar.",
+                "This message will update when the summary is ready.",
+            ),
+            KUALI_PENDING_COLOR,
+        ),
+        DiscordSummaryState::Failed => (
+            locale.text("Kuali · Resumen no disponible", "Kuali · Summary unavailable"),
+            locale.text(
+                "El modelo no logró preparar un resumen válido después de tres intentos. La transcripción completa sigue disponible.",
+                "The model could not prepare a valid summary after three attempts. The full transcript is still available.",
+            ),
+            locale.text(
+                "Revisa el proveedor en Kuali y usa «Rehacer resumen» para intentarlo otra vez.",
+                "Check the provider in Kuali and use “Regenerate summary” to try again.",
+            ),
+            KUALI_ERROR_COLOR,
+        ),
+        DiscordSummaryState::AttentionRequired => (
+            locale.text("Kuali · El modelo requiere atención", "Kuali · Model needs attention"),
+            locale.text(
+                "El proveedor rechazó el resumen por credenciales, cuota, límites de tokens o configuración del modelo. La transcripción completa sigue disponible.",
+                "The provider rejected the summary because of credentials, quota, token limits, or model configuration. The full transcript is still available.",
+            ),
+            locale.text(
+                "Abre Ajustes → Resúmenes y tareas en Kuali antes de reintentarlo.",
+                "Open Settings → Summaries and tasks in Kuali before trying again.",
+            ),
+            KUALI_ATTENTION_COLOR,
+        ),
+        DiscordSummaryState::Ready => unreachable!(),
+    };
+
+    CreateEmbed::new()
+        .author(CreateEmbedAuthor::new(author).url(KUALI_WEBSITE))
+        .title(truncate_text(&meeting.meta.title(), 256))
+        .description(description)
+        .field(
+            locale.text("Duración", "Duration"),
+            human_duration(meeting.duration_ms(), locale),
+            true,
+        )
+        .field(
+            locale.text("Participantes", "Participants"),
+            participant_count(meeting).to_string(),
+            true,
+        )
+        .field(locale.text("Estado", "Status"), next_step, false)
+        .thumbnail(KUALI_ICON)
+        .footer(CreateEmbedFooter::new("Kuali · Discord · kuali.garrux.dev"))
+        .color(color)
+}
+
+fn add_summary_state_buttons(
+    mut message: CreateMessage,
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> CreateMessage {
+    if state == DiscordSummaryState::Ready {
+        message = message.button(
             CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
                 .label(locale.text("Ver resumen", "View summary"))
                 .style(ButtonStyle::Primary),
-        )
-        .button(
-            CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
-                .label(locale.text("Ver transcripción", "View transcript"))
-                .style(ButtonStyle::Secondary),
-        )
+        );
+    }
+    message.button(
+        CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
+            .label(locale.text("Ver transcripción", "View transcript"))
+            .style(ButtonStyle::Secondary),
+    )
 }
 
-fn completion_edit_message(meeting: &Meeting, locale: DiscordLocale) -> EditMessage {
-    EditMessage::new()
+fn add_summary_state_edit_buttons(
+    mut message: EditMessage,
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> EditMessage {
+    if state == DiscordSummaryState::Ready {
+        message = message.button(
+            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
+                .label(locale.text("Ver resumen", "View summary"))
+                .style(ButtonStyle::Primary),
+        );
+    }
+    message.button(
+        CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
+            .label(locale.text("Ver transcripción", "View transcript"))
+            .style(ButtonStyle::Secondary),
+    )
+}
+
+fn summary_state_message(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> CreateMessage {
+    let message = CreateMessage::new()
+        .allowed_mentions(CreateAllowedMentions::new())
+        .embed(summary_state_embed(meeting, locale, state));
+    add_summary_state_buttons(message, meeting, locale, state)
+}
+
+fn summary_state_edit_message(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> EditMessage {
+    let message = EditMessage::new()
         .content("")
         .allowed_mentions(CreateAllowedMentions::new())
-        .embed(completion_embed(meeting, locale))
-        .button(
-            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
-                .label(locale.text("Ver resumen", "View summary"))
-                .style(ButtonStyle::Primary),
-        )
-        .button(
-            CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
-                .label(locale.text("Ver transcripción", "View transcript"))
-                .style(ButtonStyle::Secondary),
-        )
+        .embed(summary_state_embed(meeting, locale, state));
+    add_summary_state_edit_buttons(message, meeting, locale, state)
 }
 
-fn fallback_completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
-    let content = fallback_completion_content(meeting, locale);
-    CreateMessage::new()
-        .content(content)
-        .allowed_mentions(CreateAllowedMentions::new())
-        .button(
-            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
-                .label(locale.text("Ver resumen", "View summary"))
-                .style(ButtonStyle::Primary),
-        )
-        .button(
-            CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
-                .label(locale.text("Ver transcripción", "View transcript"))
-                .style(ButtonStyle::Secondary),
-        )
+fn fallback_summary_state_message(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> CreateMessage {
+    let message = CreateMessage::new()
+        .content(fallback_summary_state_content(meeting, locale, state))
+        .allowed_mentions(CreateAllowedMentions::new());
+    add_summary_state_buttons(message, meeting, locale, state)
 }
 
-fn fallback_completion_edit_message(meeting: &Meeting, locale: DiscordLocale) -> EditMessage {
-    EditMessage::new()
-        .content(fallback_completion_content(meeting, locale))
+fn fallback_summary_state_edit_message(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> EditMessage {
+    let message = EditMessage::new()
+        .content(fallback_summary_state_content(meeting, locale, state))
         .embeds(Vec::new())
-        .allowed_mentions(CreateAllowedMentions::new())
-        .button(
-            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
-                .label(locale.text("Ver resumen", "View summary"))
-                .style(ButtonStyle::Primary),
-        )
-        .button(
-            CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
-                .label(locale.text("Ver transcripción", "View transcript"))
-                .style(ButtonStyle::Secondary),
-        )
+        .allowed_mentions(CreateAllowedMentions::new());
+    add_summary_state_edit_buttons(message, meeting, locale, state)
+}
+
+#[cfg(test)]
+fn completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
+    summary_state_message(meeting, locale, DiscordSummaryState::Ready)
+}
+
+#[cfg(test)]
+fn fallback_completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
+    fallback_summary_state_message(meeting, locale, DiscordSummaryState::Ready)
+}
+
+fn fallback_summary_state_content(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    state: DiscordSummaryState,
+) -> String {
+    if state != DiscordSummaryState::Ready {
+        let description = match state {
+            DiscordSummaryState::Preparing => locale.text(
+                "Kuali está preparando el resumen, las decisiones y las tareas. Este mensaje se actualizará al terminar.",
+                "Kuali is preparing the summary, decisions, and action items. This message will update when ready.",
+            ),
+            DiscordSummaryState::Failed => locale.text(
+                "El modelo no logró preparar un resumen válido después de tres intentos. Revisa Kuali antes de reintentarlo.",
+                "The model could not prepare a valid summary after three attempts. Check Kuali before trying again.",
+            ),
+            DiscordSummaryState::AttentionRequired => locale.text(
+                "El proveedor requiere atención: revisa sus credenciales, cuota, límites de tokens y modelo en Kuali.",
+                "The provider needs attention: check its credentials, quota, token limits, and model in Kuali.",
+            ),
+            DiscordSummaryState::Ready => unreachable!(),
+        };
+        return truncate_text(
+            &format!("**{}**\n-# Kuali\n\n{description}", meeting.meta.title()),
+            1_900,
+        );
+    }
+
+    fallback_completion_content(meeting, locale)
 }
 
 fn fallback_completion_content(meeting: &Meeting, locale: DiscordLocale) -> String {
@@ -507,64 +581,45 @@ fn fallback_completion_content(meeting: &Meeting, locale: DiscordLocale) -> Stri
 }
 
 fn private_summary_embed(meeting: &Meeting, locale: DiscordLocale) -> Option<CreateEmbed> {
-    let summary = meeting.summary.as_ref()?;
-    Some(
-        CreateEmbed::new()
-            .author(CreateEmbedAuthor::new("Kuali").url(KUALI_WEBSITE))
-            .title(truncate_text(
-                &format!(
-                    "{} · {}",
-                    locale.text("Resumen", "Summary"),
-                    meeting.meta.title()
-                ),
-                256,
-            ))
-            .description(truncate_text(
-                if summary.overview.trim().is_empty() {
-                    locale.text("Sin descripción general.", "No overview available.")
-                } else {
-                    summary.overview.trim()
-                },
-                1_600.min(EMBED_DESCRIPTION_LIMIT),
-            ))
-            .field(
-                locale.text("Puntos clave", "Key points"),
-                list_preview(&summary.key_points, 850, locale),
-                false,
-            )
-            .field(
-                locale.text("Decisiones", "Decisions"),
-                list_preview(&summary.decisions, 850, locale),
-                false,
-            )
-            .field(
-                locale.text("Tareas pendientes", "Action items"),
-                tasks_preview(&summary.action_items, 850, locale),
-                false,
-            )
-            .field(
-                locale.text("Preguntas abiertas", "Open questions"),
-                list_preview(&summary.open_questions, 850, locale),
-                false,
-            )
-            .thumbnail(KUALI_ICON)
-            .footer(CreateEmbedFooter::new(locale.text(
-                "Solo tú puedes ver este mensaje · Kuali",
-                "Only you can see this message · Kuali",
-            )))
-            .color(KUALI_EMBED_COLOR),
-    )
+    meeting.summary.as_ref()?;
+    Some(private_document_embed(
+        meeting,
+        locale,
+        MeetingAction::Summary,
+    ))
 }
 
 fn private_transcript_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
+    private_document_embed(meeting, locale, MeetingAction::Transcript)
+}
+
+fn private_document_embed(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    action: MeetingAction,
+) -> CreateEmbed {
+    let (kind, count) = match action {
+        MeetingAction::Summary => (
+            locale.text("Resumen completo", "Full summary"),
+            locale
+                .text(
+                    "Todo el contenido se muestra a continuación y también puede descargarse.",
+                    "All content is shown below and is also available to download.",
+                )
+                .to_string(),
+        ),
+        MeetingAction::Transcript => (
+            locale.text("Transcripción completa", "Full transcript"),
+            match locale {
+                DiscordLocale::Spanish => format!("{} intervenciones", meeting.utterances.len()),
+                DiscordLocale::English => format!("{} utterances", meeting.utterances.len()),
+            },
+        ),
+    };
     CreateEmbed::new()
         .author(CreateEmbedAuthor::new("Kuali").url(KUALI_WEBSITE))
         .title(truncate_text(
-            &format!(
-                "{} · {}",
-                locale.text("Transcripción completa", "Full transcript"),
-                meeting.meta.title()
-            ),
+            &format!("{kind} · {}", meeting.meta.title()),
             256,
         ))
         .description(format!(
@@ -574,10 +629,7 @@ fn private_transcript_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateE
                 DiscordLocale::Spanish => format!("{} participantes", participant_count(meeting)),
                 DiscordLocale::English => format!("{} participants", participant_count(meeting)),
             },
-            match locale {
-                DiscordLocale::Spanish => format!("{} intervenciones", meeting.utterances.len()),
-                DiscordLocale::English => format!("{} utterances", meeting.utterances.len()),
-            }
+            count
         ))
         .thumbnail(KUALI_ICON)
         .footer(CreateEmbedFooter::new(locale.text(
@@ -722,6 +774,146 @@ fn transcript_document(meeting: &Meeting, locale: DiscordLocale) -> Option<Strin
     Some(output)
 }
 
+fn push_visible_list(output: &mut String, title: &str, items: &[String], locale: DiscordLocale) {
+    output.push_str(&format!("### {title}\n"));
+    if items.is_empty() {
+        output.push_str(locale.text("_Ninguno._\n\n", "_None._\n\n"));
+        return;
+    }
+    for item in items {
+        output.push_str(&format!("- {}\n", item.trim()));
+    }
+    output.push('\n');
+}
+
+fn visible_task_line(task: &ActionItem, locale: DiscordLocale) -> String {
+    let mut details = Vec::new();
+    if let Some(assignee) = task
+        .assignee
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        details.push(format!(
+            "{}: {}",
+            locale.text("Responsable", "Owner"),
+            assignee
+        ));
+    }
+    if let Some(due) = task
+        .due
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        details.push(format!("{}: {}", locale.text("Fecha", "Due"), due));
+    }
+    if let Some(source_ms) = task.source_ms {
+        details.push(format_timestamp(source_ms));
+    }
+    let mark = if task.done { "x" } else { " " };
+    if details.is_empty() {
+        format!("- [{mark}] {}", task.text.trim())
+    } else {
+        format!(
+            "- [{mark}] {}\n  -# {}",
+            task.text.trim(),
+            details.join(" · ")
+        )
+    }
+}
+
+fn visible_summary_document(meeting: &Meeting, locale: DiscordLocale) -> Option<String> {
+    let summary = meeting.summary.as_ref()?;
+    let mut output = String::new();
+    output.push_str(&format!("### {}\n", locale.text("Resumen", "Summary")));
+    if summary.overview.trim().is_empty() {
+        output.push_str(locale.text("_Sin descripción general._\n\n", "_No overview._\n\n"));
+    } else {
+        output.push_str(summary.overview.trim());
+        output.push_str("\n\n");
+    }
+
+    push_visible_list(
+        &mut output,
+        locale.text("Puntos clave", "Key points"),
+        &summary.key_points,
+        locale,
+    );
+    push_visible_list(
+        &mut output,
+        locale.text("Decisiones", "Decisions"),
+        &summary.decisions,
+        locale,
+    );
+
+    output.push_str(&format!(
+        "### {}\n",
+        locale.text("Tareas pendientes", "Action items")
+    ));
+    if summary.action_items.is_empty() {
+        output.push_str(locale.text("_Ninguna._\n\n", "_None._\n\n"));
+    } else {
+        for task in &summary.action_items {
+            output.push_str(&visible_task_line(task, locale));
+            output.push('\n');
+        }
+        output.push('\n');
+    }
+
+    push_visible_list(
+        &mut output,
+        locale.text("Preguntas abiertas", "Open questions"),
+        &summary.open_questions,
+        locale,
+    );
+    if !summary.generated_by.trim().is_empty() {
+        output.push_str(&format!(
+            "-# {} · {}",
+            locale.text("Generado por", "Generated by"),
+            summary.generated_by.trim()
+        ));
+    }
+    Some(output)
+}
+
+fn escape_inline_markdown(value: &str) -> String {
+    let mut output = String::with_capacity(value.len());
+    for character in value.chars() {
+        if matches!(character, '\\' | '*' | '_' | '~' | '`' | '|') {
+            output.push('\\');
+        }
+        output.push(character);
+    }
+    output
+}
+
+fn visible_transcript_document(meeting: &Meeting, locale: DiscordLocale) -> Option<String> {
+    if meeting.utterances.is_empty() {
+        return None;
+    }
+    let mut output = format!(
+        "### {}\n",
+        locale.text("Transcripción completa", "Full transcript")
+    );
+    let mut wrote_utterance = false;
+    for utterance in &meeting.utterances {
+        let text = utterance.text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let speaker = escape_inline_markdown(&meeting.speaker_name(utterance.speaker_id));
+        output.push_str(&format!(
+            "**{} · {}**\n> {}\n\n",
+            format_timestamp(utterance.start_ms),
+            speaker,
+            text.replace('\n', "\n> ")
+        ));
+        wrote_utterance = true;
+    }
+    wrote_utterance.then_some(output)
+}
+
 fn document_attachment(
     meeting: &Meeting,
     action: MeetingAction,
@@ -832,6 +1024,14 @@ struct Handler {
     consent_audio: Arc<[u8]>,
     audit: Arc<AuditLog>,
     recovery_tx: UnboundedSender<ReceiveRecoveryRequest>,
+}
+
+struct PrivateMeetingDocument {
+    action: MeetingAction,
+    locale: DiscordLocale,
+    embed: CreateEmbed,
+    visible: String,
+    download: String,
 }
 
 impl Handler {
@@ -1322,6 +1522,107 @@ impl Handler {
         }
     }
 
+    async fn respond_with_private_document(
+        &self,
+        ctx: &Context,
+        component: &ComponentInteraction,
+        meeting: &Meeting,
+        document: PrivateMeetingDocument,
+    ) {
+        let PrivateMeetingDocument {
+            action,
+            locale,
+            embed,
+            visible,
+            download,
+        } = document;
+        let mut chunks = split_message(&visible, 1_850).into_iter();
+        let first = chunks.next().unwrap_or_else(|| {
+            locale
+                .text(
+                    "No hay contenido para mostrar.",
+                    "There is no content to show.",
+                )
+                .to_string()
+        });
+        let can_attach = download.len() <= component.attachment_size_limit as usize;
+        let mut response = EditInteractionResponse::new()
+            .content(first.clone())
+            .embed(embed.clone())
+            .allowed_mentions(CreateAllowedMentions::new());
+        if can_attach {
+            response =
+                response.new_attachment(document_attachment(meeting, action, locale, download));
+        }
+
+        let sent = match component.edit_response(&ctx.http, response).await {
+            Ok(message) => message,
+            Err(error) if can_attach => {
+                tracing::warn!(
+                    meeting_id = %meeting.meta.id,
+                    %error,
+                    "Discord no permitió adjuntar el documento; manteniendo todo el texto visible"
+                );
+                match component
+                    .edit_response(
+                        &ctx.http,
+                        EditInteractionResponse::new()
+                            .content(first.clone())
+                            .embed(embed.clone())
+                            .allowed_mentions(CreateAllowedMentions::new()),
+                    )
+                    .await
+                {
+                    Ok(message) => message,
+                    Err(_) => return,
+                }
+            }
+            Err(_) => return,
+        };
+
+        if can_attach {
+            if let Some(attachment) = sent.attachments.first() {
+                let label = match (action, locale) {
+                    (MeetingAction::Summary, DiscordLocale::Spanish) => "Descargar resumen (.txt)",
+                    (MeetingAction::Summary, DiscordLocale::English) => "Download summary (.txt)",
+                    (MeetingAction::Transcript, DiscordLocale::Spanish) => {
+                        "Descargar transcripción (.txt)"
+                    }
+                    (MeetingAction::Transcript, DiscordLocale::English) => {
+                        "Download transcript (.txt)"
+                    }
+                };
+                let _ = component
+                    .edit_response(
+                        &ctx.http,
+                        EditInteractionResponse::new()
+                            .content(first)
+                            .embed(embed)
+                            .allowed_mentions(CreateAllowedMentions::new())
+                            .keep_existing_attachment(attachment.id)
+                            .button(CreateButton::new_link(&attachment.url).label(label)),
+                    )
+                    .await;
+            }
+        }
+
+        for chunk in chunks {
+            if component
+                .create_followup(
+                    &ctx.http,
+                    CreateInteractionResponseFollowup::new()
+                        .content(chunk)
+                        .allowed_mentions(CreateAllowedMentions::new())
+                        .ephemeral(true),
+                )
+                .await
+                .is_err()
+            {
+                break;
+            }
+        }
+    }
+
     async fn handle_meeting_button(
         &self,
         ctx: &Context,
@@ -1356,8 +1657,9 @@ impl Handler {
 
         match action {
             MeetingAction::Summary => {
-                let (Some(embed), Some(document)) = (
+                let (Some(embed), Some(visible), Some(document)) = (
                     private_summary_embed(&meeting, locale),
+                    visible_summary_document(&meeting, locale),
                     summary_document(&meeting, locale),
                 ) else {
                     let message = locale.text(
@@ -1369,38 +1671,25 @@ impl Handler {
                         .await;
                     return;
                 };
-                let fits = document.len() <= component.attachment_size_limit as usize;
-                if fits {
-                    let response = EditInteractionResponse::new()
-                        .embed(embed.clone())
-                        .new_attachment(document_attachment(
-                            &meeting,
-                            MeetingAction::Summary,
-                            locale,
-                            document,
-                        ));
-                    if component.edit_response(&ctx.http, response).await.is_ok() {
-                        return;
-                    }
-                    tracing::warn!(
-                        meeting_id = %meeting.meta.id,
-                        "Discord no permitió adjuntar el resumen; mostrando la vista privada"
-                    );
-                }
-
-                let note = locale.text(
-                    "No pude adjuntar el archivo, pero el resumen sigue visible aquí.",
-                    "I could not attach the file, but the summary is still visible here.",
-                );
-                let _ = component
-                    .edit_response(
-                        &ctx.http,
-                        EditInteractionResponse::new().content(note).embed(embed),
-                    )
-                    .await;
+                self.respond_with_private_document(
+                    ctx,
+                    component,
+                    &meeting,
+                    PrivateMeetingDocument {
+                        action: MeetingAction::Summary,
+                        locale,
+                        embed,
+                        visible,
+                        download: document,
+                    },
+                )
+                .await;
             }
             MeetingAction::Transcript => {
-                let Some(document) = transcript_document(&meeting, locale) else {
+                let (Some(visible), Some(document)) = (
+                    visible_transcript_document(&meeting, locale),
+                    transcript_document(&meeting, locale),
+                ) else {
                     let message = locale.text(
                         "Esta reunión todavía no tiene texto transcrito.",
                         "This meeting does not have transcribed text yet.",
@@ -1411,54 +1700,19 @@ impl Handler {
                     return;
                 };
                 let embed = private_transcript_embed(&meeting, locale);
-                let fits = document.len() <= component.attachment_size_limit as usize;
-                if fits {
-                    let response = EditInteractionResponse::new()
-                        .embed(embed.clone())
-                        .new_attachment(document_attachment(
-                            &meeting,
-                            MeetingAction::Transcript,
-                            locale,
-                            document.clone(),
-                        ));
-                    if component.edit_response(&ctx.http, response).await.is_ok() {
-                        return;
-                    }
-                    tracing::warn!(
-                        meeting_id = %meeting.meta.id,
-                        "Discord no permitió adjuntar la transcripción; usando mensajes privados"
-                    );
-                }
-
-                let mut chunks = split_message(&document, 1_900).into_iter();
-                let Some(first) = chunks.next() else {
-                    return;
-                };
-                if component
-                    .edit_response(
-                        &ctx.http,
-                        EditInteractionResponse::new().content(first).embed(embed),
-                    )
-                    .await
-                    .is_err()
-                {
-                    return;
-                }
-                for chunk in chunks {
-                    if component
-                        .create_followup(
-                            &ctx.http,
-                            CreateInteractionResponseFollowup::new()
-                                .content(chunk)
-                                .allowed_mentions(CreateAllowedMentions::new())
-                                .ephemeral(true),
-                        )
-                        .await
-                        .is_err()
-                    {
-                        break;
-                    }
-                }
+                self.respond_with_private_document(
+                    ctx,
+                    component,
+                    &meeting,
+                    PrivateMeetingDocument {
+                        action: MeetingAction::Transcript,
+                        locale,
+                        embed,
+                        visible,
+                        download: document,
+                    },
+                )
+                .await;
             }
         }
     }
@@ -1758,6 +2012,19 @@ impl DiscordHandle {
         meeting: &Meeting,
         language: &str,
     ) -> Result<DiscordSummaryDelivery, serenity::Error> {
+        self.sync_summary_state(delivery, meeting, language, DiscordSummaryState::Ready)
+            .await
+    }
+
+    /// Uses the same Discord message while a summary moves from preparation to
+    /// its final or actionable error state.
+    pub async fn sync_summary_state(
+        &self,
+        delivery: DiscordSummaryDelivery,
+        meeting: &Meeting,
+        language: &str,
+        state: DiscordSummaryState,
+    ) -> Result<DiscordSummaryDelivery, serenity::Error> {
         let locale = DiscordLocale::from_summary_language(language);
         let channel_id = ChannelId::new(delivery.channel_id);
 
@@ -1767,7 +2034,7 @@ impl DiscordHandle {
                 .edit_message(
                     &self.http,
                     message_id,
-                    completion_edit_message(meeting, locale),
+                    summary_state_edit_message(meeting, locale, state),
                 )
                 .await
                 .is_ok()
@@ -1784,7 +2051,7 @@ impl DiscordHandle {
                 .edit_message(
                     &self.http,
                     message_id,
-                    fallback_completion_edit_message(meeting, locale),
+                    fallback_summary_state_edit_message(meeting, locale, state),
                 )
                 .await
                 .is_ok()
@@ -1800,7 +2067,7 @@ impl DiscordHandle {
         }
 
         let message = match channel_id
-            .send_message(&self.http, completion_message(meeting, locale))
+            .send_message(&self.http, summary_state_message(meeting, locale, state))
             .await
         {
             Ok(message) => message,
@@ -1811,7 +2078,10 @@ impl DiscordHandle {
                     "Discord rechazó la tarjeta enriquecida; usando la versión compacta"
                 );
                 channel_id
-                    .send_message(&self.http, fallback_completion_message(meeting, locale))
+                    .send_message(
+                        &self.http,
+                        fallback_summary_state_message(meeting, locale, state),
+                    )
                     .await?
             }
         };
@@ -2245,9 +2515,10 @@ mod tests {
             2
         );
 
-        let rich_edit = serde_json::to_value(completion_edit_message(
+        let rich_edit = serde_json::to_value(summary_state_edit_message(
             &completed_meeting(),
             DiscordLocale::Spanish,
+            DiscordSummaryState::Ready,
         ))
         .unwrap();
         assert_eq!(rich_edit["content"], "");
@@ -2260,9 +2531,10 @@ mod tests {
             2
         );
 
-        let fallback_edit = serde_json::to_value(fallback_completion_edit_message(
+        let fallback_edit = serde_json::to_value(fallback_summary_state_edit_message(
             &completed_meeting(),
             DiscordLocale::Spanish,
+            DiscordSummaryState::Ready,
         ))
         .unwrap();
         assert!(fallback_edit["embeds"].as_array().unwrap().is_empty());
@@ -2273,7 +2545,7 @@ mod tests {
     }
 
     #[test]
-    fn public_tasks_and_private_summary_stay_inside_discord_embed_limits() {
+    fn public_tasks_and_private_headers_stay_inside_discord_embed_limits() {
         let mut meeting = completed_meeting();
         let summary = meeting.summary.as_mut().unwrap();
         summary.overview = "Descripción larga ".repeat(600);
@@ -2293,20 +2565,24 @@ mod tests {
             })
             .collect();
 
-        for embed in [
-            completion_embed(&meeting, DiscordLocale::Spanish),
-            private_summary_embed(&meeting, DiscordLocale::Spanish).unwrap(),
-        ] {
-            let embed = serde_json::to_value(embed).unwrap();
-            assert!(embed_text_length(&embed) <= 6_000);
-            for field in embed["fields"].as_array().unwrap() {
-                assert!(char_count(field["name"].as_str().unwrap()) <= 256);
-                assert!(char_count(field["value"].as_str().unwrap()) <= EMBED_FIELD_LIMIT);
-            }
-        }
         let public =
             serde_json::to_value(completion_embed(&meeting, DiscordLocale::Spanish)).unwrap();
+        assert!(embed_text_length(&public) <= 6_000);
+        for field in public["fields"].as_array().unwrap() {
+            assert!(char_count(field["name"].as_str().unwrap()) <= 256);
+            assert!(char_count(field["value"].as_str().unwrap()) <= EMBED_FIELD_LIMIT);
+        }
         assert!(public.to_string().contains("más en el resumen"));
+
+        let private =
+            serde_json::to_value(private_summary_embed(&meeting, DiscordLocale::Spanish).unwrap())
+                .unwrap();
+        assert!(embed_text_length(&private) <= 6_000);
+
+        let visible = visible_summary_document(&meeting, DiscordLocale::Spanish).unwrap();
+        assert!(visible.contains("Punto clave 39"));
+        assert!(visible.contains("Tarea 29"));
+        assert!(visible.contains("Pregunta"));
     }
 
     #[test]
@@ -2328,10 +2604,67 @@ mod tests {
             .trim_end()
             .ends_with("ID de reunión: meeting-123"));
 
+        let visible_summary = visible_summary_document(&meeting, DiscordLocale::Spanish).unwrap();
+        assert!(visible_summary.contains("### Resumen"));
+        assert!(visible_summary.contains("### Puntos clave"));
+        assert!(visible_summary.contains("### Decisiones"));
+        assert!(visible_summary.contains("### Tareas pendientes"));
+        assert!(visible_summary.contains("### Preguntas abiertas"));
+        assert!(visible_summary.contains("Preparar la publicación"));
+        assert!(!visible_summary.contains("meeting-123"));
+
+        let visible_transcript =
+            visible_transcript_document(&meeting, DiscordLocale::Spanish).unwrap();
+        assert!(visible_transcript.contains("**00:05 · Ana**"));
+        assert!(visible_transcript.contains("> Publicamos el viernes"));
+        assert!(!visible_transcript.contains("meeting-123"));
+
         let public =
             serde_json::to_string(&completion_embed(&meeting, DiscordLocale::Spanish)).unwrap();
         assert!(!public.contains("ID de reunión"));
         assert!(!public.contains("meeting-123"));
+    }
+
+    #[test]
+    fn one_public_card_moves_from_progress_to_success_or_actionable_failure() {
+        let meeting = completed_meeting();
+        let preparing = serde_json::to_value(summary_state_message(
+            &meeting,
+            DiscordLocale::Spanish,
+            DiscordSummaryState::Preparing,
+        ))
+        .unwrap();
+        assert!(preparing["embeds"][0]
+            .to_string()
+            .contains("Este mismo mensaje se actualizará"));
+        let preparing_buttons = preparing["components"][0]["components"].as_array().unwrap();
+        assert_eq!(preparing_buttons.len(), 1);
+        assert_eq!(preparing_buttons[0]["label"], "Ver transcripción");
+
+        let failed = serde_json::to_value(summary_state_edit_message(
+            &meeting,
+            DiscordLocale::Spanish,
+            DiscordSummaryState::Failed,
+        ))
+        .unwrap();
+        assert!(failed["embeds"][0]
+            .to_string()
+            .contains("después de tres intentos"));
+        assert_eq!(
+            failed["components"][0]["components"]
+                .as_array()
+                .unwrap()
+                .len(),
+            1
+        );
+
+        let attention = serde_json::to_value(summary_state_edit_message(
+            &meeting,
+            DiscordLocale::Spanish,
+            DiscordSummaryState::AttentionRequired,
+        ))
+        .unwrap();
+        assert!(attention["embeds"][0].to_string().contains("credenciales"));
     }
 
     #[test]

@@ -88,7 +88,9 @@ Kuali never captures its own announcement.
 After a meeting, Kuali can publish a compact Discord card with its action items,
 duration, participant count, and private buttons for the complete summary and
 transcript. Each private view includes a downloadable text file, keeping the
-channel readable without hiding the full meeting record.
+channel readable without hiding the full meeting record. The card appears while
+the summary is being prepared, then updates in place; private views render every
+section and transcript turn in Discord as well as offering the download.
 
 ### Browser meetings
 

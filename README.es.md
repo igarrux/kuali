@@ -90,7 +90,9 @@ Kuali nunca transcribe su propio aviso.
 Al terminar una reunión, Kuali puede publicar una tarjeta compacta en Discord
 con las tareas, la duración, el número de participantes y botones privados para
 abrir el resumen o la transcripción completa. Cada vista privada incluye un
-archivo de texto descargable, sin llenar el canal con un bloque enorme.
+archivo de texto descargable, sin llenar el canal con un bloque enorme. La
+tarjeta aparece mientras se prepara el resumen y luego se actualiza en el mismo
+lugar; las vistas privadas también muestran cada sección e intervención completa.
 
 ### Reuniones del navegador
 
