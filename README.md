@@ -185,6 +185,18 @@ refreshing the attempt timestamp.
 
 ## Development
 
+Install [`just`](https://just.systems/) and [`fzf`](https://junegunn.github.io/fzf/)
+to use the versioned project command menu:
+
+```sh
+brew install just fzf
+just
+```
+
+Choose a recipe and press Enter, or run one directly—for example,
+`just dev`, `just test`, or `just check`. Use `just --list` to inspect every
+available recipe and its description. The underlying commands remain:
+
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings

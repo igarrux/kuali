@@ -191,6 +191,18 @@ el identificador de entrega y renovando el timestamp de cada intento.
 
 ## Desarrollo
 
+Instala [`just`](https://just.systems/) y [`fzf`](https://junegunn.github.io/fzf/)
+para usar el menú de comandos versionado con el proyecto:
+
+```sh
+brew install just fzf
+just
+```
+
+Elige una receta y presiona Enter, o ejecuta una directamente; por ejemplo,
+`just dev`, `just test` o `just check`. Usa `just --list` para consultar todas
+las recetas y sus descripciones. Los comandos subyacentes siguen siendo:
+
 ```sh
 cargo fmt --all --check
 cargo clippy --workspace --all-targets -- -D warnings
