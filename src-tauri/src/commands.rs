@@ -463,6 +463,16 @@ pub fn open_setup_destination(app: tauri::AppHandle, destination: String) -> Res
     app.opener().open_url(url, None::<&str>).map_err(fail)
 }
 
+/// Validates the bot token and opens Discord's official server authorization.
+#[tauri::command]
+pub async fn open_discord_install(app: tauri::AppHandle, bot_token: String) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+    let url = kuali_discord::installation_url(&bot_token)
+        .await
+        .map_err(fail)?;
+    app.opener().open_url(url, None::<&str>).map_err(fail)
+}
+
 const CHROME_WEB_STORE_URL: &str =
     "https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp";
 

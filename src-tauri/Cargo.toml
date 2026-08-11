@@ -15,6 +15,7 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 kuali-core.workspace = true
+kuali-discord.workspace = true
 kuali-engine.workspace = true
 kuali-llm.workspace = true
 kuali-stt.workspace = true
