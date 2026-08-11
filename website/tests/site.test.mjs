@@ -162,6 +162,17 @@ test("platform support is explicit in both languages", () => {
   assert.match(spanishGuide, /Google Meet es estable[\s\S]*Microsoft Teams y Zoom son experimentales/);
 });
 
+test("only experimental platform dots use the orange status color", () => {
+  const styles = read("assets/site.css");
+
+  assert.match(styles, /--experimental: #f59e0b/);
+  assert.match(styles, /\.platform-badge\.experimental i \{[\s\S]*?background: var\(--experimental\)/);
+  assert.doesNotMatch(styles, /\.platform-badge\.experimental small/);
+  for (const page of pages) {
+    assert.match(read(page), /site\.css\?v=20260811/);
+  }
+});
+
 test("deployment metadata and security policy are present", () => {
   assert.ok(existsSync(join(websiteRoot, ".nojekyll")));
   assert.doesNotThrow(() => JSON.parse(read("site.webmanifest")));

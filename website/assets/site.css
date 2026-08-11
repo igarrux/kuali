@@ -17,6 +17,7 @@
   --violet: #aaa7ff;
   --violet-soft: rgba(170, 167, 255, 0.13);
   --warning: #eabf74;
+  --experimental: #f59e0b;
   --danger: #ff8990;
   --shadow: 0 30px 100px rgba(0, 0, 0, 0.44);
   --shadow-soft: 0 16px 44px rgba(0, 0, 0, 0.28);
@@ -872,11 +873,8 @@ kbd {
 }
 
 .platform-badge.experimental i {
-  background: var(--warning);
-}
-
-.platform-badge.experimental small {
-  color: var(--warning);
+  background: var(--experimental);
+  box-shadow: 0 0 8px rgba(245, 158, 11, 0.35);
 }
 
 .bento {
