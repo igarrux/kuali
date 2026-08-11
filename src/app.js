@@ -2207,6 +2207,8 @@ function renderDiscordGuideStep({ focus = false } = {}) {
   const next = $("btn-discord-guide-next");
   back.disabled = step === 0;
   const discordReady = Boolean(state.config?.discord?.["bot-token"]);
+  $("btn-open-discord-install").hidden = discordReady;
+  $("btn-save-discord-guide").hidden = discordReady;
   if (step === lastStep && !discordReady) {
     next.disabled = true;
     next.textContent = t("Conecta el bot primero");
@@ -2329,6 +2331,10 @@ async function renderGuide() {
       ? t("Bot configurado")
       : t("Sin configurar");
   $("guide-discord-state").classList.toggle("ready", discordReady);
+  $("guide-discord-note").textContent = discordReady
+    ? t("Discord está conectado. Ya puedes terminar la guía.")
+    : t("Después podrás cambiar el token o el usuario en Ajustes → Discord.");
+  $("guide-discord-note").classList.toggle("guide-success-note", discordReady);
   $("guide-token").value = state.config?.discord?.["bot-token"] ?? "";
   $("guide-discord-username").value = state.config?.discord?.["follow-username"] ?? "";
   renderDiscordGuideStep();

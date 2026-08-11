@@ -200,3 +200,12 @@ test("Discord onboarding opens an exact authorization flow in three steps", () =
   assert.match(commands, /async fn open_discord_install/);
   assert.match(installation, /oauth2\/applications\/@me/);
 });
+
+test("Discord authorization actions disappear after the bot connects", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+
+  assert.match(app, /\$\("btn-open-discord-install"\)\.hidden = discordReady/);
+  assert.match(app, /\$\("btn-save-discord-guide"\)\.hidden = discordReady/);
+  assert.match(app, /Discord está conectado\. Ya puedes terminar la guía\./);
+  assert.match(app, /classList\.toggle\("guide-success-note", discordReady\)/);
+});

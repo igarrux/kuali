@@ -155,6 +155,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "no el nombre visible del perfil.": "not the visible profile name.",
   "Después podrás cambiar el token o el usuario en Ajustes → Discord.":
     "You can change the token or username later in Settings → Discord.",
+  "Discord está conectado. Ya puedes terminar la guía.":
+    "Discord is connected. You can now finish the guide.",
   "Invita a Kuali al canal de voz en el que estás, aunque el seguimiento esté apagado.":
     "Invite Kuali to your current voice channel even when automatic following is off.",
   "Ver transcripción completa": "View full transcript",
