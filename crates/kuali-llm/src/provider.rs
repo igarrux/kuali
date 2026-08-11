@@ -32,6 +32,78 @@ pub enum LlmError {
     },
 }
 
+/// High-level recovery path for a failed summary request.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LlmFailureKind {
+    /// No provider can be selected, so Kuali should remain silent externally.
+    MissingConfiguration,
+    /// Credentials, quota, model selection, or context limits need a person.
+    AttentionRequired,
+    /// A malformed response or transient provider failure may succeed on retry.
+    Retryable,
+}
+
+impl LlmError {
+    pub fn failure_kind(&self) -> LlmFailureKind {
+        match self {
+            Self::NoProvider | Self::Unavailable(_) => LlmFailureKind::MissingConfiguration,
+            Self::Spawn { .. } => LlmFailureKind::AttentionRequired,
+            Self::Provider { message, .. } if provider_message_needs_attention(message) => {
+                LlmFailureKind::AttentionRequired
+            }
+            Self::Provider { .. }
+            | Self::BadJson { .. }
+            | Self::Refused { .. }
+            | Self::Http { .. } => LlmFailureKind::Retryable,
+        }
+    }
+}
+
+fn provider_message_needs_attention(message: &str) -> bool {
+    let message = message.to_lowercase();
+    [
+        "http 401",
+        "http 402",
+        "http 403",
+        "http 404",
+        "http 429",
+        "unauthorized",
+        "forbidden",
+        "permission_denied",
+        "authentication",
+        "api key",
+        "api_key",
+        "invalid_api_key",
+        "not logged",
+        "log in",
+        "please login",
+        "please run /login",
+        "login required",
+        "quota",
+        "resource_exhausted",
+        "rate limit",
+        "rate_limit",
+        "usage limit",
+        "billing",
+        "credit balance",
+        "not enough credits",
+        "insufficient credits",
+        "insufficient_quota",
+        "context length",
+        "context window",
+        "maximum context",
+        "prompt is too long",
+        "input is too long",
+        "too many tokens",
+        "token limit",
+        "max_tokens",
+        "model not found",
+        "does not exist",
+    ]
+    .iter()
+    .any(|needle| message.contains(needle))
+}
+
 /// Model request. Providers that enforce structured output use `json_schema`;
 /// others receive prompt instructions and are validated during parsing.
 #[derive(Debug, Clone)]
@@ -118,4 +190,63 @@ pub trait LlmProvider: Send + Sync {
     async fn is_available(&self) -> bool;
 
     async fn complete(&self, request: &CompletionRequest) -> Result<String, LlmError>;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn missing_providers_do_not_create_external_failure_messages() {
+        assert_eq!(
+            LlmError::NoProvider.failure_kind(),
+            LlmFailureKind::MissingConfiguration
+        );
+        assert_eq!(
+            LlmError::Unavailable("claude-cli".into()).failure_kind(),
+            LlmFailureKind::MissingConfiguration
+        );
+    }
+
+    #[test]
+    fn quota_authentication_and_context_errors_require_attention() {
+        for message in [
+            "HTTP 429: rate_limit_exceeded",
+            "HTTP 401: invalid API key",
+            "credit balance is too low",
+            "maximum context length exceeded",
+            "RESOURCE_EXHAUSTED: quota exceeded",
+            "model not found",
+        ] {
+            assert_eq!(
+                LlmError::Provider {
+                    provider: "test".into(),
+                    message: message.into(),
+                }
+                .failure_kind(),
+                LlmFailureKind::AttentionRequired,
+                "{message}"
+            );
+        }
+    }
+
+    #[test]
+    fn invalid_output_and_transient_provider_errors_can_be_retried() {
+        assert_eq!(
+            LlmError::BadJson {
+                provider: "test".into(),
+                message: "missing object".into(),
+            }
+            .failure_kind(),
+            LlmFailureKind::Retryable
+        );
+        assert_eq!(
+            LlmError::Provider {
+                provider: "test".into(),
+                message: "temporary backend failure".into(),
+            }
+            .failure_kind(),
+            LlmFailureKind::Retryable
+        );
+    }
 }

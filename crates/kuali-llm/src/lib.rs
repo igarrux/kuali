@@ -22,6 +22,7 @@ pub use detect::{
 };
 pub use models::{list_models, ModelChoice};
 pub use provider::{
-    CompletionRequest, LlmError, LlmProvider, ProviderInfo, ProviderKind, ProviderStatus,
+    CompletionRequest, LlmError, LlmFailureKind, LlmProvider, ProviderInfo, ProviderKind,
+    ProviderStatus,
 };
 pub use summarize::{parse_summary, summarize, system_prompt, user_prompt};
