@@ -4,9 +4,10 @@
 //! selfbot violates Discord's terms and is intentionally unsupported. Kuali can
 //! therefore follow users only in guilds where an authorized person invited it.
 
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use kuali_core::{
     format_timestamp, ActionItem, DiscordConfig, DiscordSummaryDelivery, Meeting, MeetingSummary,
@@ -59,6 +60,7 @@ const DISCORD_COMPONENTS_V2_FLAG: u32 = 1 << 15;
 const PUBLIC_TASK_LIMIT: usize = 6;
 const RECORD_COMMAND_ES: &str = "grabar";
 const RECORD_COMMAND_EN: &str = "record";
+const INTERACTION_TOKEN_LIFETIME: Duration = Duration::from_secs(15 * 60);
 static NEXT_VOICE_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 
 fn send_session(tx: &UnboundedSender<VoiceEvent>, session_id: VoiceSessionId, event: VoiceEvent) {
@@ -1408,6 +1410,36 @@ struct Handler {
     consent_audio: Arc<[u8]>,
     audit: Arc<AuditLog>,
     recovery_tx: UnboundedSender<ReceiveRecoveryRequest>,
+    private_views: RwLock<PrivateViewRegistry>,
+}
+
+#[derive(Debug)]
+struct PrivateViewResponse {
+    token: String,
+    created_at: Instant,
+}
+
+#[derive(Debug, Default)]
+struct PrivateViewRegistry {
+    by_user: HashMap<UserId, PrivateViewResponse>,
+}
+
+impl PrivateViewRegistry {
+    fn replace(&mut self, user_id: UserId, token: String) -> Option<String> {
+        let now = Instant::now();
+        self.by_user.retain(|_, response| {
+            now.duration_since(response.created_at) < INTERACTION_TOKEN_LIFETIME
+        });
+        self.by_user
+            .insert(
+                user_id,
+                PrivateViewResponse {
+                    token,
+                    created_at: now,
+                },
+            )
+            .map(|response| response.token)
+    }
 }
 
 struct PrivateMeetingDocument {
@@ -1451,6 +1483,24 @@ fn private_meeting_document(
 }
 
 impl Handler {
+    async fn replace_private_view(&self, ctx: &Context, component: &ComponentInteraction) {
+        let previous_token = self
+            .private_views
+            .write()
+            .replace(component.user.id, component.token.clone());
+        let Some(previous_token) = previous_token.filter(|token| token != &component.token) else {
+            return;
+        };
+
+        if let Err(error) = ctx
+            .http
+            .delete_original_interaction_response(&previous_token)
+            .await
+        {
+            tracing::debug!(%error, "la vista privada anterior ya no estaba disponible");
+        }
+    }
+
     fn follow_user(&self) -> Option<UserId> {
         self.config
             .read()
@@ -2103,6 +2153,9 @@ impl Handler {
         {
             return;
         }
+        if !update_existing {
+            self.replace_private_view(ctx, component).await;
+        }
 
         let meeting = match self.request_meeting(meeting_id, guild_id).await {
             Ok(meeting) => meeting,
@@ -2699,6 +2752,7 @@ pub async fn start(
         consent_audio,
         audit,
         recovery_tx,
+        private_views: RwLock::new(PrivateViewRegistry::default()),
     };
 
     // GUILD_VOICE_STATES exposes channel joins, while GUILDS maintains guild and
@@ -2950,6 +3004,24 @@ mod tests {
                 .collect::<std::collections::HashSet<_>>();
             assert_eq!(ids.len(), buttons.len());
         }
+    }
+
+    #[test]
+    fn a_new_private_view_replaces_only_that_users_previous_view() {
+        let mut views = PrivateViewRegistry::default();
+        let first_user = UserId::new(10);
+        let second_user = UserId::new(20);
+
+        assert_eq!(views.replace(first_user, "first-summary".into()), None);
+        assert_eq!(views.replace(second_user, "second-summary".into()), None);
+        assert_eq!(
+            views.replace(first_user, "first-transcript".into()),
+            Some("first-summary".into())
+        );
+        assert_eq!(
+            views.replace(second_user, "second-decisions".into()),
+            Some("second-summary".into())
+        );
     }
 
     #[test]
