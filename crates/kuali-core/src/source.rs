@@ -10,7 +10,7 @@
 
 use tokio::sync::oneshot;
 
-use crate::meeting::{DiscordUserId, Speaker};
+use crate::meeting::{DiscordUserId, Meeting, Speaker};
 
 /// Identifies one connection within a source. It is internal so concurrent tabs
 /// or Discord sessions never share clocks, segmenters, or meeting shutdown.
@@ -65,12 +65,12 @@ pub enum VoiceEvent {
         user_id: DiscordUserId,
         speaking: bool,
     },
-    /// The full-transcript action resolves through the engine so it can include
-    /// live meetings and prevent cross-server access.
-    TranscriptRequested {
+    /// Discord actions resolve through the engine so they can include live
+    /// meetings and cannot read data belonging to another server.
+    MeetingRequested {
         meeting_id: String,
         guild_id: u64,
-        reply: oneshot::Sender<Result<String, String>>,
+        reply: oneshot::Sender<Result<Meeting, String>>,
     },
     /// The bot resolved the configured @username. The engine persists its exact
     /// ID and updates following immediately.

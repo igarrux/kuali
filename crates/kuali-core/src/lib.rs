@@ -20,7 +20,7 @@ pub use config::{
 };
 pub use event::{EngineStatus, KualiEvent, ModelState};
 pub use meeting::{
-    color_for, format_timestamp, ActionItem, DiscordUserId, Meeting, MeetingMeta, MeetingSummary,
-    Speaker, SpeakerId, Utterance,
+    color_for, format_timestamp, ActionItem, DiscordSummaryDelivery, DiscordUserId, Meeting,
+    MeetingMeta, MeetingSummary, Speaker, SpeakerId, Utterance,
 };
 pub use source::{CallInfo, VoiceEvent, VoiceSessionId};
