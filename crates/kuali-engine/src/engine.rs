@@ -10,8 +10,8 @@ use std::time::Duration;
 
 use chrono::Utc;
 use kuali_core::{
-    DiscordUserId, EngineStatus, KualiConfig, KualiEvent, Meeting, MeetingMeta, MeetingSummary,
-    ModelState, Utterance, VoiceSessionId, WhisperModel,
+    DiscordSummaryDelivery, DiscordUserId, EngineStatus, KualiConfig, KualiEvent, Meeting,
+    MeetingMeta, MeetingSummary, ModelState, Utterance, VoiceSessionId, WhisperModel,
 };
 use kuali_discord::{CallInfo, DiscordHandle, VoiceEvent};
 use kuali_stt::{i16_to_f32, Segment, Segmenter};
@@ -703,11 +703,16 @@ impl Engine {
 
     /// Requests another LLM summary after changing providers or receiving a weak result.
     pub async fn resummarize(&self, meeting_id: &str) -> Result<MeetingSummary, EngineError> {
-        if !self.inner.config.read().llm.summarize_on_leave {
+        let config = self.inner.config.read().clone();
+        if !config.llm.summarize_on_leave {
             return Err(EngineError::SummariesDisabled);
         }
         let mut meeting = self.load_meeting(meeting_id)?;
         let summary = summarize(&self.inner, &mut meeting).await?;
+        if config.discord.post_summary_to_channel {
+            prepare_discord_summary_delivery(&mut meeting, 0);
+            sync_discord_summary(&self.inner, &mut meeting, &config.llm.output_language).await;
+        }
         Ok(summary)
     }
 
@@ -1087,7 +1092,8 @@ async fn start_meeting(
     }
     inner.set_model_state(ModelState::Active);
 
-    let meeting = Meeting::new(meta.clone());
+    let mut meeting = Meeting::new(meta.clone());
+    prepare_discord_summary_delivery(&mut meeting, info.text_channel_id);
     if let Err(e) = kuali_store::save(&meeting) {
         inner.emit(KualiEvent::error("store", e));
     }
@@ -1199,11 +1205,14 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
                 match summarize(&inner, &mut active.meeting).await {
                     Ok(summary) => {
                         // Only Discord meetings have a channel for publishing results.
-                        if config.discord.post_summary_to_channel && active.text_channel_id != 0 {
-                            post_summary(
-                                &inner,
+                        if config.discord.post_summary_to_channel {
+                            prepare_discord_summary_delivery(
+                                &mut active.meeting,
                                 active.text_channel_id,
-                                &active.meeting,
+                            );
+                            sync_discord_summary(
+                                &inner,
+                                &mut active.meeting,
                                 &config.llm.output_language,
                             )
                             .await;
@@ -1556,11 +1565,50 @@ async fn summarize(
     Ok(summary)
 }
 
-async fn post_summary(inner: &Arc<Inner>, channel_id: u64, meeting: &Meeting, language: &str) {
+fn prepare_discord_summary_delivery(meeting: &mut Meeting, text_channel_id: u64) {
+    if meeting.discord_summary_delivery.is_some() {
+        return;
+    }
+
+    let channel_id = if text_channel_id != 0 {
+        Some(text_channel_id)
+    } else if !matches!(
+        meeting.meta.guild_name.as_str(),
+        "Google Meet" | "Microsoft Teams" | "Zoom" | "Reunión web"
+    ) && meeting.meta.guild_id != 0
+        && meeting.meta.channel_id != 0
+    {
+        // Meetings saved before delivery references existed still use their
+        // Discord voice channel as the integrated text destination.
+        Some(meeting.meta.channel_id)
+    } else {
+        None
+    };
+
+    if let Some(channel_id) = channel_id {
+        meeting.discord_summary_delivery = Some(DiscordSummaryDelivery::pending(channel_id));
+    }
+}
+
+async fn sync_discord_summary(inner: &Arc<Inner>, meeting: &mut Meeting, language: &str) {
+    let Some(delivery) = meeting.discord_summary_delivery else {
+        return;
+    };
+    // Persist the pending channel before touching Discord. If the bot is
+    // offline, a later regeneration can still retry the same destination.
+    if let Err(error) = kuali_store::save(meeting) {
+        inner.emit(KualiEvent::error("store", error));
+    }
     let discord = inner.discord.lock().await;
     if let Some(handle) = discord.as_ref() {
-        if let Err(e) = handle.post_summary(channel_id, meeting, language).await {
-            inner.emit(KualiEvent::error("discord", e));
+        match handle.sync_summary(delivery, meeting, language).await {
+            Ok(delivery) => {
+                meeting.discord_summary_delivery = Some(delivery);
+                if let Err(error) = kuali_store::save(meeting) {
+                    inner.emit(KualiEvent::error("store", error));
+                }
+            }
+            Err(error) => inner.emit(KualiEvent::error("discord", error)),
         }
     }
 }
@@ -1761,6 +1809,36 @@ mod tests {
             &original,
             &another_directory
         ));
+    }
+
+    #[test]
+    fn discord_summary_delivery_reuses_saved_messages_and_recovers_legacy_channels() {
+        let mut discord = active_meeting("discord-delivery", 0).meeting;
+        prepare_discord_summary_delivery(&mut discord, 42);
+        assert_eq!(
+            discord.discord_summary_delivery,
+            Some(DiscordSummaryDelivery::pending(42))
+        );
+
+        discord.discord_summary_delivery = Some(DiscordSummaryDelivery::delivered(42, 99));
+        prepare_discord_summary_delivery(&mut discord, 77);
+        assert_eq!(
+            discord.discord_summary_delivery,
+            Some(DiscordSummaryDelivery::delivered(42, 99)),
+            "a regenerated summary must keep editing the original card"
+        );
+
+        let mut legacy = active_meeting("legacy-discord", 0).meeting;
+        prepare_discord_summary_delivery(&mut legacy, 0);
+        assert_eq!(
+            legacy.discord_summary_delivery,
+            Some(DiscordSummaryDelivery::pending(legacy.meta.channel_id))
+        );
+
+        let mut meet = active_meeting("browser-meeting", 0).meeting;
+        meet.meta.guild_name = "Google Meet".into();
+        prepare_discord_summary_delivery(&mut meet, 0);
+        assert_eq!(meet.discord_summary_delivery, None);
     }
 
     #[tokio::test]

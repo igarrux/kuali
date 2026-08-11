@@ -113,6 +113,42 @@ pub struct MeetingSummary {
     pub generated_by: String,
 }
 
+/// Location of Kuali's compact meeting card in Discord.
+///
+/// Keeping the channel before the first successful delivery lets a regenerated
+/// summary retry publication. Once Discord accepts a message, its ID turns
+/// later regenerations into edits instead of duplicate channel posts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DiscordSummaryDelivery {
+    /// Discord snowflakes cross JSON as strings so JavaScript cannot truncate
+    /// them before a meeting is saved again by the desktop interface.
+    #[serde(with = "snowflake_string")]
+    pub channel_id: u64,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        with = "snowflake_string::option"
+    )]
+    pub message_id: Option<u64>,
+}
+
+impl DiscordSummaryDelivery {
+    pub fn pending(channel_id: u64) -> Self {
+        Self {
+            channel_id,
+            message_id: None,
+        }
+    }
+
+    pub fn delivered(channel_id: u64, message_id: u64) -> Self {
+        Self {
+            channel_id,
+            message_id: Some(message_id),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeetingMeta {
@@ -155,6 +191,8 @@ pub struct Meeting {
     pub utterances: Vec<Utterance>,
     #[serde(default)]
     pub summary: Option<MeetingSummary>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub discord_summary_delivery: Option<DiscordSummaryDelivery>,
 }
 
 impl Meeting {
@@ -164,6 +202,7 @@ impl Meeting {
             speakers: Vec::new(),
             utterances: Vec::new(),
             summary: None,
+            discord_summary_delivery: None,
         }
     }
 
@@ -268,6 +307,66 @@ impl Meeting {
     }
 }
 
+mod snowflake_string {
+    use serde::{de::Error, Deserialize, Deserializer, Serializer};
+
+    #[derive(Deserialize)]
+    #[serde(untagged)]
+    enum StringOrInteger {
+        String(String),
+        Unsigned(u64),
+        Signed(i64),
+    }
+
+    pub fn serialize<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        serializer.serialize_str(&value.to_string())
+    }
+
+    pub fn deserialize<'de, D>(deserializer: D) -> Result<u64, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        match StringOrInteger::deserialize(deserializer)? {
+            StringOrInteger::String(value) => value.parse().map_err(D::Error::custom),
+            StringOrInteger::Unsigned(value) => Ok(value),
+            StringOrInteger::Signed(value) => u64::try_from(value).map_err(D::Error::custom),
+        }
+    }
+
+    pub mod option {
+        use super::StringOrInteger;
+        use serde::{de::Error, Deserialize, Deserializer, Serializer};
+
+        pub fn serialize<S>(value: &Option<u64>, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: Serializer,
+        {
+            match value {
+                Some(value) => serializer.serialize_some(&value.to_string()),
+                None => serializer.serialize_none(),
+            }
+        }
+
+        pub fn deserialize<'de, D>(deserializer: D) -> Result<Option<u64>, D::Error>
+        where
+            D: Deserializer<'de>,
+        {
+            Option::<StringOrInteger>::deserialize(deserializer)?
+                .map(|value| match value {
+                    StringOrInteger::String(value) => value.parse().map_err(D::Error::custom),
+                    StringOrInteger::Unsigned(value) => Ok(value),
+                    StringOrInteger::Signed(value) => {
+                        u64::try_from(value).map_err(D::Error::custom)
+                    }
+                })
+                .transpose()
+        }
+    }
+}
+
 fn push_turn(out: &mut String, name: &str, start_ms: u64, text: &str) {
     if text.is_empty() {
         return;
@@ -336,6 +435,31 @@ mod tests {
             });
         }
         m
+    }
+
+    #[test]
+    fn discord_delivery_snowflakes_cross_json_without_javascript_truncation() {
+        let mut meeting = meeting_with(Vec::new());
+        meeting.discord_summary_delivery = Some(DiscordSummaryDelivery::delivered(
+            543_321_203_243_483_137,
+            643_321_203_243_483_149,
+        ));
+
+        let json = serde_json::to_value(&meeting).unwrap();
+        assert_eq!(
+            json["discordSummaryDelivery"]["channelId"],
+            "543321203243483137"
+        );
+        assert_eq!(
+            json["discordSummaryDelivery"]["messageId"],
+            "643321203243483149"
+        );
+
+        let restored: Meeting = serde_json::from_value(json).unwrap();
+        assert_eq!(
+            restored.discord_summary_delivery,
+            meeting.discord_summary_delivery
+        );
     }
 
     #[test]

@@ -9,15 +9,16 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use kuali_core::{
-    format_timestamp, ActionItem, DiscordConfig, Meeting, MeetingSummary, CONSENT_MESSAGE,
+    format_timestamp, ActionItem, DiscordConfig, DiscordSummaryDelivery, Meeting, MeetingSummary,
+    CONSENT_MESSAGE,
 };
 use parking_lot::RwLock;
 use serenity::all::{
     ButtonStyle, ChannelId, ComponentInteraction, Context, CreateAllowedMentions, CreateAttachment,
     CreateButton, CreateCommand, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter,
     CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
-    CreateMessage, EditInteractionResponse, EventHandler, GatewayIntents, Guild, GuildId, Http,
-    Interaction, Permissions, Ready, UserId, VoiceState,
+    CreateMessage, EditInteractionResponse, EditMessage, EventHandler, GatewayIntents, Guild,
+    GuildId, Http, Interaction, MessageId, Permissions, Ready, UserId, VoiceState,
 };
 use serenity::Client;
 use songbird::driver::{Channels, DecodeConfig, DecodeMode, SampleRate};
@@ -427,31 +428,25 @@ fn completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage
         )
 }
 
+fn completion_edit_message(meeting: &Meeting, locale: DiscordLocale) -> EditMessage {
+    EditMessage::new()
+        .content("")
+        .allowed_mentions(CreateAllowedMentions::new())
+        .embed(completion_embed(meeting, locale))
+        .button(
+            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
+                .label(locale.text("Ver resumen", "View summary"))
+                .style(ButtonStyle::Primary),
+        )
+        .button(
+            CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
+                .label(locale.text("Ver transcripción", "View transcript"))
+                .style(ButtonStyle::Secondary),
+        )
+}
+
 fn fallback_completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
-    let tasks = meeting
-        .summary
-        .as_ref()
-        .map(|summary| task_preview(summary, locale))
-        .unwrap_or_else(|| {
-            locale
-                .text("Resumen no disponible.", "Summary unavailable.")
-                .into()
-        });
-    let content = truncate_text(
-        &format!(
-            "**{}**\n-# {} · {} · #{}\n\n**{}**\n{}",
-            meeting.meta.title(),
-            human_duration(meeting.duration_ms(), locale),
-            match locale {
-                DiscordLocale::Spanish => format!("{} participantes", participant_count(meeting)),
-                DiscordLocale::English => format!("{} participants", participant_count(meeting)),
-            },
-            one_line(&meeting.meta.channel_name),
-            locale.text("Tareas pendientes", "Action items"),
-            tasks
-        ),
-        1_900,
-    );
+    let content = fallback_completion_content(meeting, locale);
     CreateMessage::new()
         .content(content)
         .allowed_mentions(CreateAllowedMentions::new())
@@ -465,6 +460,50 @@ fn fallback_completion_message(meeting: &Meeting, locale: DiscordLocale) -> Crea
                 .label(locale.text("Ver transcripción", "View transcript"))
                 .style(ButtonStyle::Secondary),
         )
+}
+
+fn fallback_completion_edit_message(meeting: &Meeting, locale: DiscordLocale) -> EditMessage {
+    EditMessage::new()
+        .content(fallback_completion_content(meeting, locale))
+        .embeds(Vec::new())
+        .allowed_mentions(CreateAllowedMentions::new())
+        .button(
+            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
+                .label(locale.text("Ver resumen", "View summary"))
+                .style(ButtonStyle::Primary),
+        )
+        .button(
+            CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
+                .label(locale.text("Ver transcripción", "View transcript"))
+                .style(ButtonStyle::Secondary),
+        )
+}
+
+fn fallback_completion_content(meeting: &Meeting, locale: DiscordLocale) -> String {
+    let tasks = meeting
+        .summary
+        .as_ref()
+        .map(|summary| task_preview(summary, locale))
+        .unwrap_or_else(|| {
+            locale
+                .text("Resumen no disponible.", "Summary unavailable.")
+                .into()
+        });
+    truncate_text(
+        &format!(
+            "**{}**\n-# {} · {} · #{}\n\n**{}**\n{}",
+            meeting.meta.title(),
+            human_duration(meeting.duration_ms(), locale),
+            match locale {
+                DiscordLocale::Spanish => format!("{} participantes", participant_count(meeting)),
+                DiscordLocale::English => format!("{} participants", participant_count(meeting)),
+            },
+            one_line(&meeting.meta.channel_name),
+            locale.text("Tareas pendientes", "Action items"),
+            tasks
+        ),
+        1_900,
+    )
 }
 
 fn private_summary_embed(meeting: &Meeting, locale: DiscordLocale) -> Option<CreateEmbed> {
@@ -1709,30 +1748,77 @@ impl DiscordHandle {
         *self.config.write() = config;
     }
 
-    /// Publishes a compact meeting card. Complete notes stay behind private
-    /// actions so a busy channel receives tasks rather than a wall of text.
-    pub async fn post_summary(
+    /// Publishes or updates the compact meeting card. Complete notes stay behind
+    /// private actions so a busy channel receives tasks rather than a wall of
+    /// text. A missing or no-longer-editable message is replaced in the same
+    /// channel and the new Discord reference is returned for persistence.
+    pub async fn sync_summary(
         &self,
-        channel_id: u64,
+        delivery: DiscordSummaryDelivery,
         meeting: &Meeting,
         language: &str,
-    ) -> Result<(), serenity::Error> {
+    ) -> Result<DiscordSummaryDelivery, serenity::Error> {
         let locale = DiscordLocale::from_summary_language(language);
-        let channel_id = ChannelId::new(channel_id);
-        if let Err(error) = channel_id
+        let channel_id = ChannelId::new(delivery.channel_id);
+
+        if let Some(message_id) = delivery.message_id {
+            let message_id = MessageId::new(message_id);
+            if channel_id
+                .edit_message(
+                    &self.http,
+                    message_id,
+                    completion_edit_message(meeting, locale),
+                )
+                .await
+                .is_ok()
+            {
+                return Ok(delivery);
+            }
+
+            tracing::warn!(
+                meeting_id = %meeting.meta.id,
+                %message_id,
+                "Discord rechazó la edición enriquecida; probando la tarjeta compacta"
+            );
+            if channel_id
+                .edit_message(
+                    &self.http,
+                    message_id,
+                    fallback_completion_edit_message(meeting, locale),
+                )
+                .await
+                .is_ok()
+            {
+                return Ok(delivery);
+            }
+
+            tracing::warn!(
+                meeting_id = %meeting.meta.id,
+                %message_id,
+                "La tarjeta anterior ya no se puede editar; publicando una nueva"
+            );
+        }
+
+        let message = match channel_id
             .send_message(&self.http, completion_message(meeting, locale))
             .await
         {
-            tracing::warn!(
-                meeting_id = %meeting.meta.id,
-                %error,
-                "Discord rechazó la tarjeta enriquecida; usando la versión compacta"
-            );
-            channel_id
-                .send_message(&self.http, fallback_completion_message(meeting, locale))
-                .await?;
-        }
-        Ok(())
+            Ok(message) => message,
+            Err(error) => {
+                tracing::warn!(
+                    meeting_id = %meeting.meta.id,
+                    %error,
+                    "Discord rechazó la tarjeta enriquecida; usando la versión compacta"
+                );
+                channel_id
+                    .send_message(&self.http, fallback_completion_message(meeting, locale))
+                    .await?
+            }
+        };
+        Ok(DiscordSummaryDelivery::delivered(
+            channel_id.get(),
+            message.id.get(),
+        ))
     }
 
     /// Leaves the current voice channel, if any.
@@ -2158,6 +2244,32 @@ mod tests {
                 .len(),
             2
         );
+
+        let rich_edit = serde_json::to_value(completion_edit_message(
+            &completed_meeting(),
+            DiscordLocale::Spanish,
+        ))
+        .unwrap();
+        assert_eq!(rich_edit["content"], "");
+        assert_eq!(rich_edit["embeds"].as_array().unwrap().len(), 1);
+        assert_eq!(
+            rich_edit["components"][0]["components"]
+                .as_array()
+                .unwrap()
+                .len(),
+            2
+        );
+
+        let fallback_edit = serde_json::to_value(fallback_completion_edit_message(
+            &completed_meeting(),
+            DiscordLocale::Spanish,
+        ))
+        .unwrap();
+        assert!(fallback_edit["embeds"].as_array().unwrap().is_empty());
+        assert!(fallback_edit["content"]
+            .as_str()
+            .unwrap()
+            .contains("Preparar la publicación"));
     }
 
     #[test]
