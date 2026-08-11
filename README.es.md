@@ -92,7 +92,8 @@ con las tareas, la duración, el número de participantes y botones privados par
 abrir el resumen o la transcripción completa. Cada vista privada incluye un
 archivo de texto descargable, sin llenar el canal con un bloque enorme. La
 tarjeta aparece mientras se prepara el resumen y luego se actualiza en el mismo
-lugar; las vistas privadas también muestran cada sección e intervención completa.
+lugar; cada vista privada reúne todas las secciones o intervenciones y su descarga
+en una sola tarjeta.
 
 ### Reuniones del navegador
 

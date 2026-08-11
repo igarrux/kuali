@@ -90,7 +90,8 @@ duration, participant count, and private buttons for the complete summary and
 transcript. Each private view includes a downloadable text file, keeping the
 channel readable without hiding the full meeting record. The card appears while
 the summary is being prepared, then updates in place; private views render every
-section and transcript turn in Discord as well as offering the download.
+section and transcript turn inside one private card, with the download presented
+as part of the same layout.
 
 ### Browser meetings
 
