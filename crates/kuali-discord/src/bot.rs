@@ -38,7 +38,11 @@ use crate::speech::load_consent_audio;
 use kuali_core::{CallInfo, VoiceEvent, VoiceSessionId};
 
 const SUMMARY_BUTTON_PREFIX: &str = "kuali:summary:";
+const KEY_POINTS_BUTTON_PREFIX: &str = "kuali:key-points:";
+const DECISIONS_BUTTON_PREFIX: &str = "kuali:decisions:";
+const OPEN_QUESTIONS_BUTTON_PREFIX: &str = "kuali:open-questions:";
 const TRANSCRIPT_BUTTON_PREFIX: &str = "kuali:transcript:";
+const PRIVATE_PAGE_BUTTON_PREFIX: &str = "kuali:page:";
 const KUALI_WEBSITE: &str = "https://kuali.garrux.dev";
 const KUALI_ICON: &str = "https://kuali.garrux.dev/assets/icon.png";
 const KUALI_EMBED_COLOR: u32 = 0x7D_DA_B9;
@@ -46,8 +50,11 @@ const KUALI_PENDING_COLOR: u32 = 0x7C_A6_DA;
 const KUALI_ATTENTION_COLOR: u32 = 0xE8_A2_3B;
 const KUALI_ERROR_COLOR: u32 = 0xDF_6D_73;
 const EMBED_FIELD_LIMIT: usize = 1_024;
+// Leave room for the card title, metadata, and footer within Discord's display
+// text budget. The downloadable file remains complete regardless of paging.
+const PRIVATE_PAGE_CHAR_LIMIT: usize = 3_200;
 const PRIVATE_TEXT_CHUNK_LIMIT: usize = 3_800;
-const PRIVATE_TEXT_COMPONENT_LIMIT: usize = 30;
+const PRIVATE_TEXT_COMPONENT_LIMIT: usize = 24;
 const DISCORD_COMPONENTS_V2_FLAG: u32 = 1 << 15;
 const PUBLIC_TASK_LIMIT: usize = 6;
 const RECORD_COMMAND_ES: &str = "grabar";
@@ -98,6 +105,9 @@ fn session_sender(
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MeetingAction {
     Summary,
+    KeyPoints,
+    Decisions,
+    OpenQuestions,
     Transcript,
 }
 
@@ -111,17 +121,78 @@ pub enum DiscordSummaryState {
 }
 
 impl MeetingAction {
+    const READY_ACTIONS: [Self; 5] = [
+        Self::Summary,
+        Self::KeyPoints,
+        Self::Decisions,
+        Self::OpenQuestions,
+        Self::Transcript,
+    ];
+
     fn button_id(self, meeting_id: &str) -> String {
         let prefix = match self {
             Self::Summary => SUMMARY_BUTTON_PREFIX,
+            Self::KeyPoints => KEY_POINTS_BUTTON_PREFIX,
+            Self::Decisions => DECISIONS_BUTTON_PREFIX,
+            Self::OpenQuestions => OPEN_QUESTIONS_BUTTON_PREFIX,
             Self::Transcript => TRANSCRIPT_BUTTON_PREFIX,
         };
         format!("{prefix}{meeting_id}")
     }
 
+    fn page_code(self) -> &'static str {
+        match self {
+            Self::Summary => "s",
+            Self::KeyPoints => "k",
+            Self::Decisions => "d",
+            Self::OpenQuestions => "q",
+            Self::Transcript => "t",
+        }
+    }
+
+    fn from_page_code(code: &str) -> Option<Self> {
+        match code {
+            "s" => Some(Self::Summary),
+            "k" => Some(Self::KeyPoints),
+            "d" => Some(Self::Decisions),
+            "q" => Some(Self::OpenQuestions),
+            "t" => Some(Self::Transcript),
+            _ => None,
+        }
+    }
+
+    fn page_button_id(self, meeting_id: &str, page: usize) -> String {
+        format!(
+            "{PRIVATE_PAGE_BUTTON_PREFIX}{}:{page}:{meeting_id}",
+            self.page_code()
+        )
+    }
+
+    fn from_page_button(custom_id: &str) -> Option<(Self, usize, &str)> {
+        let rest = custom_id.strip_prefix(PRIVATE_PAGE_BUTTON_PREFIX)?;
+        let (action, rest) = rest.split_once(':')?;
+        let (page, meeting_id) = rest.split_once(':')?;
+        let action = Self::from_page_code(action)?;
+        let page = page.parse().ok()?;
+        (!meeting_id.is_empty()).then_some((action, page, meeting_id))
+    }
+
+    fn label(self, locale: DiscordLocale) -> &'static str {
+        match self {
+            Self::Summary => locale.text("Resumen", "Summary"),
+            Self::KeyPoints => locale.text("Puntos clave", "Key points"),
+            Self::Decisions => locale.text("Decisiones", "Decisions"),
+            Self::OpenQuestions => locale.text("Preguntas", "Questions"),
+            Self::Transcript => locale.text("Transcripción", "Transcript"),
+        }
+    }
+
     fn from_button(custom_id: &str) -> Option<(Self, &str)> {
         [
             (Self::Summary, SUMMARY_BUTTON_PREFIX),
+            (Self::KeyPoints, KEY_POINTS_BUTTON_PREFIX),
+            (Self::Decisions, DECISIONS_BUTTON_PREFIX),
+            (Self::OpenQuestions, OPEN_QUESTIONS_BUTTON_PREFIX),
             (Self::Transcript, TRANSCRIPT_BUTTON_PREFIX),
         ]
         .into_iter()
@@ -436,18 +507,24 @@ fn add_summary_state_buttons(
     locale: DiscordLocale,
     state: DiscordSummaryState,
 ) -> CreateMessage {
-    if state == DiscordSummaryState::Ready {
+    let actions: &[MeetingAction] = if state == DiscordSummaryState::Ready {
+        &MeetingAction::READY_ACTIONS
+    } else {
+        &[MeetingAction::Transcript]
+    };
+    for action in actions {
+        let style = if *action == MeetingAction::Summary {
+            ButtonStyle::Primary
+        } else {
+            ButtonStyle::Secondary
+        };
         message = message.button(
-            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
-                .label(locale.text("Ver resumen", "View summary"))
-                .style(ButtonStyle::Primary),
+            CreateButton::new(action.button_id(&meeting.meta.id))
+                .label(action.label(locale))
+                .style(style),
         );
     }
-    message.button(
-        CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
-            .label(locale.text("Ver transcripción", "View transcript"))
-            .style(ButtonStyle::Secondary),
-    )
+    message
 }
 
 fn add_summary_state_edit_buttons(
@@ -456,18 +533,24 @@ fn add_summary_state_edit_buttons(
     locale: DiscordLocale,
     state: DiscordSummaryState,
 ) -> EditMessage {
-    if state == DiscordSummaryState::Ready {
+    let actions: &[MeetingAction] = if state == DiscordSummaryState::Ready {
+        &MeetingAction::READY_ACTIONS
+    } else {
+        &[MeetingAction::Transcript]
+    };
+    for action in actions {
+        let style = if *action == MeetingAction::Summary {
+            ButtonStyle::Primary
+        } else {
+            ButtonStyle::Secondary
+        };
         message = message.button(
-            CreateButton::new(MeetingAction::Summary.button_id(&meeting.meta.id))
-                .label(locale.text("Ver resumen", "View summary"))
-                .style(ButtonStyle::Primary),
+            CreateButton::new(action.button_id(&meeting.meta.id))
+                .label(action.label(locale))
+                .style(style),
         );
     }
-    message.button(
-        CreateButton::new(MeetingAction::Transcript.button_id(&meeting.meta.id))
-            .label(locale.text("Ver transcripción", "View transcript"))
-            .style(ButtonStyle::Secondary),
-    )
+    message
 }
 
 fn summary_state_message(
@@ -591,6 +674,9 @@ fn private_document_fallback_embed(
 ) -> CreateEmbed {
     let kind = match action {
         MeetingAction::Summary => locale.text("Resumen completo", "Full summary"),
+        MeetingAction::KeyPoints => locale.text("Puntos clave", "Key points"),
+        MeetingAction::Decisions => locale.text("Decisiones", "Decisions"),
+        MeetingAction::OpenQuestions => locale.text("Preguntas abiertas", "Open questions"),
         MeetingAction::Transcript => locale.text("Transcripción completa", "Full transcript"),
     };
     CreateEmbed::new()
@@ -822,6 +908,95 @@ fn visible_summary_document(meeting: &Meeting, locale: DiscordLocale) -> Option<
     Some(output)
 }
 
+fn visible_summary_section(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    action: MeetingAction,
+) -> Option<String> {
+    let summary = meeting.summary.as_ref()?;
+    let mut output = String::new();
+    match action {
+        MeetingAction::Summary => return visible_summary_document(meeting, locale),
+        MeetingAction::KeyPoints => push_visible_list(
+            &mut output,
+            locale.text("Puntos clave", "Key points"),
+            &summary.key_points,
+            locale,
+        ),
+        MeetingAction::Decisions => push_visible_list(
+            &mut output,
+            locale.text("Decisiones", "Decisions"),
+            &summary.decisions,
+            locale,
+        ),
+        MeetingAction::OpenQuestions => push_visible_list(
+            &mut output,
+            locale.text("Preguntas abiertas", "Open questions"),
+            &summary.open_questions,
+            locale,
+        ),
+        MeetingAction::Transcript => return None,
+    }
+    Some(output)
+}
+
+fn paginate_private_document(visible: &str) -> Vec<String> {
+    let mut pages = Vec::new();
+    let mut current = String::new();
+
+    for block in visible
+        .split("\n\n")
+        .filter(|block| !block.trim().is_empty())
+    {
+        if char_count(block) > PRIVATE_PAGE_CHAR_LIMIT {
+            if !current.is_empty() {
+                pages.push(std::mem::take(&mut current));
+            }
+            pages.extend(split_message(block, PRIVATE_PAGE_CHAR_LIMIT));
+            continue;
+        }
+
+        let separator = if current.is_empty() { 0 } else { 2 };
+        if char_count(&current) + separator + char_count(block) > PRIVATE_PAGE_CHAR_LIMIT {
+            pages.push(std::mem::take(&mut current));
+        }
+        if !current.is_empty() {
+            current.push_str("\n\n");
+        }
+        current.push_str(block);
+    }
+
+    if !current.is_empty() {
+        pages.push(current);
+    }
+    if pages.is_empty() {
+        pages.push(visible.to_string());
+    }
+    pages
+}
+
+fn transcript_page_range(visible: &str) -> Option<String> {
+    let timestamps = visible.lines().filter_map(|line| {
+        line.strip_prefix("**")?
+            .split_once(" · ")
+            .map(|(timestamp, _)| timestamp)
+            .filter(|timestamp| {
+                !timestamp.is_empty()
+                    && timestamp
+                        .chars()
+                        .all(|character| character.is_ascii_digit() || character == ':')
+            })
+    });
+    let timestamps = timestamps.collect::<Vec<_>>();
+    let first = timestamps.first()?;
+    let last = timestamps.last()?;
+    if first == last {
+        Some((*first).to_string())
+    } else {
+        Some(format!("{first}–{last}"))
+    }
+}
+
 fn escape_inline_markdown(value: &str) -> String {
     let mut output = String::with_capacity(value.len());
     for character in value.chars() {
@@ -859,28 +1034,86 @@ fn visible_transcript_document(meeting: &Meeting, locale: DiscordLocale) -> Opti
     wrote_utterance.then_some(output)
 }
 
-fn private_document_filename(action: MeetingAction, locale: DiscordLocale) -> &'static str {
+fn private_document_filename(action: MeetingAction, locale: DiscordLocale) -> Option<&'static str> {
     match (action, locale) {
-        (MeetingAction::Summary, DiscordLocale::Spanish) => "kuali-resumen.txt",
-        (MeetingAction::Summary, DiscordLocale::English) => "kuali-summary.txt",
-        (MeetingAction::Transcript, DiscordLocale::Spanish) => "kuali-transcripcion.txt",
-        (MeetingAction::Transcript, DiscordLocale::English) => "kuali-transcript.txt",
+        (MeetingAction::Summary, DiscordLocale::Spanish) => Some("kuali-resumen.txt"),
+        (MeetingAction::Summary, DiscordLocale::English) => Some("kuali-summary.txt"),
+        (MeetingAction::Transcript, DiscordLocale::Spanish) => Some("kuali-transcripcion.txt"),
+        (MeetingAction::Transcript, DiscordLocale::English) => Some("kuali-transcript.txt"),
+        _ => None,
     }
 }
 
-fn private_document_description(action: MeetingAction, locale: DiscordLocale) -> &'static str {
+fn private_document_description(
+    action: MeetingAction,
+    locale: DiscordLocale,
+) -> Option<&'static str> {
     match (action, locale) {
         (MeetingAction::Summary, DiscordLocale::Spanish) => {
-            "Descargar el resumen completo en texto"
+            Some("Descargar el resumen completo en texto")
         }
-        (MeetingAction::Summary, DiscordLocale::English) => "Download the complete summary as text",
+        (MeetingAction::Summary, DiscordLocale::English) => {
+            Some("Download the complete summary as text")
+        }
         (MeetingAction::Transcript, DiscordLocale::Spanish) => {
-            "Descargar la transcripción completa en texto"
+            Some("Descargar la transcripción completa en texto")
         }
         (MeetingAction::Transcript, DiscordLocale::English) => {
-            "Download the complete transcript as text"
+            Some("Download the complete transcript as text")
         }
+        _ => None,
     }
+}
+
+fn private_pagination_row(
+    action: MeetingAction,
+    meeting_id: &str,
+    locale: DiscordLocale,
+    page: usize,
+    page_count: usize,
+) -> serde_json::Value {
+    let previous = page.saturating_sub(1);
+    let next = (page + 1).min(page_count - 1);
+    serde_json::json!({
+        "type": 1,
+        "components": [
+            {
+                "type": 2,
+                "style": 2,
+                "label": locale.text("Inicio", "First"),
+                "custom_id": action.page_button_id(meeting_id, 0),
+                "disabled": page == 0
+            },
+            {
+                "type": 2,
+                "style": 2,
+                "label": locale.text("Anterior", "Previous"),
+                "custom_id": action.page_button_id(meeting_id, previous),
+                "disabled": page == 0
+            },
+            {
+                "type": 2,
+                "style": 2,
+                "label": format!("{}/{}", page + 1, page_count),
+                "custom_id": "kuali:page-indicator",
+                "disabled": true
+            },
+            {
+                "type": 2,
+                "style": 2,
+                "label": locale.text("Siguiente", "Next"),
+                "custom_id": action.page_button_id(meeting_id, next),
+                "disabled": page + 1 == page_count
+            },
+            {
+                "type": 2,
+                "style": 2,
+                "label": locale.text("Final", "Last"),
+                "custom_id": action.page_button_id(meeting_id, page_count - 1),
+                "disabled": page + 1 == page_count
+            }
+        ]
+    })
 }
 
 fn private_document_payload(
@@ -888,10 +1121,15 @@ fn private_document_payload(
     action: MeetingAction,
     locale: DiscordLocale,
     visible: &str,
-    include_download: bool,
+    page: usize,
+    page_count: usize,
+    attachment_id: Option<serde_json::Value>,
 ) -> serde_json::Value {
     let kind = match action {
         MeetingAction::Summary => locale.text("Resumen completo", "Full summary"),
+        MeetingAction::KeyPoints => locale.text("Puntos clave", "Key points"),
+        MeetingAction::Decisions => locale.text("Decisiones", "Decisions"),
+        MeetingAction::OpenQuestions => locale.text("Preguntas abiertas", "Open questions"),
         MeetingAction::Transcript => locale.text("Transcripción completa", "Full transcript"),
     };
     let participants = match locale {
@@ -905,6 +1143,24 @@ fn private_document_payload(
         (MeetingAction::Summary, DiscordLocale::English) => {
             "Key points, decisions, and action items".to_string()
         }
+        (MeetingAction::KeyPoints, DiscordLocale::Spanish) => {
+            "Hallazgos y temas principales".to_string()
+        }
+        (MeetingAction::KeyPoints, DiscordLocale::English) => {
+            "Main findings and topics".to_string()
+        }
+        (MeetingAction::Decisions, DiscordLocale::Spanish) => {
+            "Acuerdos tomados durante la reunión".to_string()
+        }
+        (MeetingAction::Decisions, DiscordLocale::English) => {
+            "Agreements made during the meeting".to_string()
+        }
+        (MeetingAction::OpenQuestions, DiscordLocale::Spanish) => {
+            "Temas que todavía requieren respuesta".to_string()
+        }
+        (MeetingAction::OpenQuestions, DiscordLocale::English) => {
+            "Topics that still need an answer".to_string()
+        }
         (MeetingAction::Transcript, DiscordLocale::Spanish) => {
             format!("{} intervenciones", meeting.utterances.len())
         }
@@ -912,10 +1168,26 @@ fn private_document_payload(
             format!("{} utterances", meeting.utterances.len())
         }
     };
-    let header = format!(
-        "## {kind}\n**{}**\n-# {} · {participants} · {detail}",
-        meeting.meta.title(),
+    let mut metadata = vec![
         human_duration(meeting.duration_ms(), locale),
+        participants,
+        detail,
+    ];
+    if action == MeetingAction::Transcript {
+        if let Some(range) = transcript_page_range(visible) {
+            metadata.push(range);
+        }
+    }
+    if page_count > 1 {
+        metadata.push(match locale {
+            DiscordLocale::Spanish => format!("Página {} de {page_count}", page + 1),
+            DiscordLocale::English => format!("Page {} of {page_count}", page + 1),
+        });
+    }
+    let header = format!(
+        "## {kind}\n**{}**\n-# {}",
+        meeting.meta.title(),
+        metadata.join(" · "),
     );
     let mut chunks = split_message(visible, PRIVATE_TEXT_CHUNK_LIMIT);
     if chunks.len() > PRIVATE_TEXT_COMPONENT_LIMIT {
@@ -923,45 +1195,89 @@ fn private_document_payload(
         chunks.push(overflow.join("\n"));
     }
 
-    let mut children = vec![
-        serde_json::json!({
-            "type": 9,
-            "components": [{ "type": 10, "content": header }],
-            "accessory": {
-                "type": 11,
-                "media": { "url": KUALI_ICON },
-                "description": "Kuali"
-            }
-        }),
-        serde_json::json!({ "type": 14, "divider": true, "spacing": 1 }),
-    ];
-    children.extend(
-        chunks
-            .into_iter()
-            .map(|content| serde_json::json!({ "type": 10, "content": content })),
-    );
-    children.push(serde_json::json!({ "type": 14, "divider": true, "spacing": 1 }));
-    children.push(serde_json::json!({
+    let content = chunks
+        .into_iter()
+        .map(|content| serde_json::json!({ "type": 10, "content": content }))
+        .collect::<Vec<_>>();
+    let footer = serde_json::json!({
         "type": 10,
         "content": locale.text(
             "-# Solo tú puedes ver este mensaje · Kuali",
             "-# Only you can see this message · Kuali"
         )
-    }));
+    });
+    let separator = || serde_json::json!({ "type": 14, "divider": true, "spacing": 1 });
 
     let filename = private_document_filename(action, locale);
-    if include_download {
-        children.push(serde_json::json!({
-            "type": 13,
-            "file": { "url": format!("attachment://{filename}") }
-        }));
-    }
+    let file = filename
+        .filter(|_| attachment_id.is_some())
+        .map(|filename| {
+            serde_json::json!({
+                "type": 13,
+                "file": { "url": format!("attachment://{filename}") }
+            })
+        });
 
-    let attachments = if include_download {
+    // Serenity 0.12 can receive unknown top-level V2 components, but it cannot
+    // deserialize a Container with nested Text Displays. Paginated cards stay
+    // flat so their navigation button interactions reach Kuali reliably.
+    let components = if page_count > 1 {
+        let mut components = vec![
+            serde_json::json!({
+                "type": 10,
+                "content": format!("## Kuali · {}", header.trim_start_matches("## "))
+            }),
+            separator(),
+        ];
+        components.extend(content);
+        components.push(separator());
+        components.push(private_pagination_row(
+            action,
+            &meeting.meta.id,
+            locale,
+            page,
+            page_count,
+        ));
+        components.push(footer);
+        if let Some(file) = file {
+            components.push(file);
+        }
+        components
+    } else {
+        let mut children = vec![
+            serde_json::json!({
+                "type": 9,
+                "components": [{ "type": 10, "content": header }],
+                "accessory": {
+                    "type": 11,
+                    "media": { "url": KUALI_ICON },
+                    "description": "Kuali"
+                }
+            }),
+            separator(),
+        ];
+        children.extend(content);
+        children.push(separator());
+        children.push(footer);
+        if let Some(file) = file {
+            children.push(file);
+        }
+        vec![serde_json::json!({
+            "type": 17,
+            "accent_color": KUALI_EMBED_COLOR,
+            "components": children
+        })]
+    };
+
+    let attachments = if let (Some(id), Some(filename), Some(description)) = (
+        attachment_id,
+        filename,
+        private_document_description(action, locale),
+    ) {
         serde_json::json!([{
-            "id": 0,
+            "id": id,
             "filename": filename,
-            "description": private_document_description(action, locale)
+            "description": description
         }])
     } else {
         serde_json::json!([])
@@ -973,11 +1289,7 @@ fn private_document_payload(
         "embeds": [],
         "allowed_mentions": { "parse": [] },
         "attachments": attachments,
-        "components": [{
-            "type": 17,
-            "accent_color": KUALI_EMBED_COLOR,
-            "components": children
-        }]
+        "components": components
     })
 }
 
@@ -1070,7 +1382,40 @@ struct PrivateMeetingDocument {
     action: MeetingAction,
     locale: DiscordLocale,
     visible: String,
-    download: String,
+    download: Option<String>,
+    page: usize,
+    page_count: usize,
+}
+
+fn private_meeting_document(
+    meeting: &Meeting,
+    action: MeetingAction,
+    locale: DiscordLocale,
+    requested_page: usize,
+) -> Option<PrivateMeetingDocument> {
+    let visible = match action {
+        MeetingAction::Summary
+        | MeetingAction::KeyPoints
+        | MeetingAction::Decisions
+        | MeetingAction::OpenQuestions => visible_summary_section(meeting, locale, action)?,
+        MeetingAction::Transcript => visible_transcript_document(meeting, locale)?,
+    };
+    let download = match action {
+        MeetingAction::Summary => summary_document(meeting, locale),
+        MeetingAction::Transcript => transcript_document(meeting, locale),
+        MeetingAction::KeyPoints | MeetingAction::Decisions | MeetingAction::OpenQuestions => None,
+    };
+    let pages = paginate_private_document(&visible);
+    let page_count = pages.len();
+    let page = requested_page.min(page_count - 1);
+    Some(PrivateMeetingDocument {
+        action,
+        locale,
+        visible: pages.into_iter().nth(page)?,
+        download,
+        page,
+        page_count,
+    })
 }
 
 impl Handler {
@@ -1568,16 +1913,28 @@ impl Handler {
         meeting: &Meeting,
         document: PrivateMeetingDocument,
     ) {
-        let can_attach = document.download.len() <= component.attachment_size_limit as usize;
+        let filename = private_document_filename(document.action, document.locale);
+        let has_existing_attachment = filename.is_some_and(|filename| {
+            component
+                .message
+                .attachments
+                .iter()
+                .any(|attachment| attachment.filename == filename)
+        });
+        let can_upload = document
+            .download
+            .as_ref()
+            .is_some_and(|download| download.len() <= component.attachment_size_limit as usize);
+        let include_download = has_existing_attachment || can_upload;
         let result = self
-            .edit_private_document_components(component, meeting, &document, can_attach)
+            .edit_private_document_components(component, meeting, &document, include_download)
             .await;
         let mut error = match result {
             Ok(()) => return,
             Err(error) => error,
         };
 
-        if can_attach {
+        if can_upload && !has_existing_attachment {
             tracing::warn!(
                 meeting_id = %meeting.meta.id,
                 %error,
@@ -1619,12 +1976,30 @@ impl Handler {
         document: &PrivateMeetingDocument,
         include_download: bool,
     ) -> Result<(), String> {
+        let filename = private_document_filename(document.action, document.locale);
+        let existing_attachment = filename.and_then(|filename| {
+            component
+                .message
+                .attachments
+                .iter()
+                .find(|attachment| attachment.filename == filename)
+        });
+        let attachment_id = if include_download {
+            Some(match existing_attachment {
+                Some(attachment) => serde_json::json!(attachment.id.get().to_string()),
+                None => serde_json::json!(0),
+            })
+        } else {
+            None
+        };
         let payload = private_document_payload(
             meeting,
             document.action,
             document.locale,
             &document.visible,
-            include_download,
+            document.page,
+            document.page_count,
+            attachment_id,
         );
         let url = format!(
             "https://discord.com/api/v10/webhooks/{}/{}/messages/@original",
@@ -1635,9 +2010,13 @@ impl Handler {
             reqwest::header::USER_AGENT,
             format!("Kuali/{} ({KUALI_WEBSITE})", env!("CARGO_PKG_VERSION")),
         );
-        let response = if include_download {
-            let filename = private_document_filename(document.action, document.locale);
-            let file = reqwest::multipart::Part::bytes(document.download.as_bytes().to_vec())
+        let response = if include_download && existing_attachment.is_none() {
+            let filename = filename.ok_or_else(|| "la vista no tiene una descarga".to_string())?;
+            let download = document
+                .download
+                .as_ref()
+                .ok_or_else(|| "la vista no tiene una descarga".to_string())?;
+            let file = reqwest::multipart::Part::bytes(download.as_bytes().to_vec())
                 .file_name(filename)
                 .mime_str("text/plain; charset=utf-8")
                 .map_err(|_| "no pude preparar el archivo de descarga".to_string())?;
@@ -1671,14 +2050,20 @@ impl Handler {
         component: &ComponentInteraction,
         action: MeetingAction,
         meeting_id: String,
+        requested_page: usize,
+        update_existing: bool,
     ) {
         let Some(guild_id) = component.guild_id else {
             return;
         };
         let locale = DiscordLocale::from_discord_locale(&component.locale);
-        let deferred = CreateInteractionResponse::Defer(
-            CreateInteractionResponseMessage::new().ephemeral(true),
-        );
+        let deferred = if update_existing {
+            CreateInteractionResponse::Acknowledge
+        } else {
+            CreateInteractionResponse::Defer(
+                CreateInteractionResponseMessage::new().ephemeral(true),
+            )
+        };
         if component
             .create_response(&ctx.http, deferred)
             .await
@@ -1697,62 +2082,26 @@ impl Handler {
             }
         };
 
-        match action {
-            MeetingAction::Summary => {
-                let (Some(visible), Some(document)) = (
-                    visible_summary_document(&meeting, locale),
-                    summary_document(&meeting, locale),
-                ) else {
-                    let message = locale.text(
-                        "Esta reunión todavía no tiene un resumen.",
-                        "This meeting does not have a summary yet.",
-                    );
-                    let _ = component
-                        .edit_response(&ctx.http, EditInteractionResponse::new().content(message))
-                        .await;
-                    return;
-                };
-                self.respond_with_private_document(
-                    ctx,
-                    component,
-                    &meeting,
-                    PrivateMeetingDocument {
-                        action: MeetingAction::Summary,
-                        locale,
-                        visible,
-                        download: document,
-                    },
+        let Some(document) = private_meeting_document(&meeting, action, locale, requested_page)
+        else {
+            let message = if action == MeetingAction::Transcript {
+                locale.text(
+                    "Esta reunión todavía no tiene texto transcrito.",
+                    "This meeting does not have transcribed text yet.",
                 )
-                .await;
-            }
-            MeetingAction::Transcript => {
-                let (Some(visible), Some(document)) = (
-                    visible_transcript_document(&meeting, locale),
-                    transcript_document(&meeting, locale),
-                ) else {
-                    let message = locale.text(
-                        "Esta reunión todavía no tiene texto transcrito.",
-                        "This meeting does not have transcribed text yet.",
-                    );
-                    let _ = component
-                        .edit_response(&ctx.http, EditInteractionResponse::new().content(message))
-                        .await;
-                    return;
-                };
-                self.respond_with_private_document(
-                    ctx,
-                    component,
-                    &meeting,
-                    PrivateMeetingDocument {
-                        action: MeetingAction::Transcript,
-                        locale,
-                        visible,
-                        download: document,
-                    },
+            } else {
+                locale.text(
+                    "Esta reunión todavía no tiene notas generadas.",
+                    "This meeting does not have generated notes yet.",
                 )
+            };
+            let _ = component
+                .edit_response(&ctx.http, EditInteractionResponse::new().content(message))
                 .await;
-            }
-        }
+            return;
+        };
+        self.respond_with_private_document(ctx, component, &meeting, document)
+            .await;
     }
 
     async fn leave(&self, ctx: &Context, guild_id: GuildId) {
@@ -1875,11 +2224,17 @@ impl EventHandler for Handler {
                 _ => {}
             },
             Interaction::Component(component) => {
-                if let Some((action, meeting_id)) =
+                if let Some((action, page, meeting_id)) =
+                    MeetingAction::from_page_button(&component.data.custom_id)
+                        .map(|(action, page, meeting_id)| (action, page, meeting_id.to_string()))
+                {
+                    self.handle_meeting_button(&ctx, &component, action, meeting_id, page, true)
+                        .await;
+                } else if let Some((action, meeting_id)) =
                     MeetingAction::from_button(&component.data.custom_id)
                         .map(|(action, meeting_id)| (action, meeting_id.to_string()))
                 {
-                    self.handle_meeting_button(&ctx, &component, action, meeting_id)
+                    self.handle_meeting_button(&ctx, &component, action, meeting_id, 0, false)
                         .await;
                 }
             }
@@ -2459,6 +2814,16 @@ mod tests {
             .sum::<usize>()
     }
 
+    fn component_display_text_length(component: &serde_json::Value) -> usize {
+        component["content"].as_str().map(char_count).unwrap_or(0)
+            + component["components"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .map(component_display_text_length)
+                .sum::<usize>()
+    }
+
     #[test]
     fn a_discord_username_accepts_at_and_case_without_accepting_display_names() {
         assert!(discord_username_matches(" @Garrux ", "garrux"));
@@ -2508,16 +2873,24 @@ mod tests {
 
     #[test]
     fn meeting_buttons_hide_and_recover_the_action_and_meeting_id() {
-        for action in [MeetingAction::Summary, MeetingAction::Transcript] {
+        for action in MeetingAction::READY_ACTIONS {
             let custom_id = action.button_id("meeting-123");
             assert_eq!(
                 MeetingAction::from_button(&custom_id),
                 Some((action, "meeting-123"))
             );
             assert!(custom_id.len() <= 100);
+
+            let page_id = action.page_button_id("meeting-123", 7);
+            assert_eq!(
+                MeetingAction::from_page_button(&page_id),
+                Some((action, 7, "meeting-123"))
+            );
+            assert!(page_id.len() <= 100);
         }
         assert_eq!(MeetingAction::from_button("otro:meeting-123"), None);
         assert_eq!(MeetingAction::from_button(TRANSCRIPT_BUTTON_PREFIX), None);
+        assert_eq!(MeetingAction::from_page_button("kuali:page:x:1:id"), None);
     }
 
     #[test]
@@ -2542,9 +2915,12 @@ mod tests {
         assert!(!embed.to_string().contains("Publicamos el viernes"));
 
         let buttons = message["components"][0]["components"].as_array().unwrap();
-        assert_eq!(buttons.len(), 2);
-        assert_eq!(buttons[0]["label"], "Ver resumen");
-        assert_eq!(buttons[1]["label"], "Ver transcripción");
+        assert_eq!(buttons.len(), 5);
+        assert_eq!(buttons[0]["label"], "Resumen");
+        assert_eq!(buttons[1]["label"], "Puntos clave");
+        assert_eq!(buttons[2]["label"], "Decisiones");
+        assert_eq!(buttons[3]["label"], "Preguntas");
+        assert_eq!(buttons[4]["label"], "Transcripción");
         assert_eq!(message["allowed_mentions"]["parse"], serde_json::json!([]));
 
         let fallback = serde_json::to_value(fallback_completion_message(
@@ -2559,7 +2935,7 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .len(),
-            2
+            5
         );
 
         let rich_edit = serde_json::to_value(summary_state_edit_message(
@@ -2575,7 +2951,7 @@ mod tests {
                 .as_array()
                 .unwrap()
                 .len(),
-            2
+            5
         );
 
         let fallback_edit = serde_json::to_value(fallback_summary_state_edit_message(
@@ -2592,7 +2968,7 @@ mod tests {
     }
 
     #[test]
-    fn public_tasks_fit_embeds_and_private_documents_stay_in_one_message() {
+    fn public_tasks_fit_embeds_and_private_documents_page_without_losing_content() {
         let mut meeting = completed_meeting();
         let summary = meeting.summary.as_mut().unwrap();
         summary.overview = "Descripción larga ".repeat(600);
@@ -2626,26 +3002,173 @@ mod tests {
         assert!(visible.contains("Tarea 29"));
         assert!(visible.contains("Pregunta"));
 
-        let private = private_document_payload(
+        let pages = paginate_private_document(&visible);
+        assert!(pages.len() > 1);
+        assert!(pages
+            .iter()
+            .all(|page| char_count(page) <= PRIVATE_PAGE_CHAR_LIMIT));
+
+        let mut rendered = String::new();
+        for (page, visible_page) in pages.iter().enumerate() {
+            let private = private_document_payload(
+                &meeting,
+                MeetingAction::Summary,
+                DiscordLocale::Spanish,
+                visible_page,
+                page,
+                pages.len(),
+                Some(serde_json::json!(0)),
+            );
+            assert_eq!(private["flags"], DISCORD_COMPONENTS_V2_FLAG);
+            assert_eq!(private["content"], serde_json::Value::Null);
+            assert!(private["embeds"].as_array().unwrap().is_empty());
+            let components = private["components"].as_array().unwrap();
+            assert!(components.len() <= 10);
+            assert!(components.iter().map(component_count).sum::<usize>() <= 40);
+            assert!(
+                components
+                    .iter()
+                    .map(component_display_text_length)
+                    .sum::<usize>()
+                    < 4_000
+            );
+            let _: Vec<serenity::all::ActionRow> =
+                serde_json::from_value(private["components"].clone()).unwrap();
+            rendered.push_str(&private.to_string());
+        }
+        assert!(rendered.contains("Punto clave 39"));
+        assert!(rendered.contains("Tarea 29"));
+        assert!(rendered.contains("attachment://kuali-resumen.txt"));
+        assert!(rendered.contains("Solo tú puedes ver este mensaje"));
+    }
+
+    #[test]
+    fn focused_note_buttons_show_only_the_requested_section() {
+        let meeting = completed_meeting();
+        let cases = [
+            (
+                MeetingAction::KeyPoints,
+                "La versión candidata está lista",
+                "Publicar el viernes",
+            ),
+            (
+                MeetingAction::Decisions,
+                "Publicar el viernes",
+                "La versión candidata está lista",
+            ),
+            (
+                MeetingAction::OpenQuestions,
+                "¿A qué hora se publica?",
+                "Publicar el viernes",
+            ),
+        ];
+
+        for (action, expected, unrelated) in cases {
+            let document =
+                private_meeting_document(&meeting, action, DiscordLocale::Spanish, 0).unwrap();
+            assert!(document.visible.contains(expected));
+            assert!(!document.visible.contains(unrelated));
+            assert!(document.download.is_none());
+
+            let payload = private_document_payload(
+                &meeting,
+                action,
+                DiscordLocale::Spanish,
+                &document.visible,
+                document.page,
+                document.page_count,
+                None,
+            );
+            assert!(payload["attachments"].as_array().unwrap().is_empty());
+            assert!(!payload.to_string().contains("attachment://"));
+        }
+    }
+
+    #[test]
+    fn long_transcripts_page_inside_one_card_without_losing_turns() {
+        let mut meeting = completed_meeting();
+        meeting.utterances.clear();
+        for index in 0..260 {
+            meeting.push_utterance(Utterance {
+                id: format!("utterance-{index}"),
+                speaker_id: 1,
+                start_ms: index * 5_000,
+                end_ms: index * 5_000 + 4_000,
+                text: format!(
+                    "Intervención {index}: {}",
+                    "contenido importante ".repeat(12)
+                ),
+                confidence: Some(0.95),
+            });
+        }
+
+        let visible = visible_transcript_document(&meeting, DiscordLocale::Spanish).unwrap();
+        let pages = paginate_private_document(&visible);
+        assert!(pages.len() > 1);
+        assert!(pages
+            .iter()
+            .all(|page| char_count(page) <= PRIVATE_PAGE_CHAR_LIMIT));
+        assert_eq!(pages.join("\n\n"), visible.trim_end());
+
+        let document = private_meeting_document(
             &meeting,
-            MeetingAction::Summary,
+            MeetingAction::Transcript,
             DiscordLocale::Spanish,
-            &visible,
-            true,
+            0,
+        )
+        .unwrap();
+        assert_eq!(document.page, 0);
+        assert_eq!(document.page_count, pages.len());
+        assert!(document.visible.contains("Intervención 0"));
+        assert!(!document.visible.contains("Intervención 259"));
+
+        let payload = private_document_payload(
+            &meeting,
+            document.action,
+            document.locale,
+            &document.visible,
+            document.page,
+            document.page_count,
+            Some(serde_json::json!("987654321")),
         );
-        assert_eq!(private["flags"], DISCORD_COMPONENTS_V2_FLAG);
-        assert_eq!(private["content"], serde_json::Value::Null);
-        assert!(private["embeds"].as_array().unwrap().is_empty());
-        assert_eq!(private["components"].as_array().unwrap().len(), 1);
-        assert!(component_count(&private["components"][0]) <= 40);
-        assert!(private.to_string().contains("Punto clave 39"));
-        assert!(private.to_string().contains("Tarea 29"));
-        assert!(private
-            .to_string()
-            .contains("attachment://kuali-resumen.txt"));
-        assert!(private
-            .to_string()
-            .contains("Solo tú puedes ver este mensaje"));
+        let components = payload["components"].as_array().unwrap();
+        assert!(components.len() <= 10);
+        assert!(components.iter().map(component_count).sum::<usize>() <= 40);
+        assert!(
+            components
+                .iter()
+                .map(component_display_text_length)
+                .sum::<usize>()
+                < 4_000
+        );
+        assert_eq!(payload["attachments"][0]["id"], "987654321");
+        assert!(payload.to_string().contains("Página 1 de"));
+        let _: Vec<serenity::all::ActionRow> =
+            serde_json::from_value(payload["components"].clone()).unwrap();
+
+        let controls = components
+            .iter()
+            .find(|component| component["type"] == 1)
+            .unwrap();
+        let buttons = controls["components"].as_array().unwrap();
+        assert_eq!(buttons.len(), 5);
+        assert_eq!(buttons[0]["disabled"], true);
+        assert_eq!(buttons[1]["disabled"], true);
+        assert_eq!(buttons[2]["label"], format!("1/{}", pages.len()));
+        assert_eq!(
+            MeetingAction::from_page_button(buttons[3]["custom_id"].as_str().unwrap()),
+            Some((MeetingAction::Transcript, 1, "meeting-123"))
+        );
+
+        let final_document = private_meeting_document(
+            &meeting,
+            MeetingAction::Transcript,
+            DiscordLocale::Spanish,
+            usize::MAX,
+        )
+        .unwrap();
+        assert_eq!(final_document.page + 1, final_document.page_count);
+        assert!(final_document.visible.contains("Intervención 259"));
     }
 
     #[test]
@@ -2687,7 +3210,9 @@ mod tests {
             MeetingAction::Transcript,
             DiscordLocale::Spanish,
             &visible_transcript,
-            true,
+            0,
+            1,
+            Some(serde_json::json!(0)),
         );
         assert_eq!(
             private_transcript["components"].as_array().unwrap().len(),
@@ -2720,7 +3245,7 @@ mod tests {
             .contains("Este mismo mensaje se actualizará"));
         let preparing_buttons = preparing["components"][0]["components"].as_array().unwrap();
         assert_eq!(preparing_buttons.len(), 1);
-        assert_eq!(preparing_buttons[0]["label"], "Ver transcripción");
+        assert_eq!(preparing_buttons[0]["label"], "Transcripción");
 
         let failed = serde_json::to_value(summary_state_edit_message(
             &meeting,
@@ -2761,7 +3286,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             message["components"][0]["components"][0]["label"],
-            "View summary"
+            "Summary"
         );
         assert!(message["embeds"][0].to_string().contains("Action items"));
     }
