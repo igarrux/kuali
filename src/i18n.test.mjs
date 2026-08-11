@@ -160,7 +160,7 @@ test("visible placeholders do not contain a contributor's personal examples", ()
 test("English-only terminology hints are shown only in the Spanish interface", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const styles = readFileSync(new URL("./styles.css", import.meta.url), "utf8");
-  assert.equal((html.match(/data-language-only="es"/g) ?? []).length, 2);
+  assert.equal((html.match(/data-language-only="es"/g) ?? []).length, 1);
   assert.match(styles, /html\[lang="en"\] \[data-language-only="es"\] \{ display: none; \}/);
   assert.doesNotMatch(
     html,
@@ -168,14 +168,11 @@ test("English-only terminology hints are shown only in the Spanish interface", (
   );
 });
 
-test("every Discord screenshot slot uses its documented filename", () => {
+test("the simplified Discord guide keeps only the two necessary screenshots", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const files = [
     "discord-02-new-application.png",
     "discord-03-reset-token.png",
-    "discord-04-guild-install.png",
-    "discord-05-install-link-scopes.png",
-    "discord-06-bot-permissions.png",
   ];
   for (const file of files) {
     assert.match(html, new RegExp(`data-guide-src-es="assets/guides/discord/${file}"`));
@@ -183,5 +180,49 @@ test("every Discord screenshot slot uses its documented filename", () => {
   }
   assert.equal((html.match(/<summary>Ver ejemplo<\/summary>/g) ?? []).length, files.length);
   assert.equal((html.match(/class="guide-image-open"/g) ?? []).length, files.length);
-  assert.doesNotMatch(html, /discord-07-invite-bot\.png/);
+  assert.doesNotMatch(html, /discord-0[4-7][^"']*\.png/);
+});
+
+test("Discord onboarding opens an exact authorization flow in three steps", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  const installation = readFileSync(
+    new URL("../crates/kuali-discord/src/installation.rs", import.meta.url),
+    "utf8",
+  );
+
+  assert.equal((html.match(/data-discord-guide-step=/g) ?? []).length, 3);
+  assert.match(html, /id="discord-guide-progress"[\s\S]*?aria-valuemax="3"/);
+  assert.match(html, /id="btn-open-discord-install"/);
+  assert.doesNotMatch(html, /Configura el enlace y los ámbitos|Elige los permisos mínimos/);
+  assert.match(app, /invoke\("open_discord_install", \{ botToken: token \}\)/);
+  assert.match(commands, /async fn open_discord_install/);
+  assert.match(installation, /oauth2\/applications\/@me/);
+});
+
+test("Discord authorization actions disappear after the bot connects", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+
+  assert.match(app, /\$\("btn-open-discord-install"\)\.hidden = discordReady/);
+  assert.match(app, /\$\("btn-save-discord-guide"\)\.hidden = discordReady/);
+  assert.match(app, /Discord está conectado\. Ya puedes terminar la guía\./);
+  assert.match(app, /classList\.toggle\("guide-success-note", discordReady\)/);
+});
+
+test("finishing setup resets both guides before returning home", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const closeGuide = app.slice(
+    app.indexOf("async function closeCompletedGuide()"),
+    app.indexOf("async function finishInitialSetup()"),
+  );
+  const finishSetup = app.slice(
+    app.indexOf("async function finishInitialSetup()"),
+    app.indexOf("function renderDiscordGuideStep"),
+  );
+
+  assert.match(closeGuide, /state\.discordGuideStep = 0/);
+  assert.match(closeGuide, /state\.meetGuideStep = 0/);
+  assert.match(closeGuide, /await goHome\(\)/);
+  assert.equal((finishSetup.match(/return closeCompletedGuide\(\)/g) ?? []).length, 2);
 });

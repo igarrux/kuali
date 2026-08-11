@@ -72,8 +72,10 @@ model without requiring manual configuration-file edits.
 ### Discord
 
 Create a bot in the [Discord Developer Portal](https://discord.com/developers/applications),
-copy its token into Kuali, and install it in the servers where it should record.
-The in-app guide shows each screen and the exact permissions required.
+copy its token and your `@username` into Kuali, then choose a server in the
+Discord authorization window Kuali opens. Kuali derives the application ID
+from the token and prepares the required scopes and minimum permissions
+automatically; you do not need to configure an OAuth link by hand.
 
 Kuali can follow one configured Discord account automatically. Automatic
 following can be paused at any time without forgetting the account. A person in

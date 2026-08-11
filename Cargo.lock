@@ -2808,6 +2808,7 @@ name = "kuali-app"
 version = "0.1.8"
 dependencies = [
  "kuali-core",
+ "kuali-discord",
  "kuali-engine",
  "kuali-llm",
  "kuali-store",
@@ -2847,6 +2848,7 @@ dependencies = [
  "chrono",
  "kuali-core",
  "parking_lot 0.12.5",
+ "reqwest 0.12.28",
  "serde",
  "serde_json",
  "serenity",

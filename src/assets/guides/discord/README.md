@@ -8,17 +8,11 @@ Spanish filenames:
 
 1. `discord-02-new-application.png`
 2. `discord-03-reset-token.png`
-3. `discord-04-guild-install.png`
-4. `discord-05-install-link-scopes.png`
-5. `discord-06-bot-permissions.png`
 
 English filenames use the same name with the `en-` prefix:
 
 1. `en-discord-02-new-application.png`
 2. `en-discord-03-reset-token.png`
-3. `en-discord-04-guild-install.png`
-4. `en-discord-05-install-link-scopes.png`
-5. `en-discord-06-bot-permissions.png`
 
 Capture recommendations:
 
@@ -38,8 +32,7 @@ What each image should show:
 
 - `02`: the **Nueva aplicación** button in the Developer Portal.
 - `03`: **Bot → Restablecer token**. Do not show the resulting token.
-- `04`: **Instalaciones → Contextos de instalación → Seleccionar métodos**,
-  with **Instalación de servidor** selected.
-- `05`: **Enlace proporcionado por Discord** and the `bot` plus
-  `applications.commands` scopes under **Ámbitos**.
-- `06`: the six minimum bot permissions selected, with **Administrador** off.
+
+Kuali derives the application ID from the token and prepares the Discord
+authorization URL automatically, so the guide does not need screenshots for
+scopes or permissions.
