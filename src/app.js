@@ -2158,10 +2158,16 @@ async function downloadRequiredModel() {
   }
 }
 
+async function closeCompletedGuide() {
+  state.discordGuideStep = 0;
+  state.meetGuideStep = 0;
+  await goHome();
+  return true;
+}
+
 async function finishInitialSetup() {
   if (initialSetupCompleted()) {
-    await goHome();
-    return true;
+    return closeCompletedGuide();
   }
 
   await refreshRequiredModelNotice();
@@ -2184,8 +2190,7 @@ async function finishInitialSetup() {
     state.config = config;
   }
   localStorage.setItem("kuali.onboarding.completed", "true");
-  await goHome();
-  return true;
+  return closeCompletedGuide();
 }
 
 function renderDiscordGuideStep({ focus = false } = {}) {

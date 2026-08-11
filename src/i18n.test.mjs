@@ -209,3 +209,20 @@ test("Discord authorization actions disappear after the bot connects", () => {
   assert.match(app, /Discord está conectado\. Ya puedes terminar la guía\./);
   assert.match(app, /classList\.toggle\("guide-success-note", discordReady\)/);
 });
+
+test("finishing setup resets both guides before returning home", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const closeGuide = app.slice(
+    app.indexOf("async function closeCompletedGuide()"),
+    app.indexOf("async function finishInitialSetup()"),
+  );
+  const finishSetup = app.slice(
+    app.indexOf("async function finishInitialSetup()"),
+    app.indexOf("function renderDiscordGuideStep"),
+  );
+
+  assert.match(closeGuide, /state\.discordGuideStep = 0/);
+  assert.match(closeGuide, /state\.meetGuideStep = 0/);
+  assert.match(closeGuide, /await goHome\(\)/);
+  assert.equal((finishSetup.match(/return closeCompletedGuide\(\)/g) ?? []).length, 2);
+});
