@@ -35,7 +35,9 @@ de audio ni la envía a un servicio operado por el proyecto.
 
 ## Funciones
 
-- Transcripción en vivo por hablante para Discord y reuniones del navegador.
+- Transcripción en vivo por hablante para Discord y Google Meet.
+- Captura experimental para Microsoft Teams y Zoom, con soporte parcial mientras
+  se validan y mejoran sus integraciones.
 - Varias reuniones simultáneas con participantes, relojes y estado independientes.
 - Whisper local con aceleración Metal y detección de voz mediante Silero.
 - Biblioteca con búsqueda dentro de la transcripción, carpetas por canal y
@@ -95,6 +97,20 @@ La extensión se comunica únicamente con el receptor local de Kuali. Mantiene
 separadas las pistas y la identidad de los participantes cuando el servicio de
 reuniones las expone; si recibe audio mezclado, lo etiqueta como tal en lugar de
 inventar quién habló.
+
+### Estado de las plataformas
+
+| Plataforma | Estado |
+|---|---|
+| Discord | Estable |
+| Google Meet | Estable |
+| Microsoft Teams | Experimental · soporte parcial |
+| Zoom | Experimental · soporte parcial |
+
+Teams y Zoom todavía no tienen el mismo nivel de pruebas en reuniones reales
+que Discord y Google Meet. La captura, la identidad de participantes o la
+separación de hablantes pueden ser incompletas en algunos modos mientras mejora
+el soporte.
 
 ## Modelos de transcripción
 

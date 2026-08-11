@@ -148,6 +148,20 @@ test("both guides document model weights and Standard Webhooks", () => {
   }
 });
 
+test("platform support is explicit in both languages", () => {
+  const englishHome = read("index.html");
+  const spanishHome = read("es/index.html");
+  const englishGuide = read("guides/index.html");
+  const spanishGuide = read("es/guides/index.html");
+
+  assert.match(englishHome, /Microsoft Teams <small>Experimental · partial<\/small>/);
+  assert.match(englishHome, /Zoom <small>Experimental · partial<\/small>/);
+  assert.match(spanishHome, /Microsoft Teams <small>Experimental · parcial<\/small>/);
+  assert.match(spanishHome, /Zoom <small>Experimental · parcial<\/small>/);
+  assert.match(englishGuide, /Google Meet is stable[\s\S]*Microsoft Teams and Zoom are experimental/);
+  assert.match(spanishGuide, /Google Meet es estable[\s\S]*Microsoft Teams y Zoom son experimentales/);
+});
+
 test("deployment metadata and security policy are present", () => {
   assert.ok(existsSync(join(websiteRoot, ".nojekyll")));
   assert.doesNotThrow(() => JSON.parse(read("site.webmanifest")));

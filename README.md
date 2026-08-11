@@ -34,7 +34,9 @@ an audio recording and never sent to a Kuali-operated service.
 
 ## Features
 
-- Live, speaker-attributed transcription for Discord and browser meetings.
+- Live, speaker-attributed transcription for Discord and Google Meet.
+- Experimental browser capture for Microsoft Teams and Zoom, with partial
+  support while their integrations are validated and improved.
 - Separate concurrent meetings without shared participants, clocks, or state.
 - Local Whisper inference with Metal acceleration and Silero voice detection.
 - Searchable meeting library with transcript excerpts, channel folders, and
@@ -91,6 +93,19 @@ live in [`browser-extension/`](browser-extension/README.md).
 The extension connects only to Kuali's loopback listener. It preserves separate
 speaker tracks and participant identity when the meeting service exposes them,
 and labels mixed audio honestly instead of inventing an attribution.
+
+### Platform support
+
+| Platform | Status |
+|---|---|
+| Discord | Stable |
+| Google Meet | Stable |
+| Microsoft Teams | Experimental · partial support |
+| Zoom | Experimental · partial support |
+
+Teams and Zoom have not yet received the same depth of real-world testing as
+Discord and Google Meet. Their capture, participant identity, or speaker
+separation may be incomplete in some meeting modes while support improves.
 
 ## Transcription models
 

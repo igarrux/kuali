@@ -6,12 +6,15 @@ Kuali
 
 ## Resumen
 
-Captura audio de Meet, Teams y Zoom para transcribirlo de forma privada en la app local de Kuali.
+Transcribe Google Meet localmente con Kuali. Teams y Zoom tienen soporte experimental y parcial.
 
 ## Descripción detallada
 
 Kuali convierte reuniones del navegador en notas buscables y atribuidas por
 hablante, sin añadir un bot de grabación a la llamada.
+
+Google Meet tiene soporte estable. Microsoft Teams y Zoom tienen soporte
+experimental y parcial mientras sus integraciones reciben más pruebas reales.
 
 Inicia la captura desde la barra, revisa qué datos se procesarán y confirma que
 informaste a los participantes. Kuali envía el audio directamente a la app de
@@ -32,9 +35,10 @@ a Kuali mediante `127.0.0.1`, no tiene una nube operada por Kuali y no conserva
 el audio capturado como archivo. La transcripción sólo sale del equipo si
 configuras un proveedor de resúmenes, una entrega por Discord o un webhook.
 
-Google Meet, Microsoft Teams y Zoom pueden cambiar sus interfaces privadas. La
-separación de hablantes es de mejor esfuerzo; Kuali etiqueta el audio mezclado
-cuando no puede separarlo en vez de atribuirlo a la persona equivocada.
+Los servicios de reuniones pueden cambiar sus interfaces privadas. Teams y Zoom
+pueden tener captura, identidad o separación de hablantes incompletas en algunos
+modos. Kuali etiqueta el audio mezclado cuando no puede separarlo en vez de
+atribuirlo a la persona equivocada.
 
 Informa siempre a los participantes y obtén el consentimiento exigido en tu
 ubicación. Kuali no está afiliado con Google, Microsoft ni Zoom.

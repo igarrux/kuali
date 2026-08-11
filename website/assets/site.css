@@ -862,6 +862,23 @@ kbd {
   background: var(--accent);
 }
 
+.platform-badge small {
+  padding-left: 8px;
+  border-left: 1px solid var(--line-strong);
+  color: var(--muted);
+  font-size: 0.66rem;
+  font-weight: 720;
+  letter-spacing: 0.02em;
+}
+
+.platform-badge.experimental i {
+  background: var(--warning);
+}
+
+.platform-badge.experimental small {
+  color: var(--warning);
+}
+
 .bento {
   display: grid;
   grid-template-columns: repeat(12, 1fr);

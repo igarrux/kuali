@@ -70,3 +70,13 @@ test("localized store summaries fit the 132-character limit", () => {
     assert(summary.length > 0 && summary.length <= 132, `${path}: ${summary.length}`);
   }
 });
+
+test("store copy marks Teams and Zoom as experimental with partial support", () => {
+  const english = read("store/listing.en.md");
+  const spanish = read("store/listing.es-419.md");
+
+  assert.match(english, /Google Meet support is stable/);
+  assert.match(english, /Microsoft Teams and Zoom support is experimental[\s\S]*partial/);
+  assert.match(spanish, /Google Meet tiene soporte estable/);
+  assert.match(spanish, /Microsoft Teams y Zoom tienen soporte[\s\S]*experimental y parcial/);
+});

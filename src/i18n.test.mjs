@@ -89,6 +89,19 @@ test("browser onboarding prefers the verified store and keeps manual installatio
   assert.match(commands, new RegExp(storeId));
 });
 
+test("browser guidance distinguishes stable and experimental platform support", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const supportNotice = "Google Meet tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y parcial.";
+
+  assert.equal((html.match(new RegExp(supportNotice, "g")) ?? []).length, 2);
+  setLanguagePreference("en", { notify: false });
+  assert.equal(
+    t(supportNotice),
+    "Google Meet has stable support. Microsoft Teams and Zoom have experimental, partial support.",
+  );
+  setLanguagePreference("es", { notify: false });
+});
+
 test("a persistent model notice handles downloads and gates initial setup", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");

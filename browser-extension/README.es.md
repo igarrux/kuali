@@ -2,9 +2,16 @@
 
 [English](README.md) · **Español**
 
-Conecta reuniones de Google Meet, Microsoft Teams y Zoom con la aplicación
-local de Kuali. Tú sigues siendo un participante normal; no entra una cuenta de
-bot externa.
+Conecta reuniones del navegador con la aplicación local de Kuali. Google Meet
+tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y
+parcial mientras sus integraciones reciben más pruebas en reuniones reales. Tú
+sigues siendo un participante normal; no entra una cuenta de bot externa.
+
+| Plataforma | Estado |
+|---|---|
+| Google Meet | Estable |
+| Microsoft Teams | Experimental · soporte parcial |
+| Zoom | Experimental · soporte parcial |
 
 ## Instalar
 
@@ -59,8 +66,8 @@ la RAM. Para una prueba rápida de una sola persona usa
   disponible. Como respaldo, Kuali relaciona una sola vez el CSRC con una ficha
   tras varios cientos de milisegundos de voz decodificada inequívoca; el audio
   posterior nunca persigue el brillo visual.
-- Teams usa pistas WebRTC individuales cuando la web las expone.
-- Zoom intenta lo mismo. Si ese modo no expone pistas WebRTC, un `tabCapture`
+- Teams (experimental) usa pistas WebRTC individuales cuando la web las expone.
+- Zoom (experimental) intenta lo mismo. Si ese modo no expone pistas WebRTC, un `tabCapture`
   aislado conserva la reunión como un canal `mixed`. El fallback se descarta tan
   pronto como aparece una pista individual, para no transcribir ambas rutas.
 

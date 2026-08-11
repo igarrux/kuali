@@ -2,9 +2,17 @@
 
 **English** · [Español](README.es.md)
 
-This unpacked Chrome/Chromium extension connects Google Meet, Microsoft Teams,
-and Zoom meetings to the Kuali desktop app. You remain a normal participant in
-the meeting; no external bot account joins it.
+This unpacked Chrome/Chromium extension connects browser meetings to the Kuali
+desktop app. Google Meet support is stable. Microsoft Teams and Zoom support is
+experimental and partial while those integrations receive broader real-world
+testing. You remain a normal participant in the meeting; no external bot
+account joins it.
+
+| Platform | Status |
+|---|---|
+| Google Meet | Stable |
+| Microsoft Teams | Experimental · partial support |
+| Zoom | Experimental · partial support |
 
 ## Install
 
@@ -64,9 +72,10 @@ platform, and an `audioKind` of either `separate` or `mixed`.
   Kuali's participant channels remain stable. Identity comes from Meet's
   participant collection when available or from a one-time, confidence-gated
   CSRC/activity correlation; later audio never follows the visual glow.
-- Teams: captures individual WebRTC tracks when Teams exposes them and maps
-  voice-outline activity to the corresponding participant.
-- Zoom: captures separate WebRTC tracks when the active Zoom mode exposes them.
+- Teams (experimental): captures individual WebRTC tracks when Teams exposes
+  them and maps voice-outline activity to the corresponding participant.
+- Zoom (experimental): captures separate WebRTC tracks when the active Zoom
+  mode exposes them.
   If none appear, an offscreen `tabCapture` fallback preserves the meeting as
   one `mixed` channel. It is discarded as soon as an individual page track is
   proven, so the two paths never intentionally transcribe the same audio.

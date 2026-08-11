@@ -207,6 +207,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Instalar en Arc": "Install in Arc",
   "Chrome Web Store también permite instalar extensiones en Edge, Brave y Arc.":
     "The Chrome Web Store also supports installing extensions in Edge, Brave, and Arc.",
+  "Google Meet tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y parcial.":
+    "Google Meet has stable support. Microsoft Teams and Zoom have experimental, partial support.",
   "Instalación manual": "Manual installation",
   "Úsala solamente si la tienda no está disponible. Abre el administrador del navegador, activa":
     "Use this only when the store is unavailable. Open the browser's extension manager, enable",
@@ -340,8 +342,6 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Conecta reuniones del navegador y avisa a otras aplicaciones.":
     "Connect browser meetings and notify other applications.",
   "Reuniones del navegador": "Browser meetings",
-  "Google Meet, Microsoft Teams y Zoom mediante la extensión Kuali.":
-    "Google Meet, Microsoft Teams, and Zoom through the Kuali extension.",
   "Comprobando…": "Checking…",
   "Escuchar reuniones del navegador": "Listen to browser meetings",
   "Solo abre un receptor local; no expone nada a tu red.":
