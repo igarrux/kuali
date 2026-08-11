@@ -14,11 +14,11 @@ use kuali_core::{
 };
 use parking_lot::RwLock;
 use serenity::all::{
-    ButtonStyle, ChannelId, ComponentInteraction, Context, CreateAllowedMentions, CreateAttachment,
-    CreateButton, CreateCommand, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter,
-    CreateInteractionResponse, CreateInteractionResponseFollowup, CreateInteractionResponseMessage,
-    CreateMessage, EditInteractionResponse, EditMessage, EventHandler, GatewayIntents, Guild,
-    GuildId, Http, Interaction, MessageId, Permissions, Ready, UserId, VoiceState,
+    ButtonStyle, ChannelId, ComponentInteraction, Context, CreateAllowedMentions, CreateButton,
+    CreateCommand, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, CreateInteractionResponse,
+    CreateInteractionResponseMessage, CreateMessage, EditInteractionResponse, EditMessage,
+    EventHandler, GatewayIntents, Guild, GuildId, Http, Interaction, MessageId, Permissions, Ready,
+    UserId, VoiceState,
 };
 use serenity::Client;
 use songbird::driver::{Channels, DecodeConfig, DecodeMode, SampleRate};
@@ -46,6 +46,9 @@ const KUALI_PENDING_COLOR: u32 = 0x7C_A6_DA;
 const KUALI_ATTENTION_COLOR: u32 = 0xE8_A2_3B;
 const KUALI_ERROR_COLOR: u32 = 0xDF_6D_73;
 const EMBED_FIELD_LIMIT: usize = 1_024;
+const PRIVATE_TEXT_CHUNK_LIMIT: usize = 3_800;
+const PRIVATE_TEXT_COMPONENT_LIMIT: usize = 30;
+const DISCORD_COMPONENTS_V2_FLAG: u32 = 1 << 15;
 const PUBLIC_TASK_LIMIT: usize = 6;
 const RECORD_COMMAND_ES: &str = "grabar";
 const RECORD_COMMAND_EN: &str = "record";
@@ -580,41 +583,15 @@ fn fallback_completion_content(meeting: &Meeting, locale: DiscordLocale) -> Stri
     )
 }
 
-fn private_summary_embed(meeting: &Meeting, locale: DiscordLocale) -> Option<CreateEmbed> {
-    meeting.summary.as_ref()?;
-    Some(private_document_embed(
-        meeting,
-        locale,
-        MeetingAction::Summary,
-    ))
-}
-
-fn private_transcript_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
-    private_document_embed(meeting, locale, MeetingAction::Transcript)
-}
-
-fn private_document_embed(
+fn private_document_fallback_embed(
     meeting: &Meeting,
     locale: DiscordLocale,
     action: MeetingAction,
+    visible: &str,
 ) -> CreateEmbed {
-    let (kind, count) = match action {
-        MeetingAction::Summary => (
-            locale.text("Resumen completo", "Full summary"),
-            locale
-                .text(
-                    "Todo el contenido se muestra a continuación y también puede descargarse.",
-                    "All content is shown below and is also available to download.",
-                )
-                .to_string(),
-        ),
-        MeetingAction::Transcript => (
-            locale.text("Transcripción completa", "Full transcript"),
-            match locale {
-                DiscordLocale::Spanish => format!("{} intervenciones", meeting.utterances.len()),
-                DiscordLocale::English => format!("{} utterances", meeting.utterances.len()),
-            },
-        ),
+    let kind = match action {
+        MeetingAction::Summary => locale.text("Resumen completo", "Full summary"),
+        MeetingAction::Transcript => locale.text("Transcripción completa", "Full transcript"),
     };
     CreateEmbed::new()
         .author(CreateEmbedAuthor::new("Kuali").url(KUALI_WEBSITE))
@@ -622,45 +599,13 @@ fn private_document_embed(
             &format!("{kind} · {}", meeting.meta.title()),
             256,
         ))
-        .description(format!(
-            "{} · {} · {}",
-            human_duration(meeting.duration_ms(), locale),
-            match locale {
-                DiscordLocale::Spanish => format!("{} participantes", participant_count(meeting)),
-                DiscordLocale::English => format!("{} participants", participant_count(meeting)),
-            },
-            count
-        ))
+        .description(truncate_text(visible, 4_000))
         .thumbnail(KUALI_ICON)
         .footer(CreateEmbedFooter::new(locale.text(
             "Solo tú puedes ver este mensaje · Kuali",
             "Only you can see this message · Kuali",
         )))
         .color(KUALI_EMBED_COLOR)
-}
-
-fn safe_filename(value: &str) -> String {
-    let mut output = String::new();
-    let mut separator = false;
-    for character in value.trim().to_lowercase().chars() {
-        if character.is_alphanumeric() {
-            if separator && !output.is_empty() {
-                output.push('-');
-            }
-            output.push(character);
-            separator = false;
-        } else {
-            separator = true;
-        }
-        if char_count(&output) >= 48 {
-            break;
-        }
-    }
-    if output.is_empty() {
-        "reunion".to_string()
-    } else {
-        output
-    }
 }
 
 fn document_header(meeting: &Meeting, locale: DiscordLocale) -> String {
@@ -914,31 +859,126 @@ fn visible_transcript_document(meeting: &Meeting, locale: DiscordLocale) -> Opti
     wrote_utterance.then_some(output)
 }
 
-fn document_attachment(
+fn private_document_filename(action: MeetingAction, locale: DiscordLocale) -> &'static str {
+    match (action, locale) {
+        (MeetingAction::Summary, DiscordLocale::Spanish) => "kuali-resumen.txt",
+        (MeetingAction::Summary, DiscordLocale::English) => "kuali-summary.txt",
+        (MeetingAction::Transcript, DiscordLocale::Spanish) => "kuali-transcripcion.txt",
+        (MeetingAction::Transcript, DiscordLocale::English) => "kuali-transcript.txt",
+    }
+}
+
+fn private_document_description(action: MeetingAction, locale: DiscordLocale) -> &'static str {
+    match (action, locale) {
+        (MeetingAction::Summary, DiscordLocale::Spanish) => {
+            "Descargar el resumen completo en texto"
+        }
+        (MeetingAction::Summary, DiscordLocale::English) => "Download the complete summary as text",
+        (MeetingAction::Transcript, DiscordLocale::Spanish) => {
+            "Descargar la transcripción completa en texto"
+        }
+        (MeetingAction::Transcript, DiscordLocale::English) => {
+            "Download the complete transcript as text"
+        }
+    }
+}
+
+fn private_document_payload(
     meeting: &Meeting,
     action: MeetingAction,
     locale: DiscordLocale,
-    content: String,
-) -> CreateAttachment {
-    let (kind, description) = match (action, locale) {
+    visible: &str,
+    include_download: bool,
+) -> serde_json::Value {
+    let kind = match action {
+        MeetingAction::Summary => locale.text("Resumen completo", "Full summary"),
+        MeetingAction::Transcript => locale.text("Transcripción completa", "Full transcript"),
+    };
+    let participants = match locale {
+        DiscordLocale::Spanish => format!("{} participantes", participant_count(meeting)),
+        DiscordLocale::English => format!("{} participants", participant_count(meeting)),
+    };
+    let detail = match (action, locale) {
         (MeetingAction::Summary, DiscordLocale::Spanish) => {
-            ("resumen", "Resumen completo generado por Kuali")
+            "Puntos clave, decisiones y tareas".to_string()
         }
         (MeetingAction::Summary, DiscordLocale::English) => {
-            ("summary", "Complete summary generated by Kuali")
+            "Key points, decisions, and action items".to_string()
         }
         (MeetingAction::Transcript, DiscordLocale::Spanish) => {
-            ("transcripcion", "Transcripción completa generada por Kuali")
+            format!("{} intervenciones", meeting.utterances.len())
         }
         (MeetingAction::Transcript, DiscordLocale::English) => {
-            ("transcript", "Complete transcript generated by Kuali")
+            format!("{} utterances", meeting.utterances.len())
         }
     };
-    CreateAttachment::bytes(
-        content.into_bytes(),
-        format!("kuali-{kind}-{}.txt", safe_filename(&meeting.meta.title())),
-    )
-    .description(description)
+    let header = format!(
+        "## {kind}\n**{}**\n-# {} · {participants} · {detail}",
+        meeting.meta.title(),
+        human_duration(meeting.duration_ms(), locale),
+    );
+    let mut chunks = split_message(visible, PRIVATE_TEXT_CHUNK_LIMIT);
+    if chunks.len() > PRIVATE_TEXT_COMPONENT_LIMIT {
+        let overflow = chunks.split_off(PRIVATE_TEXT_COMPONENT_LIMIT - 1);
+        chunks.push(overflow.join("\n"));
+    }
+
+    let mut children = vec![
+        serde_json::json!({
+            "type": 9,
+            "components": [{ "type": 10, "content": header }],
+            "accessory": {
+                "type": 11,
+                "media": { "url": KUALI_ICON },
+                "description": "Kuali"
+            }
+        }),
+        serde_json::json!({ "type": 14, "divider": true, "spacing": 1 }),
+    ];
+    children.extend(
+        chunks
+            .into_iter()
+            .map(|content| serde_json::json!({ "type": 10, "content": content })),
+    );
+    children.push(serde_json::json!({ "type": 14, "divider": true, "spacing": 1 }));
+    children.push(serde_json::json!({
+        "type": 10,
+        "content": locale.text(
+            "-# Solo tú puedes ver este mensaje · Kuali",
+            "-# Only you can see this message · Kuali"
+        )
+    }));
+
+    let filename = private_document_filename(action, locale);
+    if include_download {
+        children.push(serde_json::json!({
+            "type": 13,
+            "file": { "url": format!("attachment://{filename}") }
+        }));
+    }
+
+    let attachments = if include_download {
+        serde_json::json!([{
+            "id": 0,
+            "filename": filename,
+            "description": private_document_description(action, locale)
+        }])
+    } else {
+        serde_json::json!([])
+    };
+
+    serde_json::json!({
+        "flags": DISCORD_COMPONENTS_V2_FLAG,
+        "content": null,
+        "embeds": [],
+        "allowed_mentions": { "parse": [] },
+        "attachments": attachments,
+        "components": [{
+            "type": 17,
+            "accent_color": KUALI_EMBED_COLOR,
+            "components": children
+        }]
+    })
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -1029,7 +1069,6 @@ struct Handler {
 struct PrivateMeetingDocument {
     action: MeetingAction,
     locale: DiscordLocale,
-    embed: CreateEmbed,
     visible: String,
     download: String,
 }
@@ -1529,98 +1568,101 @@ impl Handler {
         meeting: &Meeting,
         document: PrivateMeetingDocument,
     ) {
-        let PrivateMeetingDocument {
-            action,
-            locale,
-            embed,
-            visible,
-            download,
-        } = document;
-        let mut chunks = split_message(&visible, 1_850).into_iter();
-        let first = chunks.next().unwrap_or_else(|| {
-            locale
-                .text(
-                    "No hay contenido para mostrar.",
-                    "There is no content to show.",
-                )
-                .to_string()
-        });
-        let can_attach = download.len() <= component.attachment_size_limit as usize;
-        let mut response = EditInteractionResponse::new()
-            .content(first.clone())
-            .embed(embed.clone())
-            .allowed_mentions(CreateAllowedMentions::new());
-        if can_attach {
-            response =
-                response.new_attachment(document_attachment(meeting, action, locale, download));
-        }
-
-        let sent = match component.edit_response(&ctx.http, response).await {
-            Ok(message) => message,
-            Err(error) if can_attach => {
-                tracing::warn!(
-                    meeting_id = %meeting.meta.id,
-                    %error,
-                    "Discord no permitió adjuntar el documento; manteniendo todo el texto visible"
-                );
-                match component
-                    .edit_response(
-                        &ctx.http,
-                        EditInteractionResponse::new()
-                            .content(first.clone())
-                            .embed(embed.clone())
-                            .allowed_mentions(CreateAllowedMentions::new()),
-                    )
-                    .await
-                {
-                    Ok(message) => message,
-                    Err(_) => return,
-                }
-            }
-            Err(_) => return,
+        let can_attach = document.download.len() <= component.attachment_size_limit as usize;
+        let result = self
+            .edit_private_document_components(component, meeting, &document, can_attach)
+            .await;
+        let mut error = match result {
+            Ok(()) => return,
+            Err(error) => error,
         };
 
         if can_attach {
-            if let Some(attachment) = sent.attachments.first() {
-                let label = match (action, locale) {
-                    (MeetingAction::Summary, DiscordLocale::Spanish) => "Descargar resumen (.txt)",
-                    (MeetingAction::Summary, DiscordLocale::English) => "Download summary (.txt)",
-                    (MeetingAction::Transcript, DiscordLocale::Spanish) => {
-                        "Descargar transcripción (.txt)"
-                    }
-                    (MeetingAction::Transcript, DiscordLocale::English) => {
-                        "Download transcript (.txt)"
-                    }
-                };
-                let _ = component
-                    .edit_response(
-                        &ctx.http,
-                        EditInteractionResponse::new()
-                            .content(first)
-                            .embed(embed)
-                            .allowed_mentions(CreateAllowedMentions::new())
-                            .keep_existing_attachment(attachment.id)
-                            .button(CreateButton::new_link(&attachment.url).label(label)),
-                    )
-                    .await;
+            tracing::warn!(
+                meeting_id = %meeting.meta.id,
+                %error,
+                "Discord no permitió adjuntar el documento; reintentando sin descarga"
+            );
+            match self
+                .edit_private_document_components(component, meeting, &document, false)
+                .await
+            {
+                Ok(()) => return,
+                Err(retry_error) => error = retry_error,
             }
         }
 
-        for chunk in chunks {
-            if component
-                .create_followup(
-                    &ctx.http,
-                    CreateInteractionResponseFollowup::new()
-                        .content(chunk)
-                        .allowed_mentions(CreateAllowedMentions::new())
-                        .ephemeral(true),
+        tracing::warn!(
+            meeting_id = %meeting.meta.id,
+            %error,
+            "Discord rechazó la tarjeta moderna; usando una respuesta compatible"
+        );
+        let _ = component
+            .edit_response(
+                &ctx.http,
+                EditInteractionResponse::new()
+                    .embed(private_document_fallback_embed(
+                        meeting,
+                        document.locale,
+                        document.action,
+                        &document.visible,
+                    ))
+                    .allowed_mentions(CreateAllowedMentions::new()),
+            )
+            .await;
+    }
+
+    async fn edit_private_document_components(
+        &self,
+        component: &ComponentInteraction,
+        meeting: &Meeting,
+        document: &PrivateMeetingDocument,
+        include_download: bool,
+    ) -> Result<(), String> {
+        let payload = private_document_payload(
+            meeting,
+            document.action,
+            document.locale,
+            &document.visible,
+            include_download,
+        );
+        let url = format!(
+            "https://discord.com/api/v10/webhooks/{}/{}/messages/@original",
+            component.application_id.get(),
+            component.token
+        );
+        let request = reqwest::Client::new().patch(url).header(
+            reqwest::header::USER_AGENT,
+            format!("Kuali/{} ({KUALI_WEBSITE})", env!("CARGO_PKG_VERSION")),
+        );
+        let response = if include_download {
+            let filename = private_document_filename(document.action, document.locale);
+            let file = reqwest::multipart::Part::bytes(document.download.as_bytes().to_vec())
+                .file_name(filename)
+                .mime_str("text/plain; charset=utf-8")
+                .map_err(|_| "no pude preparar el archivo de descarga".to_string())?;
+            request
+                .multipart(
+                    reqwest::multipart::Form::new()
+                        .text("payload_json", payload.to_string())
+                        .part("files[0]", file),
                 )
+                .send()
                 .await
-                .is_err()
-            {
-                break;
-            }
+        } else {
+            request.json(&payload).send().await
         }
+        .map_err(|error| format!("falló la conexión con Discord: {}", error.without_url()))?;
+
+        let status = response.status();
+        if status.is_success() {
+            return Ok(());
+        }
+        let body = response.text().await.unwrap_or_default();
+        Err(format!(
+            "Discord respondió {status}: {}",
+            truncate_text(&body, 300)
+        ))
     }
 
     async fn handle_meeting_button(
@@ -1657,8 +1699,7 @@ impl Handler {
 
         match action {
             MeetingAction::Summary => {
-                let (Some(embed), Some(visible), Some(document)) = (
-                    private_summary_embed(&meeting, locale),
+                let (Some(visible), Some(document)) = (
                     visible_summary_document(&meeting, locale),
                     summary_document(&meeting, locale),
                 ) else {
@@ -1678,7 +1719,6 @@ impl Handler {
                     PrivateMeetingDocument {
                         action: MeetingAction::Summary,
                         locale,
-                        embed,
                         visible,
                         download: document,
                     },
@@ -1699,7 +1739,6 @@ impl Handler {
                         .await;
                     return;
                 };
-                let embed = private_transcript_embed(&meeting, locale);
                 self.respond_with_private_document(
                     ctx,
                     component,
@@ -1707,7 +1746,6 @@ impl Handler {
                     PrivateMeetingDocument {
                         action: MeetingAction::Transcript,
                         locale,
-                        embed,
                         visible,
                         download: document,
                     },
@@ -2412,6 +2450,15 @@ mod tests {
         scalar + author + footer + fields
     }
 
+    fn component_count(component: &serde_json::Value) -> usize {
+        1 + component["components"]
+            .as_array()
+            .into_iter()
+            .flatten()
+            .map(component_count)
+            .sum::<usize>()
+    }
+
     #[test]
     fn a_discord_username_accepts_at_and_case_without_accepting_display_names() {
         assert!(discord_username_matches(" @Garrux ", "garrux"));
@@ -2545,7 +2592,7 @@ mod tests {
     }
 
     #[test]
-    fn public_tasks_and_private_headers_stay_inside_discord_embed_limits() {
+    fn public_tasks_fit_embeds_and_private_documents_stay_in_one_message() {
         let mut meeting = completed_meeting();
         let summary = meeting.summary.as_mut().unwrap();
         summary.overview = "Descripción larga ".repeat(600);
@@ -2574,15 +2621,31 @@ mod tests {
         }
         assert!(public.to_string().contains("más en el resumen"));
 
-        let private =
-            serde_json::to_value(private_summary_embed(&meeting, DiscordLocale::Spanish).unwrap())
-                .unwrap();
-        assert!(embed_text_length(&private) <= 6_000);
-
         let visible = visible_summary_document(&meeting, DiscordLocale::Spanish).unwrap();
         assert!(visible.contains("Punto clave 39"));
         assert!(visible.contains("Tarea 29"));
         assert!(visible.contains("Pregunta"));
+
+        let private = private_document_payload(
+            &meeting,
+            MeetingAction::Summary,
+            DiscordLocale::Spanish,
+            &visible,
+            true,
+        );
+        assert_eq!(private["flags"], DISCORD_COMPONENTS_V2_FLAG);
+        assert_eq!(private["content"], serde_json::Value::Null);
+        assert!(private["embeds"].as_array().unwrap().is_empty());
+        assert_eq!(private["components"].as_array().unwrap().len(), 1);
+        assert!(component_count(&private["components"][0]) <= 40);
+        assert!(private.to_string().contains("Punto clave 39"));
+        assert!(private.to_string().contains("Tarea 29"));
+        assert!(private
+            .to_string()
+            .contains("attachment://kuali-resumen.txt"));
+        assert!(private
+            .to_string()
+            .contains("Solo tú puedes ver este mensaje"));
     }
 
     #[test]
@@ -2618,6 +2681,24 @@ mod tests {
         assert!(visible_transcript.contains("**00:05 · Ana**"));
         assert!(visible_transcript.contains("> Publicamos el viernes"));
         assert!(!visible_transcript.contains("meeting-123"));
+
+        let private_transcript = private_document_payload(
+            &meeting,
+            MeetingAction::Transcript,
+            DiscordLocale::Spanish,
+            &visible_transcript,
+            true,
+        );
+        assert_eq!(
+            private_transcript["components"].as_array().unwrap().len(),
+            1
+        );
+        assert!(private_transcript
+            .to_string()
+            .contains("attachment://kuali-transcripcion.txt"));
+        assert!(private_transcript
+            .to_string()
+            .contains("Publicamos el viernes"));
 
         let public =
             serde_json::to_string(&completion_embed(&meeting, DiscordLocale::Spanish)).unwrap();
