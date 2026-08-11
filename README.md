@@ -72,8 +72,10 @@ model without requiring manual configuration-file edits.
 ### Discord
 
 Create a bot in the [Discord Developer Portal](https://discord.com/developers/applications),
-copy its token into Kuali, and install it in the servers where it should record.
-The in-app guide shows each screen and the exact permissions required.
+copy its token and your `@username` into Kuali, then choose a server in the
+Discord authorization window Kuali opens. Kuali derives the application ID
+from the token and prepares the required scopes and minimum permissions
+automatically; you do not need to configure an OAuth link by hand.
 
 Kuali can follow one configured Discord account automatically. Automatic
 following can be paused at any time without forgetting the account. A person in
@@ -82,6 +84,14 @@ a voice channel can also invite the bot with `/grabar` or `/record`.
 When Kuali joins, it plays and posts the consent notice. It repeats the notice
 for participants who arrive later and keeps an append-only consent audit log.
 Kuali never captures its own announcement.
+
+After a meeting, Kuali can publish a compact Discord card with its action items,
+duration, participant count, and private shortcuts to the summary, key points,
+decisions, open questions, and full transcript. The summary and transcript also
+include downloadable text files, keeping the channel readable without hiding
+the full meeting record. The card appears while the summary is being prepared
+and then updates in place. Long private views are paginated inside the same card
+without splitting the meeting across multiple Discord messages.
 
 ### Browser meetings
 
@@ -184,6 +194,18 @@ recommended multi-day retry schedule while preserving the delivery ID and
 refreshing the attempt timestamp.
 
 ## Development
+
+Install [`just`](https://just.systems/) and [`fzf`](https://junegunn.github.io/fzf/)
+to use the versioned project command menu:
+
+```sh
+brew install just fzf
+just
+```
+
+Choose a recipe and press Enter, or run one directly—for example,
+`just dev`, `just test`, or `just check`. Use `just --list` to inspect every
+available recipe and its description. The underlying commands remain:
 
 ```sh
 cargo fmt --all --check

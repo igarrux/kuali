@@ -10,10 +10,12 @@
 mod audit;
 pub mod bot;
 pub mod identity;
+mod installation;
 pub mod receiver;
 mod speech;
 
-pub use bot::{start, DiscordError, DiscordHandle};
+pub use bot::{start, DiscordError, DiscordHandle, DiscordSummaryState};
+pub use installation::{installation_url, DiscordInstallationError};
 // Source vocabulary lives in `kuali-core` so Meet can emit it without depending
 // on Discord. Re-export it here to preserve existing consumers.
 pub use identity::MemberResolver;

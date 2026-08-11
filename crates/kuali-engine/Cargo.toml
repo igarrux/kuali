@@ -28,5 +28,6 @@ uuid.workspace = true
 
 [dev-dependencies]
 anyhow.workspace = true
+async-trait.workspace = true
 futures-util.workspace = true
 tokio-tungstenite.workspace = true

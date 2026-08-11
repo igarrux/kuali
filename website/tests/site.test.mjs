@@ -148,6 +148,35 @@ test("both guides document model weights and Standard Webhooks", () => {
   }
 });
 
+test("Discord setup is a three-step token-driven authorization flow", () => {
+  const variants = [
+    {
+      page: "guides/index.html",
+      oldCopy: /Enable Guild Install|Configure the install link and scopes/,
+      automaticCopy: /obtains the application ID from the token/,
+    },
+    {
+      page: "es/guides/index.html",
+      oldCopy: /Activa Instalación de servidor|Configura el enlace y los ámbitos/,
+      automaticCopy: /obtiene el ID de la aplicación desde el token/,
+    },
+  ];
+
+  for (const { page, oldCopy, automaticCopy } of variants) {
+    const html = read(page);
+    const section = html.match(/<section class="guide-section" id="discord"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(section, `${page} is missing the Discord guide`);
+    assert.equal((section.match(/<article class="guide-step">/g) ?? []).length, 3);
+    assert.equal((section.match(/data-lightbox-source/g) ?? []).length, 3);
+    assert.match(section, /copy-username\.png/);
+    assert.match(section, /Attach Files|Adjuntar archivos/);
+    assert.match(section, /Embed Links|Insertar enlaces/);
+    assert.match(section, automaticCopy);
+    assert.match(section, /applications\.commands/);
+    assert.doesNotMatch(section, oldCopy);
+  }
+});
+
 test("platform support is explicit in both languages", () => {
   const englishHome = read("index.html");
   const spanishHome = read("es/index.html");

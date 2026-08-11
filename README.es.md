@@ -74,8 +74,10 @@ editar archivos de configuración manualmente.
 ### Discord
 
 Crea un bot en el [Portal de desarrolladores de Discord](https://discord.com/developers/applications),
-pega su token en Kuali e instálalo en los servidores donde se usará. La guía de
-la aplicación muestra cada pantalla y los permisos exactos.
+pega su token y tu `@usuario` en Kuali y elige un servidor en la ventana de
+autorización que se abrirá. Kuali obtiene el ID de la aplicación desde el token
+y prepara automáticamente los ámbitos y permisos mínimos; no tienes que crear
+un enlace de OAuth manualmente.
 
 Kuali puede seguir automáticamente a una cuenta configurada. El seguimiento se
 puede pausar sin olvidar la cuenta. Una persona dentro de un canal de voz también
@@ -84,6 +86,14 @@ puede invitar al bot mediante `/grabar` o `/record`.
 Al entrar, Kuali reproduce y publica el aviso de consentimiento. Lo repite para
 quienes llegan después y conserva un registro de auditoría anexado cronológicamente.
 Kuali nunca transcribe su propio aviso.
+
+Al terminar una reunión, Kuali puede publicar una tarjeta compacta en Discord
+con las tareas, la duración, el número de participantes y accesos privados al
+resumen, puntos clave, decisiones, preguntas abiertas y transcripción completa.
+El resumen y la transcripción también incluyen archivos de texto descargables,
+sin llenar el canal con un bloque enorme. La tarjeta aparece mientras se prepara
+el resumen y luego se actualiza en el mismo lugar. Las vistas privadas largas se
+paginan dentro de la misma tarjeta, sin repartir la reunión entre varios mensajes.
 
 ### Reuniones del navegador
 
@@ -190,6 +200,18 @@ usan el calendario de reintentos recomendado durante varios días, conservando
 el identificador de entrega y renovando el timestamp de cada intento.
 
 ## Desarrollo
+
+Instala [`just`](https://just.systems/) y [`fzf`](https://junegunn.github.io/fzf/)
+para usar el menú de comandos versionado con el proyecto:
+
+```sh
+brew install just fzf
+just
+```
+
+Elige una receta y presiona Enter, o ejecuta una directamente; por ejemplo,
+`just dev`, `just test` o `just check`. Usa `just --list` para consultar todas
+las recetas y sus descripciones. Los comandos subyacentes siguen siendo:
 
 ```sh
 cargo fmt --all --check

@@ -217,7 +217,7 @@ pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, Ll
         })
         .collect();
 
-    Ok(MeetingSummary {
+    let summary = MeetingSummary {
         title: clean_title(&parsed.title),
         overview: parsed.overview.trim().to_string(),
         key_points: clean(parsed.key_points),
@@ -225,7 +225,19 @@ pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, Ll
         action_items,
         open_questions: clean(parsed.open_questions),
         generated_by: generated_by.to_string(),
-    })
+    };
+    if summary.overview.is_empty()
+        && summary.key_points.is_empty()
+        && summary.decisions.is_empty()
+        && summary.action_items.is_empty()
+        && summary.open_questions.is_empty()
+    {
+        return Err(LlmError::BadJson {
+            provider: generated_by.to_string(),
+            message: "the response contained no usable summary sections".into(),
+        });
+    }
+    Ok(summary)
 }
 
 fn clean_title(value: &str) -> String {
@@ -388,6 +400,12 @@ mod tests {
         let summary = parse_summary(r#"{"overview":"solo esto"}"#, "test").unwrap();
         assert_eq!(summary.overview, "solo esto");
         assert!(summary.action_items.is_empty());
+    }
+
+    #[test]
+    fn an_empty_object_is_invalid_instead_of_becoming_a_blank_summary() {
+        let error = parse_summary("{}", "test").unwrap_err();
+        assert!(matches!(error, LlmError::BadJson { .. }));
     }
 
     #[test]

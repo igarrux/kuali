@@ -10,10 +10,10 @@ use std::time::Duration;
 
 use chrono::Utc;
 use kuali_core::{
-    DiscordUserId, EngineStatus, KualiConfig, KualiEvent, Meeting, MeetingMeta, MeetingSummary,
-    ModelState, Utterance, VoiceSessionId, WhisperModel,
+    DiscordSummaryDelivery, DiscordUserId, EngineStatus, KualiConfig, KualiEvent, Meeting,
+    MeetingMeta, MeetingSummary, ModelState, Utterance, VoiceSessionId, WhisperModel,
 };
-use kuali_discord::{CallInfo, DiscordHandle, VoiceEvent};
+use kuali_discord::{CallInfo, DiscordHandle, DiscordSummaryState, VoiceEvent};
 use kuali_stt::{i16_to_f32, Segment, Segmenter};
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
@@ -29,6 +29,7 @@ const TICK_MS: u64 = 20;
 /// Drafts improve latency but must never block final utterances under concurrent
 /// speech. Whisper has one mutable state, so pending drafts are bounded.
 const MAX_QUEUED_PREVIEWS: usize = 4;
+const MAX_SUMMARY_ATTEMPTS: usize = 3;
 
 /// Wrapped dependency errors include large enums such as `serenity::Error`.
 /// Boxing prevents every engine `Result` from carrying that stack cost on the
@@ -703,12 +704,14 @@ impl Engine {
 
     /// Requests another LLM summary after changing providers or receiving a weak result.
     pub async fn resummarize(&self, meeting_id: &str) -> Result<MeetingSummary, EngineError> {
-        if !self.inner.config.read().llm.summarize_on_leave {
+        let config = self.inner.config.read().clone();
+        if !config.llm.summarize_on_leave {
             return Err(EngineError::SummariesDisabled);
         }
         let mut meeting = self.load_meeting(meeting_id)?;
-        let summary = summarize(&self.inner, &mut meeting).await?;
-        Ok(summary)
+        summarize_and_sync(&self.inner, &mut meeting, &config, 0)
+            .await
+            .map_err(Into::into)
     }
 
     pub fn export(
@@ -815,12 +818,12 @@ async fn handle_voice_event(inner: &Arc<Inner>, source: VoiceSource, event: Voic
             )
             .await;
         }
-        VoiceEvent::TranscriptRequested {
+        VoiceEvent::MeetingRequested {
             meeting_id,
             guild_id,
             reply,
         } => {
-            let result = transcript_for_discord(inner, &meeting_id, guild_id);
+            let result = meeting_for_discord(inner, &meeting_id, guild_id);
             let _ = reply.send(result);
         }
         VoiceEvent::FollowRequested { user_id, reply } => {
@@ -970,12 +973,12 @@ async fn handle_session_event(inner: &Arc<Inner>, session: VoiceSessionKey, even
             }
         }
         VoiceEvent::Warning(message) => emit_voice_warning(inner, session.source, message),
-        VoiceEvent::TranscriptRequested {
+        VoiceEvent::MeetingRequested {
             meeting_id,
             guild_id,
             reply,
         } => {
-            let result = transcript_for_discord(inner, &meeting_id, guild_id);
+            let result = meeting_for_discord(inner, &meeting_id, guild_id);
             let _ = reply.send(result);
         }
         VoiceEvent::FollowRequested { user_id, reply } => {
@@ -1006,11 +1009,11 @@ fn session_keys_for_source(inner: &Arc<Inner>, source: VoiceSource) -> Vec<Voice
         .collect()
 }
 
-fn transcript_for_discord(
+fn meeting_for_discord(
     inner: &Arc<Inner>,
     meeting_id: &str,
     guild_id: u64,
-) -> Result<String, String> {
+) -> Result<Meeting, String> {
     let active = inner
         .active
         .lock()
@@ -1025,17 +1028,7 @@ fn transcript_for_discord(
     if meeting.meta.guild_id != guild_id {
         return Err("Esa reunión no pertenece a este servidor.".to_string());
     }
-    let transcript = meeting.transcript_text();
-    if transcript.trim().is_empty() {
-        return Err("Esa reunión todavía no tiene texto transcrito.".to_string());
-    }
-
-    Ok(format!(
-        "**Transcripción completa**\n-# {}\n\n{}\n\n-# ID de reunión · `{}`",
-        meeting.meta.title(),
-        transcript.trim_end(),
-        meeting.meta.id
-    ))
+    Ok(meeting)
 }
 
 async fn start_meeting(
@@ -1097,7 +1090,8 @@ async fn start_meeting(
     }
     inner.set_model_state(ModelState::Active);
 
-    let meeting = Meeting::new(meta.clone());
+    let mut meeting = Meeting::new(meta.clone());
+    prepare_discord_summary_delivery(&mut meeting, info.text_channel_id);
     if let Err(e) = kuali_store::save(&meeting) {
         inner.emit(KualiEvent::error("store", e));
     }
@@ -1206,12 +1200,15 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
             } else if !config.llm.summarize_on_leave {
                 crate::webhooks::SummaryStatus::Disabled
             } else {
-                match summarize(&inner, &mut active.meeting).await {
+                match summarize_and_sync(
+                    &inner,
+                    &mut active.meeting,
+                    &config,
+                    active.text_channel_id,
+                )
+                .await
+                {
                     Ok(summary) => {
-                        // Only Discord meetings have a channel for publishing results.
-                        if config.discord.post_summary_to_channel && active.text_channel_id != 0 {
-                            post_summary(&inner, active.text_channel_id, &active.meeting).await;
-                        }
                         drop(summary);
                         crate::webhooks::SummaryStatus::Ready
                     }
@@ -1512,12 +1509,52 @@ async fn drain_transcriptions(inner: &Arc<Inner>, meeting_id: &str) {
     }
 }
 
-async fn summarize(
+async fn summarize_and_sync(
     inner: &Arc<Inner>,
     meeting: &mut Meeting,
-) -> Result<MeetingSummary, EngineError> {
-    let config = inner.config.read().llm.clone();
+    config: &KualiConfig,
+    text_channel_id: u64,
+) -> Result<MeetingSummary, kuali_llm::LlmError> {
+    // Provider selection comes first: without a configured and available model,
+    // Kuali neither posts a progress card nor leaves a misleading failure in Discord.
+    let provider = kuali_llm::select_provider(&config.llm).await?;
+    if config.discord.post_summary_to_channel {
+        prepare_discord_summary_delivery(meeting, text_channel_id);
+        sync_discord_summary(
+            inner,
+            meeting,
+            &config.llm.output_language,
+            DiscordSummaryState::Preparing,
+        )
+        .await;
+    }
 
+    let result = summarize_with_retries(
+        inner,
+        meeting,
+        provider.as_ref(),
+        &config.llm.output_language,
+    )
+    .await;
+    if config.discord.post_summary_to_channel {
+        let state = match &result {
+            Ok(_) => DiscordSummaryState::Ready,
+            Err(error) if error.failure_kind() == kuali_llm::LlmFailureKind::AttentionRequired => {
+                DiscordSummaryState::AttentionRequired
+            }
+            Err(_) => DiscordSummaryState::Failed,
+        };
+        sync_discord_summary(inner, meeting, &config.llm.output_language, state).await;
+    }
+    result
+}
+
+async fn summarize_with_retries(
+    inner: &Arc<Inner>,
+    meeting: &mut Meeting,
+    provider: &dyn kuali_llm::LlmProvider,
+    language: &str,
+) -> Result<MeetingSummary, kuali_llm::LlmError> {
     if inner.active.lock().is_empty() {
         inner.set_status(EngineStatus::Summarizing);
     }
@@ -1525,22 +1562,34 @@ async fn summarize(
         meeting_id: meeting.meta.id.clone(),
     });
 
-    let result = async {
-        let provider = kuali_llm::select_provider(&config).await?;
-        kuali_llm::summarize(provider.as_ref(), meeting, &config.output_language).await
-    }
-    .await;
-    let summary = match result {
-        Ok(summary) => summary,
-        Err(error) => {
-            inner.set_status(if inner.active.lock().is_empty() {
-                EngineStatus::Watching
-            } else {
-                EngineStatus::Recording
-            });
-            return Err(error.into());
+    let mut completed = None;
+    for attempt in 1..=MAX_SUMMARY_ATTEMPTS {
+        match kuali_llm::summarize(provider, meeting, language).await {
+            Ok(summary) => {
+                completed = Some(summary);
+                break;
+            }
+            Err(error) if attempt < MAX_SUMMARY_ATTEMPTS => {
+                tracing::warn!(
+                    meeting_id = %meeting.meta.id,
+                    attempt,
+                    max_attempts = MAX_SUMMARY_ATTEMPTS,
+                    error = %error,
+                    "el proveedor no produjo un resumen válido; reintentando"
+                );
+                tokio::time::sleep(Duration::from_millis(400 * attempt as u64)).await;
+            }
+            Err(error) => {
+                inner.set_status(if inner.active.lock().is_empty() {
+                    EngineStatus::Watching
+                } else {
+                    EngineStatus::Recording
+                });
+                return Err(error);
+            }
         }
-    };
+    }
+    let summary = completed.expect("the retry loop returns on its final failure");
 
     meeting.meta.display_title = Some(summary.title.clone());
     meeting.summary = Some(summary.clone());
@@ -1560,15 +1609,58 @@ async fn summarize(
     Ok(summary)
 }
 
-async fn post_summary(inner: &Arc<Inner>, channel_id: u64, meeting: &Meeting) {
-    let text = kuali_store::markdown::render_for_discord(meeting);
+fn prepare_discord_summary_delivery(meeting: &mut Meeting, text_channel_id: u64) {
+    if meeting.discord_summary_delivery.is_some() {
+        return;
+    }
+
+    let channel_id = if text_channel_id != 0 {
+        Some(text_channel_id)
+    } else if !matches!(
+        meeting.meta.guild_name.as_str(),
+        "Google Meet" | "Microsoft Teams" | "Zoom" | "Reunión web"
+    ) && meeting.meta.guild_id != 0
+        && meeting.meta.channel_id != 0
+    {
+        // Meetings saved before delivery references existed still use their
+        // Discord voice channel as the integrated text destination.
+        Some(meeting.meta.channel_id)
+    } else {
+        None
+    };
+
+    if let Some(channel_id) = channel_id {
+        meeting.discord_summary_delivery = Some(DiscordSummaryDelivery::pending(channel_id));
+    }
+}
+
+async fn sync_discord_summary(
+    inner: &Arc<Inner>,
+    meeting: &mut Meeting,
+    language: &str,
+    state: DiscordSummaryState,
+) {
+    let Some(delivery) = meeting.discord_summary_delivery else {
+        return;
+    };
+    // Persist the pending channel before touching Discord. If the bot is
+    // offline, a later regeneration can still retry the same destination.
+    if let Err(error) = kuali_store::save(meeting) {
+        inner.emit(KualiEvent::error("store", error));
+    }
     let discord = inner.discord.lock().await;
     if let Some(handle) = discord.as_ref() {
-        if let Err(e) = handle
-            .post_summary(channel_id, &text, &meeting.meta.id)
+        match handle
+            .sync_summary_state(delivery, meeting, language, state)
             .await
         {
-            inner.emit(KualiEvent::error("discord", e));
+            Ok(delivery) => {
+                meeting.discord_summary_delivery = Some(delivery);
+                if let Err(error) = kuali_store::save(meeting) {
+                    inner.emit(KualiEvent::error("store", error));
+                }
+            }
+            Err(error) => inner.emit(KualiEvent::error("discord", error)),
         }
     }
 }
@@ -1719,7 +1811,68 @@ pub async fn wait_for_status(engine: &Engine, status: EngineStatus, timeout: Dur
 #[cfg(test)]
 mod tests {
     use super::*;
+    use async_trait::async_trait;
     use kuali_core::{color_for, Speaker};
+    use kuali_llm::{CompletionRequest, LlmError, LlmProvider, ProviderInfo, ProviderKind};
+    use std::sync::atomic::{AtomicUsize, Ordering as AtomicOrdering};
+
+    struct SummaryTestProvider {
+        failures: usize,
+        attempts: AtomicUsize,
+    }
+
+    impl SummaryTestProvider {
+        fn new(failures: usize) -> Self {
+            Self {
+                failures,
+                attempts: AtomicUsize::new(0),
+            }
+        }
+
+        fn attempts(&self) -> usize {
+            self.attempts.load(AtomicOrdering::Relaxed)
+        }
+    }
+
+    #[async_trait]
+    impl LlmProvider for SummaryTestProvider {
+        fn id(&self) -> &'static str {
+            "summary-test"
+        }
+
+        fn info(&self) -> ProviderInfo {
+            ProviderInfo {
+                id: self.id().into(),
+                label: "Summary test".into(),
+                model: "deterministic".into(),
+                kind: ProviderKind::LocalCli,
+                structured_output: false,
+            }
+        }
+
+        async fn is_available(&self) -> bool {
+            true
+        }
+
+        async fn complete(&self, _request: &CompletionRequest) -> Result<String, LlmError> {
+            let attempt = self.attempts.fetch_add(1, AtomicOrdering::Relaxed) + 1;
+            if attempt <= self.failures {
+                return Err(LlmError::BadJson {
+                    provider: self.id().into(),
+                    message: format!("invalid response {attempt}"),
+                });
+            }
+            Ok(r#"{
+                "title":"Plan listo",
+                "overview":"Resumen válido",
+                "keyPoints":[],
+                "decisions":[],
+                "actionItems":[],
+                "openQuestions":[]
+            }"#
+            .into())
+        }
+    }
 
     fn session(source: VoiceSource, id: u64) -> VoiceSessionKey {
         VoiceSessionKey { source, id }
@@ -1769,6 +1922,87 @@ mod tests {
             &original,
             &another_directory
         ));
+    }
+
+    #[tokio::test]
+    async fn summary_generation_succeeds_on_the_third_and_final_attempt() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let provider = SummaryTestProvider::new(2);
+        let id = format!("summary-retry-success-{}", uuid::Uuid::new_v4());
+        let mut meeting = active_meeting(&id, 0).meeting;
+
+        let summary = summarize_with_retries(&engine.inner, &mut meeting, &provider, "Spanish")
+            .await
+            .unwrap();
+
+        assert_eq!(provider.attempts(), MAX_SUMMARY_ATTEMPTS);
+        assert_eq!(summary.title, "Plan listo");
+        assert_eq!(meeting.summary, Some(summary));
+        kuali_store::delete(&id).unwrap();
+    }
+
+    #[tokio::test]
+    async fn summary_generation_stops_after_three_invalid_responses() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let provider = SummaryTestProvider::new(usize::MAX);
+        let mut meeting = active_meeting("summary-retry-failure", 0).meeting;
+
+        let error = summarize_with_retries(&engine.inner, &mut meeting, &provider, "Spanish")
+            .await
+            .unwrap_err();
+
+        assert_eq!(provider.attempts(), MAX_SUMMARY_ATTEMPTS);
+        assert!(matches!(error, LlmError::BadJson { .. }));
+        assert!(meeting.summary.is_none());
+    }
+
+    #[tokio::test]
+    async fn an_unconfigured_model_never_creates_a_discord_delivery() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let mut config = KualiConfig::default();
+        config.llm.preferred_provider = Some("provider-that-does-not-exist".into());
+        config.discord.post_summary_to_channel = true;
+        let mut meeting = active_meeting("summary-without-provider", 0).meeting;
+
+        let error = summarize_and_sync(&engine.inner, &mut meeting, &config, 42)
+            .await
+            .unwrap_err();
+
+        assert_eq!(
+            error.failure_kind(),
+            kuali_llm::LlmFailureKind::MissingConfiguration
+        );
+        assert!(meeting.discord_summary_delivery.is_none());
+    }
+
+    #[test]
+    fn discord_summary_delivery_reuses_saved_messages_and_recovers_legacy_channels() {
+        let mut discord = active_meeting("discord-delivery", 0).meeting;
+        prepare_discord_summary_delivery(&mut discord, 42);
+        assert_eq!(
+            discord.discord_summary_delivery,
+            Some(DiscordSummaryDelivery::pending(42))
+        );
+
+        discord.discord_summary_delivery = Some(DiscordSummaryDelivery::delivered(42, 99));
+        prepare_discord_summary_delivery(&mut discord, 77);
+        assert_eq!(
+            discord.discord_summary_delivery,
+            Some(DiscordSummaryDelivery::delivered(42, 99)),
+            "a regenerated summary must keep editing the original card"
+        );
+
+        let mut legacy = active_meeting("legacy-discord", 0).meeting;
+        prepare_discord_summary_delivery(&mut legacy, 0);
+        assert_eq!(
+            legacy.discord_summary_delivery,
+            Some(DiscordSummaryDelivery::pending(legacy.meta.channel_id))
+        );
+
+        let mut meet = active_meeting("browser-meeting", 0).meeting;
+        meet.meta.guild_name = "Google Meet".into();
+        prepare_discord_summary_delivery(&mut meet, 0);
+        assert_eq!(meet.discord_summary_delivery, None);
     }
 
     #[tokio::test]
@@ -2125,7 +2359,7 @@ mod tests {
     }
 
     #[test]
-    fn a_transcript_request_returns_the_live_text_only_to_its_guild() {
+    fn a_meeting_request_returns_live_data_only_to_its_guild() {
         let (engine, _rx) = Engine::new(KualiConfig::default());
         let mut meeting = Meeting::new(MeetingMeta {
             id: "live-transcript".into(),
@@ -2166,10 +2400,11 @@ mod tests {
             },
         );
 
-        let text = transcript_for_discord(&engine.inner, "live-transcript", 42).unwrap();
-        assert!(text.contains("[00:01] Ana: Texto completo"));
-        assert!(text.starts_with("**Transcripción completa**"));
-        assert!(text.ends_with("-# ID de reunión · `live-transcript`"));
-        assert!(transcript_for_discord(&engine.inner, "live-transcript", 99).is_err());
+        let meeting = meeting_for_discord(&engine.inner, "live-transcript", 42).unwrap();
+        assert!(meeting
+            .transcript_text()
+            .contains("[00:01] Ana: Texto completo"));
+        assert_eq!(meeting.meta.id, "live-transcript");
+        assert!(meeting_for_discord(&engine.inner, "live-transcript", 99).is_err());
     }
 }
