@@ -169,6 +169,8 @@ test("Discord setup is a three-step token-driven authorization flow", () => {
     assert.equal((section.match(/<article class="guide-step">/g) ?? []).length, 3);
     assert.equal((section.match(/data-lightbox-source/g) ?? []).length, 3);
     assert.match(section, /copy-username\.png/);
+    assert.match(section, /Attach Files|Adjuntar archivos/);
+    assert.match(section, /Embed Links|Insertar enlaces/);
     assert.match(section, automaticCopy);
     assert.match(section, /applications\.commands/);
     assert.doesNotMatch(section, oldCopy);

@@ -85,6 +85,11 @@ When Kuali joins, it plays and posts the consent notice. It repeats the notice
 for participants who arrive later and keeps an append-only consent audit log.
 Kuali never captures its own announcement.
 
+After a meeting, Kuali can publish a compact Discord card with its action items,
+duration, participant count, and private buttons for the complete summary and
+transcript. Each private view includes a downloadable text file, keeping the
+channel readable without hiding the full meeting record.
+
 ### Browser meetings
 
 Install the extension from its official

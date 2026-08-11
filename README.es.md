@@ -87,6 +87,11 @@ Al entrar, Kuali reproduce y publica el aviso de consentimiento. Lo repite para
 quienes llegan después y conserva un registro de auditoría anexado cronológicamente.
 Kuali nunca transcribe su propio aviso.
 
+Al terminar una reunión, Kuali puede publicar una tarjeta compacta en Discord
+con las tareas, la duración, el número de participantes y botones privados para
+abrir el resumen o la transcripción completa. Cada vista privada incluye un
+archivo de texto descargable, sin llenar el canal con un bloque enorme.
+
 ### Reuniones del navegador
 
 Instala la extensión desde su ficha oficial en

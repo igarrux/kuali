@@ -140,6 +140,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Ver canales": "View Channels",
   "Enviar mensajes": "Send Messages",
   "Enviar mensajes en los hilos": "Send Messages in Threads",
+  "Insertar enlaces": "Embed Links",
+  "Adjuntar archivos": "Attach Files",
   Conectar: "Connect",
   Hablar: "Speak",
   "Usar actividad de voz": "Use Voice Activity",
@@ -272,7 +274,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Kuali lo dice en voz alta, lo publica en el chat y registra la entrega al entrar y cada vez que llega una persona nueva.":
     "Kuali says it aloud, posts it in chat, and logs its delivery when joining and whenever a new person arrives.",
   "Salir cuando el canal se quede vacío": "Leave when the channel is empty",
-  "Publicar el resumen en el canal al terminar": "Post the summary to the channel when finished",
+  "Publicar tareas y accesos al resumen en el canal al terminar":
+    "Post action items and summary links to the channel when finished",
   "Whisper escucha localmente; el audio no sale de tu equipo.":
     "Whisper listens locally; audio never leaves your computer.",
   Reconocimiento: "Recognition",
