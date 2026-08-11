@@ -305,15 +305,15 @@
               </div>
               <div class="guide-stepper" id="discord-guide-stepper">
                 <div class="guide-progress-head">
-                  <span id="discord-guide-progress-label">Paso 1 de 8</span>
-                  <span id="discord-guide-progress-title">Abre el portal</span>
+                  <span id="discord-guide-progress-label">Paso 1 de 3</span>
+                  <span id="discord-guide-progress-title">Crea la aplicación</span>
                 </div>
                 <div
                   class="guide-progress-track"
                   role="progressbar"
                   aria-label="Progreso de configuración de Discord"
                   aria-valuemin="1"
-                  aria-valuemax="8"
+                  aria-valuemax="3"
                   aria-valuenow="1"
                   id="discord-guide-progress"
                 ><span id="discord-guide-progress-bar"></span></div>
@@ -323,18 +323,10 @@
                     <span class="guide-step-number" aria-hidden="true">1</span>
                     <div>
                       <span class="eyebrow">Portal de desarrolladores</span>
-                      <h4 id="discord-step-1-title">Abre el portal de Discord</h4>
-                      <p>Inicia sesión con tu cuenta de Discord. Aquí crearás un bot independiente para Kuali; tu cuenta personal nunca se automatiza.</p>
+                      <h4 id="discord-step-1-title">Crea una aplicación para Kuali</h4>
+                      <p>Abre el portal, inicia sesión y pulsa <strong>Nueva aplicación</strong>. Escribe <strong>Kuali</strong>, acepta las condiciones y confirma con <strong>Crear</strong>.</p>
+                      <p>Discord creará un bot independiente para Kuali; tu cuenta personal nunca se automatiza.</p>
                       <button type="button" class="primary guide-action" id="btn-open-discord-portal">Abrir portal de Discord ↗</button>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-discord-guide-step="1" aria-labelledby="discord-step-2-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">2</span>
-                    <div>
-                      <span class="eyebrow">Crear aplicación</span>
-                      <h4 id="discord-step-2-title">Pulsa “Nueva aplicación”</h4>
-                      <p>Está en la esquina superior derecha. Escribe <strong>Kuali</strong>, acepta las condiciones y confirma con <strong>Crear</strong>.</p>
                       <p class="guide-translation" data-language-only="es"><span aria-hidden="true">A</span> Si el portal aparece en inglés: <em>New Application</em> y <em>Create</em>.</p>
                       <details class="guide-example" data-guide-image hidden>
                         <summary>Ver ejemplo</summary>
@@ -355,11 +347,11 @@
                     </div>
                   </section>
 
-                  <section class="guide-step-page" data-discord-guide-step="2" aria-labelledby="discord-step-3-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">3</span>
+                  <section class="guide-step-page" data-discord-guide-step="1" aria-labelledby="discord-step-2-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">2</span>
                     <div>
                       <span class="eyebrow">Token privado</span>
-                      <h4 id="discord-step-3-title">Restablece y copia el token</h4>
+                      <h4 id="discord-step-2-title">Copia el token y escribe tu usuario</h4>
                       <p>En el panel izquierdo entra en <strong>Bot</strong>. Pulsa <strong>Restablecer token</strong>, confirma y copia el valor que muestra Discord.</p>
                       <p class="guide-secret-note"><span aria-hidden="true">!</span> El token es una contraseña. No lo publiques, no lo subas a Git y no lo envíes a nadie.</p>
                       <details class="guide-example" data-guide-image hidden>
@@ -381,68 +373,20 @@
                       <label class="guide-inline-field" for="guide-token">Pega aquí el token copiado</label>
                       <input type="password" id="guide-token" name="guide-discord-token" placeholder="MTIz…" autocomplete="off" spellcheck="false" />
                       <p class="guide-field-error" id="guide-token-error" role="alert"></p>
+                      <label class="guide-inline-field" for="guide-discord-username">Tu usuario de Discord</label>
+                      <input type="text" id="guide-discord-username" name="guide-discord-username" placeholder="@tu_usuario" autocomplete="off" spellcheck="false" translate="no" />
+                      <p class="guide-field-hint">Usa el <strong>@usuario</strong>, no el nombre visible del perfil.</p>
+                      <p class="guide-field-error" id="guide-username-error" role="alert"></p>
+                      <p class="browser-support-note">Kuali comprobará el token y abrirá automáticamente la autorización con los permisos correctos.</p>
                     </div>
                   </section>
 
-                  <section class="guide-step-page" data-discord-guide-step="3" aria-labelledby="discord-step-4-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">4</span>
+                  <section class="guide-step-page" data-discord-guide-step="2" aria-labelledby="discord-step-3-title" hidden>
+                    <span class="guide-step-number" aria-hidden="true">3</span>
                     <div>
-                      <span class="eyebrow">Dónde se instala</span>
-                      <h4 id="discord-step-4-title">Activa “Instalación de servidor”</h4>
-                      <p>En el panel izquierdo entra en <strong>Instalaciones</strong>. En <strong>Contextos de instalación → Seleccionar métodos</strong>, marca <strong>Instalación de servidor</strong>. Kuali necesita pertenecer al servidor para entrar a sus canales de voz.</p>
-                      <p class="guide-translation" data-language-only="es"><span aria-hidden="true">A</span> En inglés: <em>Installation → Installation Contexts → Guild Install</em>.</p>
-                      <details class="guide-example" data-guide-image hidden>
-                        <summary>Ver ejemplo</summary>
-                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
-                          <img
-                            src="assets/guides/discord/discord-04-guild-install.png"
-                            data-guide-src-es="assets/guides/discord/discord-04-guild-install.png"
-                            data-guide-src-en="assets/guides/discord/en-discord-04-guild-install.png"
-                            alt="Instalación de servidor marcada en Contextos de instalación"
-                            width="2560"
-                            height="1440"
-                            decoding="async"
-                          />
-                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
-                        </button>
-                        <p class="guide-example-caption">Ejemplo: “Instalación de servidor” marcada.</p>
-                      </details>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-discord-guide-step="4" aria-labelledby="discord-step-5-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">5</span>
-                    <div>
-                      <span class="eyebrow">Ámbitos</span>
-                      <h4 id="discord-step-5-title">Configura el enlace y los ámbitos</h4>
-                      <p>En <strong>Enlace de instalación</strong>, elige <strong>Enlace proporcionado por Discord</strong>. Luego, en <strong>Ajustes de instalación predeterminados → Instalación de servidor → Ámbitos</strong>, añade:</p>
-                      <div class="guide-code-list" aria-label="Ámbitos necesarios"><code translate="no">applications.commands</code><code translate="no">bot</code></div>
-                      <p><code translate="no">applications.commands</code> muestra los comandos de Kuali y <code translate="no">bot</code> añade el bot al servidor.</p>
-                      <details class="guide-example" data-guide-image hidden>
-                        <summary>Ver ejemplo</summary>
-                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
-                          <img
-                            src="assets/guides/discord/discord-05-install-link-scopes.png"
-                            data-guide-src-es="assets/guides/discord/discord-05-install-link-scopes.png"
-                            data-guide-src-en="assets/guides/discord/en-discord-05-install-link-scopes.png"
-                            alt="Ámbitos applications.commands y bot añadidos en Instalación de servidor"
-                            width="2560"
-                            height="1440"
-                            decoding="async"
-                          />
-                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
-                        </button>
-                        <p class="guide-example-caption">Ejemplo: “Enlace proporcionado por Discord” y ambos ámbitos.</p>
-                      </details>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-discord-guide-step="5" aria-labelledby="discord-step-6-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">6</span>
-                    <div>
-                      <span class="eyebrow">Permisos mínimos</span>
-                      <h4 id="discord-step-6-title">Selecciona lo que Kuali necesita</h4>
-                      <p>Al añadir el ámbito <code translate="no">bot</code> aparecerá <strong>Permisos</strong>. Marca solamente:</p>
+                      <span class="eyebrow">Autorizar servidor</span>
+                      <h4 id="discord-step-3-title">Añade Kuali a tu servidor</h4>
+                      <p>En la ventana de Discord elige <strong>Añadir a un servidor</strong>, selecciona dónde usarás Kuali y pulsa <strong>Autorizar</strong>. Los ámbitos y permisos ya están preparados.</p>
                       <ul class="guide-permission-list">
                         <li>Ver canales</li>
                         <li>Enviar mensajes</li>
@@ -451,53 +395,13 @@
                         <li>Hablar</li>
                         <li>Usar actividad de voz</li>
                       </ul>
-                      <p class="guide-translation"><span aria-hidden="true">✓</span> No marques <strong>Administrador</strong>; Kuali no necesita moderar ni leer tus mensajes.</p>
-                      <details class="guide-example" data-guide-image hidden>
-                        <summary>Ver ejemplo</summary>
-                        <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
-                          <img
-                            src="assets/guides/discord/discord-06-bot-permissions.png"
-                            data-guide-src-es="assets/guides/discord/discord-06-bot-permissions.png"
-                            data-guide-src-en="assets/guides/discord/en-discord-06-bot-permissions.png"
-                            alt="Permisos mínimos del bot Kuali seleccionados en Discord"
-                            width="2560"
-                            height="1440"
-                            decoding="async"
-                          />
-                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
-                        </button>
-                        <p class="guide-example-caption">Ejemplo: los seis permisos mínimos seleccionados.</p>
-                      </details>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-discord-guide-step="6" aria-labelledby="discord-step-7-title" hidden>
-                    <span class="guide-step-number" aria-hidden="true">7</span>
-                    <div>
-                      <span class="eyebrow">Invitar y conectar</span>
-                      <h4 id="discord-step-7-title">Invita el bot a tu servidor</h4>
-                      <p>Copia el enlace de la sección <strong>Enlace de instalación</strong>, ábrelo, pulsa <strong>Añadir a un servidor</strong> y elige el servidor donde usarás Kuali.</p>
-                      <p>Después escribe tu nombre de usuario real de Discord. Kuali buscará una sola cuenta exacta en los servidores que comparte contigo y guardará internamente su ID.</p>
-                      <label class="guide-inline-field" for="guide-discord-username">Tu usuario de Discord</label>
-                      <input type="text" id="guide-discord-username" name="guide-discord-username" placeholder="@tu_usuario" autocomplete="off" spellcheck="false" translate="no" />
-                      <p class="guide-field-hint">Usa el <strong>@usuario</strong>, no el nombre visible del perfil.</p>
-                      <p class="guide-field-error" id="guide-username-error" role="alert"></p>
-                      <button type="button" class="primary guide-save" id="btn-save-discord-guide">Guardar token y conectar</button>
-                      <p class="guide-note" id="guide-discord-note" role="status" aria-live="polite">Después podrás cambiar el token en Ajustes → Discord.</p>
-                    </div>
-                  </section>
-
-                  <section class="guide-step-page" data-discord-guide-step="7" aria-labelledby="discord-step-8-title" hidden>
-                    <span class="guide-step-number complete" aria-hidden="true">✓</span>
-                    <div>
-                      <span class="eyebrow">Todo listo</span>
-                      <h4 id="discord-step-8-title">Empieza a usar Kuali</h4>
-                      <p>Entra a un canal de voz. Con el usuario ya reconocido, Kuali entrará automáticamente detrás de ti.</p>
+                      <p class="guide-translation"><span aria-hidden="true">✓</span> Kuali no solicita Administrador ni acceso para leer tu historial de mensajes.</p>
+                      <button type="button" class="ghost guide-action" id="btn-open-discord-install">Abrir autorización otra vez ↗</button>
+                      <button type="button" class="primary guide-save" id="btn-save-discord-guide">Ya autoricé · conectar</button>
+                      <p class="guide-note" id="guide-discord-note" role="status" aria-live="polite">Después podrás cambiar el token o el usuario en Ajustes → Discord.</p>
                       <ul class="guide-command-list">
                         <li><code translate="no">/grabar · /record</code><span>Invita a Kuali al canal de voz en el que estás, aunque el seguimiento esté apagado.</span></li>
-                        <li><strong>Ver transcripción completa</strong><span>El botón aparece debajo del resumen y entrega el texto completo de forma privada.</span></li>
                       </ul>
-                      <p class="guide-success-note">Si cambias tu @usuario, actualízalo en Ajustes → Discord para que Kuali vuelva a reconocerte.</p>
                     </div>
                   </section>
                 </div>

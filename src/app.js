@@ -1988,14 +1988,9 @@ function globalTaskCard(item) {
 // --- setup guide ----------------------------------------------------------
 
 const DISCORD_GUIDE_TITLES = [
-  "Abre el portal",
   "Crea la aplicación",
-  "Copia el token",
-  "Elige el contexto",
-  "Añade los ámbitos",
-  "Concede permisos",
-  "Invita y conecta",
-  "Empieza a usar Kuali",
+  "Pega el token",
+  "Autoriza el servidor",
 ];
 
 const KUALI_EXTENSION_STORE_URL =
@@ -2212,7 +2207,7 @@ function renderDiscordGuideStep({ focus = false } = {}) {
   const next = $("btn-discord-guide-next");
   back.disabled = step === 0;
   const discordReady = Boolean(state.config?.discord?.["bot-token"]);
-  if (step === 6 && !discordReady) {
+  if (step === lastStep && !discordReady) {
     next.disabled = true;
     next.textContent = t("Conecta el bot primero");
   } else {
@@ -2272,11 +2267,26 @@ async function advanceMeetGuide() {
 }
 
 async function advanceDiscordGuide() {
-  if (state.discordGuideStep === 2) {
+  if (state.discordGuideStep === 1) {
     const token = $("guide-token").value.trim();
     if (!token) {
       $("guide-token-error").textContent = t("Pega el token que copiaste en Discord para continuar.");
       $("guide-token").focus();
+      return;
+    }
+    const username = normalizedDiscordUsername($("guide-discord-username").value);
+    if (!username) {
+      $("guide-username-error").textContent = t(
+        "Escribe tu @usuario de Discord para activar el seguimiento automático.",
+      );
+      $("guide-discord-username").focus();
+      return;
+    }
+    const next = $("btn-discord-guide-next");
+    next.disabled = true;
+    next.textContent = t("Comprobando token…");
+    if (!await openDiscordInstallFromGuide()) {
+      renderDiscordGuideStep();
       return;
     }
   }
@@ -2285,6 +2295,24 @@ async function advanceDiscordGuide() {
     return;
   }
   setDiscordGuideStep(state.discordGuideStep + 1);
+}
+
+async function openDiscordInstallFromGuide() {
+  const token = $("guide-token").value.trim();
+  if (!token) {
+    $("guide-token-error").textContent = t("Pega el token que copiaste en Discord para continuar.");
+    $("guide-token").focus();
+    return false;
+  }
+  try {
+    await invoke("open_discord_install", { botToken: token });
+    $("guide-token-error").textContent = "";
+    return true;
+  } catch (error) {
+    $("guide-token-error").textContent = String(error);
+    $("guide-token").focus();
+    return false;
+  }
 }
 
 async function renderGuide() {
@@ -2388,7 +2416,7 @@ async function saveDiscordFromGuide() {
     return false;
   } finally {
     button.disabled = false;
-    button.textContent = t("Guardar token y conectar");
+    button.textContent = t("Ya autoricé · conectar");
   }
 }
 
@@ -3748,7 +3776,12 @@ function wireUp() {
     $("guide-username-error").textContent = "";
   });
   $("btn-save-discord-guide").addEventListener("click", async () => {
-    if (await saveDiscordFromGuide()) setDiscordGuideStep(7);
+    if (await saveDiscordFromGuide()) setDiscordGuideStep(2);
+  });
+  $("btn-open-discord-install").addEventListener("click", async () => {
+    if (await openDiscordInstallFromGuide()) {
+      toast(t("Autorización de Discord abierta"), t("guía"));
+    }
   });
   $("btn-open-discord-portal").addEventListener("click", () =>
     invoke("open_setup_destination", { destination: "discord-developers" })
