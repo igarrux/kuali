@@ -56,7 +56,7 @@ test("summaries and tasks have an explicit privacy switch", () => {
   assert.match(app, /btn-resummarize"\)\.hidden = live \|\| !summariesEnabled\(\)/);
 });
 
-test("signed updates are periodic, controllable, and deferred during active work", () => {
+test("signed updates are checked at startup and deferred during active work", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   const tauriConfig = JSON.parse(
@@ -66,6 +66,16 @@ test("signed updates are periodic, controllable, and deferred during active work
   assert.match(html, /id="btn-check-update"/);
   assert.match(html, /id="btn-install-update"/);
   assert.match(app, /UPDATE_CHECK_INTERVAL_MS = 6 \* 60 \* 60 \* 1000/);
+  assert.match(app, /scheduleUpdateChecks\(\);\s+void checkForUpdates\(\);/);
+  assert.doesNotMatch(app, /UPDATE_BOOT_DELAY_MS|updateBootTimer/);
+  assert.match(
+    app,
+    /function maybeInstallUpdateAutomatically\(\)[\s\S]*?\["automatic-updates"\] === false/,
+  );
+  assert.doesNotMatch(
+    app,
+    /function scheduleUpdateChecks\(\)[\s\S]*?\["automatic-updates"\] === false/,
+  );
   assert.match(app, /state\.liveMeetings\.size === 0/);
   assert.equal(tauriConfig.bundle.createUpdaterArtifacts, true);
   assert.match(tauriConfig.plugins.updater.pubkey, /^[A-Za-z0-9+/=]+$/);

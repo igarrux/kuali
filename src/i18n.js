@@ -359,11 +359,11 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "El receptor de la extensión y el seguimiento de Discord quedarán listos automáticamente.":
     "The extension receiver and Discord following will be ready automatically.",
   "Actualizar Kuali automáticamente": "Update Kuali automatically",
-  "Busca versiones firmadas periódicamente y las instala cuando no hay reuniones ni resúmenes en curso.":
-    "Periodically checks for signed releases and installs them when no meetings or summaries are in progress.",
+  "Instala las versiones firmadas cuando no hay reuniones ni resúmenes en curso.":
+    "Installs signed releases when no meetings or summaries are in progress.",
   Actualizaciones: "Updates",
-  "Kuali comprobará periódicamente si hay una versión nueva.":
-    "Kuali will periodically check for a new version.",
+  "Kuali busca actualizaciones al iniciar y periódicamente.":
+    "Kuali checks for updates at startup and periodically.",
   "Buscar ahora": "Check now",
   "Actualizar y reiniciar": "Update and restart",
   "¿Necesitas volver a configurar algo?": "Need to configure something again?",

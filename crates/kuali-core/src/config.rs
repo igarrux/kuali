@@ -32,8 +32,8 @@ pub struct ApplicationConfig {
     /// the interface to that language without changing transcription or
     /// summary languages.
     pub language: String,
-    /// Check the signed release feed periodically and install updates whenever
-    /// no recording or summary is in progress.
+    /// Install signed updates whenever no recording or summary is in progress.
+    /// Kuali checks the release feed at startup regardless of this preference.
     pub automatic_updates: bool,
 }
 

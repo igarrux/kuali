@@ -81,7 +81,6 @@ const state = {
   updateStatus: "idle",
   updateProgress: null,
   updateTimer: null,
-  updateBootTimer: null,
   updateAutomaticAttempted: null,
   /** IDs with an open speech turn, used by the speaking indicator. */
   talking: new Map(),
@@ -91,7 +90,6 @@ const state = {
 };
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
-const UPDATE_BOOT_DELAY_MS = 15 * 1000;
 
 function isLiveMeeting(id) {
   return Boolean(id) && state.liveMeetings.has(id);
@@ -154,7 +152,7 @@ function renderUpdateState() {
   const busy = ["checking", "installing"].includes(state.updateStatus);
   const safeToRestart = canRestartForUpdate();
   const version = info?.version || "";
-  let statusText = t("Kuali comprobará periódicamente si hay una versión nueva.");
+  let statusText = t("Kuali busca actualizaciones al iniciar y periódicamente.");
 
   if (state.updateStatus === "checking") {
     statusText = t("Buscando actualizaciones…");
@@ -284,13 +282,9 @@ async function checkForUpdates({ manual = false } = {}) {
   }
 }
 
-function scheduleAutomaticUpdateChecks() {
-  clearTimeout(state.updateBootTimer);
+function scheduleUpdateChecks() {
   clearInterval(state.updateTimer);
-  state.updateBootTimer = null;
   state.updateTimer = null;
-  if (state.config?.application?.["automatic-updates"] === false) return;
-  state.updateBootTimer = setTimeout(() => checkForUpdates(), UPDATE_BOOT_DELAY_MS);
   state.updateTimer = setInterval(() => checkForUpdates(), UPDATE_CHECK_INTERVAL_MS);
 }
 
@@ -3445,7 +3439,8 @@ async function saveSettings() {
     await invoke("set_autostart_enabled", { enabled: $("cfg-autostart").checked });
     state.autostartEnabled = $("cfg-autostart").checked;
     state.config = c;
-    scheduleAutomaticUpdateChecks();
+    scheduleUpdateChecks();
+    maybeInstallUpdateAutomatically();
     setLanguagePreference(c.application.language);
     state.modelsDirectory = await invoke("resolved_models_directory");
     state.models = await invoke("whisper_models");
@@ -4155,7 +4150,8 @@ async function boot() {
   await listen("kuali://config-changed", async () => {
     state.config = await invoke("get_config");
     setLanguagePreference(state.config.application?.language ?? "auto");
-    scheduleAutomaticUpdateChecks();
+    scheduleUpdateChecks();
+    maybeInstallUpdateAutomatically();
     await refreshRequiredModelNotice(state.config.whisper.model);
     renderStatus();
     if (["idle", "setup"].includes(state.currentPane)) await renderRoot();
@@ -4174,7 +4170,8 @@ async function boot() {
   state.webMeetings = snapshot.webMeetings;
   state.config = config;
   applyLiveSnapshot(snapshot, true);
-  scheduleAutomaticUpdateChecks();
+  scheduleUpdateChecks();
+  void checkForUpdates();
   await resumeConfiguredModelAfterSetup();
 
   await refreshMeetings();
