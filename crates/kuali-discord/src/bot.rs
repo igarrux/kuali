@@ -111,6 +111,35 @@ enum MeetingAction {
     Transcript,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum PaginationControl {
+    First,
+    Previous,
+    Next,
+    Last,
+}
+
+impl PaginationControl {
+    fn code(self) -> &'static str {
+        match self {
+            Self::First => "f",
+            Self::Previous => "p",
+            Self::Next => "n",
+            Self::Last => "l",
+        }
+    }
+
+    fn from_code(code: &str) -> Option<Self> {
+        match code {
+            "f" => Some(Self::First),
+            "p" => Some(Self::Previous),
+            "n" => Some(Self::Next),
+            "l" => Some(Self::Last),
+            _ => None,
+        }
+    }
+}
+
 /// State rendered into the one persistent Discord card for a meeting.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DiscordSummaryState {
@@ -161,18 +190,21 @@ impl MeetingAction {
         }
     }
 
-    fn page_button_id(self, meeting_id: &str, page: usize) -> String {
+    fn page_button_id(self, control: PaginationControl, meeting_id: &str, page: usize) -> String {
         format!(
-            "{PRIVATE_PAGE_BUTTON_PREFIX}{}:{page}:{meeting_id}",
-            self.page_code()
+            "{PRIVATE_PAGE_BUTTON_PREFIX}{}:{}:{page}:{meeting_id}",
+            self.page_code(),
+            control.code()
         )
     }
 
     fn from_page_button(custom_id: &str) -> Option<(Self, usize, &str)> {
         let rest = custom_id.strip_prefix(PRIVATE_PAGE_BUTTON_PREFIX)?;
         let (action, rest) = rest.split_once(':')?;
+        let (control, rest) = rest.split_once(':')?;
         let (page, meeting_id) = rest.split_once(':')?;
         let action = Self::from_page_code(action)?;
+        PaginationControl::from_code(control)?;
         let page = page.parse().ok()?;
         (!meeting_id.is_empty()).then_some((action, page, meeting_id))
     }
@@ -1081,14 +1113,14 @@ fn private_pagination_row(
                 "type": 2,
                 "style": 2,
                 "label": locale.text("Inicio", "First"),
-                "custom_id": action.page_button_id(meeting_id, 0),
+                "custom_id": action.page_button_id(PaginationControl::First, meeting_id, 0),
                 "disabled": page == 0
             },
             {
                 "type": 2,
                 "style": 2,
                 "label": locale.text("Anterior", "Previous"),
-                "custom_id": action.page_button_id(meeting_id, previous),
+                "custom_id": action.page_button_id(PaginationControl::Previous, meeting_id, previous),
                 "disabled": page == 0
             },
             {
@@ -1102,14 +1134,14 @@ fn private_pagination_row(
                 "type": 2,
                 "style": 2,
                 "label": locale.text("Siguiente", "Next"),
-                "custom_id": action.page_button_id(meeting_id, next),
+                "custom_id": action.page_button_id(PaginationControl::Next, meeting_id, next),
                 "disabled": page + 1 == page_count
             },
             {
                 "type": 2,
                 "style": 2,
                 "label": locale.text("Final", "Last"),
-                "custom_id": action.page_button_id(meeting_id, page_count - 1),
+                "custom_id": action.page_button_id(PaginationControl::Last, meeting_id, page_count - 1),
                 "disabled": page + 1 == page_count
             }
         ]
@@ -2881,16 +2913,43 @@ mod tests {
             );
             assert!(custom_id.len() <= 100);
 
-            let page_id = action.page_button_id("meeting-123", 7);
-            assert_eq!(
-                MeetingAction::from_page_button(&page_id),
-                Some((action, 7, "meeting-123"))
-            );
-            assert!(page_id.len() <= 100);
+            for control in [
+                PaginationControl::First,
+                PaginationControl::Previous,
+                PaginationControl::Next,
+                PaginationControl::Last,
+            ] {
+                let page_id = action.page_button_id(control, "meeting-123", 7);
+                assert_eq!(
+                    MeetingAction::from_page_button(&page_id),
+                    Some((action, 7, "meeting-123"))
+                );
+                assert!(page_id.len() <= 100);
+            }
         }
         assert_eq!(MeetingAction::from_button("otro:meeting-123"), None);
         assert_eq!(MeetingAction::from_button(TRANSCRIPT_BUTTON_PREFIX), None);
-        assert_eq!(MeetingAction::from_page_button("kuali:page:x:1:id"), None);
+        assert_eq!(MeetingAction::from_page_button("kuali:page:x:n:1:id"), None);
+        assert_eq!(MeetingAction::from_page_button("kuali:page:t:x:1:id"), None);
+    }
+
+    #[test]
+    fn pagination_controls_never_repeat_custom_ids() {
+        for page in 0..2 {
+            let row = private_pagination_row(
+                MeetingAction::Transcript,
+                "meeting-123",
+                DiscordLocale::Spanish,
+                page,
+                2,
+            );
+            let buttons = row["components"].as_array().unwrap();
+            let ids = buttons
+                .iter()
+                .map(|button| button["custom_id"].as_str().unwrap())
+                .collect::<std::collections::HashSet<_>>();
+            assert_eq!(ids.len(), buttons.len());
+        }
     }
 
     #[test]
