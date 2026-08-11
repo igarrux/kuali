@@ -815,12 +815,12 @@ async fn handle_voice_event(inner: &Arc<Inner>, source: VoiceSource, event: Voic
             )
             .await;
         }
-        VoiceEvent::TranscriptRequested {
+        VoiceEvent::MeetingRequested {
             meeting_id,
             guild_id,
             reply,
         } => {
-            let result = transcript_for_discord(inner, &meeting_id, guild_id);
+            let result = meeting_for_discord(inner, &meeting_id, guild_id);
             let _ = reply.send(result);
         }
         VoiceEvent::FollowRequested { user_id, reply } => {
@@ -970,12 +970,12 @@ async fn handle_session_event(inner: &Arc<Inner>, session: VoiceSessionKey, even
             }
         }
         VoiceEvent::Warning(message) => emit_voice_warning(inner, session.source, message),
-        VoiceEvent::TranscriptRequested {
+        VoiceEvent::MeetingRequested {
             meeting_id,
             guild_id,
             reply,
         } => {
-            let result = transcript_for_discord(inner, &meeting_id, guild_id);
+            let result = meeting_for_discord(inner, &meeting_id, guild_id);
             let _ = reply.send(result);
         }
         VoiceEvent::FollowRequested { user_id, reply } => {
@@ -1006,11 +1006,11 @@ fn session_keys_for_source(inner: &Arc<Inner>, source: VoiceSource) -> Vec<Voice
         .collect()
 }
 
-fn transcript_for_discord(
+fn meeting_for_discord(
     inner: &Arc<Inner>,
     meeting_id: &str,
     guild_id: u64,
-) -> Result<String, String> {
+) -> Result<Meeting, String> {
     let active = inner
         .active
         .lock()
@@ -1025,17 +1025,7 @@ fn transcript_for_discord(
     if meeting.meta.guild_id != guild_id {
         return Err("Esa reunión no pertenece a este servidor.".to_string());
     }
-    let transcript = meeting.transcript_text();
-    if transcript.trim().is_empty() {
-        return Err("Esa reunión todavía no tiene texto transcrito.".to_string());
-    }
-
-    Ok(format!(
-        "**Transcripción completa**\n-# {}\n\n{}\n\n-# ID de reunión · `{}`",
-        meeting.meta.title(),
-        transcript.trim_end(),
-        meeting.meta.id
-    ))
+    Ok(meeting)
 }
 
 async fn start_meeting(
@@ -1210,7 +1200,13 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
                     Ok(summary) => {
                         // Only Discord meetings have a channel for publishing results.
                         if config.discord.post_summary_to_channel && active.text_channel_id != 0 {
-                            post_summary(&inner, active.text_channel_id, &active.meeting).await;
+                            post_summary(
+                                &inner,
+                                active.text_channel_id,
+                                &active.meeting,
+                                &config.llm.output_language,
+                            )
+                            .await;
                         }
                         drop(summary);
                         crate::webhooks::SummaryStatus::Ready
@@ -1560,14 +1556,10 @@ async fn summarize(
     Ok(summary)
 }
 
-async fn post_summary(inner: &Arc<Inner>, channel_id: u64, meeting: &Meeting) {
-    let text = kuali_store::markdown::render_for_discord(meeting);
+async fn post_summary(inner: &Arc<Inner>, channel_id: u64, meeting: &Meeting, language: &str) {
     let discord = inner.discord.lock().await;
     if let Some(handle) = discord.as_ref() {
-        if let Err(e) = handle
-            .post_summary(channel_id, &text, &meeting.meta.id)
-            .await
-        {
+        if let Err(e) = handle.post_summary(channel_id, meeting, language).await {
             inner.emit(KualiEvent::error("discord", e));
         }
     }
@@ -2125,7 +2117,7 @@ mod tests {
     }
 
     #[test]
-    fn a_transcript_request_returns_the_live_text_only_to_its_guild() {
+    fn a_meeting_request_returns_live_data_only_to_its_guild() {
         let (engine, _rx) = Engine::new(KualiConfig::default());
         let mut meeting = Meeting::new(MeetingMeta {
             id: "live-transcript".into(),
@@ -2166,10 +2158,11 @@ mod tests {
             },
         );
 
-        let text = transcript_for_discord(&engine.inner, "live-transcript", 42).unwrap();
-        assert!(text.contains("[00:01] Ana: Texto completo"));
-        assert!(text.starts_with("**Transcripción completa**"));
-        assert!(text.ends_with("-# ID de reunión · `live-transcript`"));
-        assert!(transcript_for_discord(&engine.inner, "live-transcript", 99).is_err());
+        let meeting = meeting_for_discord(&engine.inner, "live-transcript", 42).unwrap();
+        assert!(meeting
+            .transcript_text()
+            .contains("[00:01] Ana: Texto completo"));
+        assert_eq!(meeting.meta.id, "live-transcript");
+        assert!(meeting_for_discord(&engine.inner, "live-transcript", 99).is_err());
     }
 }

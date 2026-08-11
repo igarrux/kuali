@@ -91,61 +91,6 @@ pub fn render(meeting: &Meeting) -> String {
     out
 }
 
-/// Concise Discord summary designed to fit in chat without dumping the transcript.
-pub fn render_for_discord(meeting: &Meeting) -> String {
-    let Some(summary) = &meeting.summary else {
-        return format!("**{}** — sin resumen disponible.", meeting.meta.title());
-    };
-
-    let mut out = format!(
-        "**{}**\n-# {} · {} participantes\n\n",
-        meeting.meta.title(),
-        format_timestamp(meeting.duration_ms()),
-        meeting.speakers.iter().filter(|s| !s.is_bot).count()
-    );
-
-    if !summary.overview.trim().is_empty() {
-        out.push_str(summary.overview.trim());
-        out.push_str("\n\n");
-    }
-
-    if !summary.key_points.is_empty() {
-        out.push_str("**Puntos clave**\n");
-        for point in &summary.key_points {
-            out.push_str(&format!("- {point}\n"));
-        }
-        out.push('\n');
-    }
-
-    if summary.action_items.is_empty() {
-        out.push_str("**Tareas:** ninguna.\n");
-    } else {
-        out.push_str("**Tareas pendientes**\n");
-        for task in &summary.action_items {
-            match &task.assignee {
-                Some(assignee) => out.push_str(&format!("- {} — **{}**\n", task.text, assignee)),
-                None => out.push_str(&format!("- {}\n", task.text)),
-            }
-        }
-    }
-
-    if !summary.decisions.is_empty() {
-        out.push_str("\n**Decisiones**\n");
-        for decision in &summary.decisions {
-            out.push_str(&format!("- {decision}\n"));
-        }
-    }
-
-    if !summary.open_questions.is_empty() {
-        out.push_str("\n**Preguntas abiertas**\n");
-        for question in &summary.open_questions {
-            out.push_str(&format!("- {question}\n"));
-        }
-    }
-
-    out
-}
-
 fn bullet_section(out: &mut String, title: &str, items: &[String]) {
     if items.is_empty() {
         return;
@@ -270,32 +215,5 @@ mod tests {
         let mut m = meeting(true);
         m.summary.as_mut().unwrap().action_items[0].done = true;
         assert!(render(&m).contains("- [x] Preparar la demo"));
-    }
-
-    #[test]
-    fn the_discord_version_leaves_the_transcript_out() {
-        let text = render_for_discord(&meeting(true));
-        assert!(text.starts_with("**Equipo · Daily**\n-# "));
-        assert!(!text.contains("##"));
-        assert!(!text.contains("📋"));
-        assert!(text.contains("Preparar la demo"));
-        assert!(text.contains("**Ana**"));
-        assert!(text.contains("**Puntos clave**"));
-        assert!(text.contains("La demo va justa"));
-        assert!(text.contains("**Preguntas abiertas**"));
-        assert!(text.contains("¿Quién presenta?"));
-        assert!(!text.contains("ID de la reunión"));
-        assert!(!text.contains("/transcription"));
-        assert!(
-            !text.contains("Preparo la demo para el viernes"),
-            "the transcript should not be included in chat output"
-        );
-    }
-
-    #[test]
-    fn the_discord_version_says_so_when_there_are_no_tasks() {
-        let mut m = meeting(true);
-        m.summary.as_mut().unwrap().action_items.clear();
-        assert!(render_for_discord(&m).contains("ninguna"));
     }
 }

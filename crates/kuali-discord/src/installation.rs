@@ -34,6 +34,8 @@ fn required_permissions() -> Permissions {
     Permissions::VIEW_CHANNEL
         | Permissions::SEND_MESSAGES
         | Permissions::SEND_MESSAGES_IN_THREADS
+        | Permissions::EMBED_LINKS
+        | Permissions::ATTACH_FILES
         | Permissions::CONNECT
         | Permissions::SPEAK
         | Permissions::USE_VAD
@@ -95,6 +97,8 @@ mod tests {
         let expected = Permissions::VIEW_CHANNEL
             | Permissions::SEND_MESSAGES
             | Permissions::SEND_MESSAGES_IN_THREADS
+            | Permissions::EMBED_LINKS
+            | Permissions::ATTACH_FILES
             | Permissions::CONNECT
             | Permissions::SPEAK
             | Permissions::USE_VAD;
