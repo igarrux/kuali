@@ -74,8 +74,10 @@ editar archivos de configuración manualmente.
 ### Discord
 
 Crea un bot en el [Portal de desarrolladores de Discord](https://discord.com/developers/applications),
-pega su token en Kuali e instálalo en los servidores donde se usará. La guía de
-la aplicación muestra cada pantalla y los permisos exactos.
+pega su token y tu `@usuario` en Kuali y elige un servidor en la ventana de
+autorización que se abrirá. Kuali obtiene el ID de la aplicación desde el token
+y prepara automáticamente los ámbitos y permisos mínimos; no tienes que crear
+un enlace de OAuth manualmente.
 
 Kuali puede seguir automáticamente a una cuenta configurada. El seguimiento se
 puede pausar sin olvidar la cuenta. Una persona dentro de un canal de voz también
