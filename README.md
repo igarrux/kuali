@@ -86,12 +86,12 @@ for participants who arrive later and keeps an append-only consent audit log.
 Kuali never captures its own announcement.
 
 After a meeting, Kuali can publish a compact Discord card with its action items,
-duration, participant count, and private buttons for the complete summary and
-transcript. Each private view includes a downloadable text file, keeping the
-channel readable without hiding the full meeting record. The card appears while
-the summary is being prepared, then updates in place; private views render every
-section and transcript turn inside one private card, with the download presented
-as part of the same layout.
+duration, participant count, and private shortcuts to the summary, key points,
+decisions, open questions, and full transcript. The summary and transcript also
+include downloadable text files, keeping the channel readable without hiding
+the full meeting record. The card appears while the summary is being prepared
+and then updates in place. Long private views are paginated inside the same card
+without splitting the meeting across multiple Discord messages.
 
 ### Browser meetings
 
