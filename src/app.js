@@ -2068,8 +2068,22 @@ function renderRequiredModelActivity() {
   const missingWeights = !hasDownloadedWhisperWeight();
   if (downloadModel) $("required-model-select").value = downloadModel.id;
   const selected = selectedRequiredModel();
-  $("model-required").hidden = !missingWeights && !downloading;
-  $("required-model-select").disabled = state.models.length === 0 || downloading;
+  const panel = $("model-required");
+  const selector = $("required-model-select");
+  const selectorLabel = $("required-model-field").querySelector("label");
+  panel.hidden = !missingWeights && !downloading;
+  panel.classList.toggle("downloading", downloading);
+  selector.disabled = state.models.length === 0 || downloading;
+  selector.hidden = downloading;
+  selectorLabel.textContent = downloading ? t("Descarga en curso") : t("Modelo de transcripción");
+  $("required-model-current").hidden = !downloading;
+  $("required-model-hint").hidden = downloading;
+  if (downloading) {
+    $("required-model-current-name").textContent = shortModelName(downloadModel);
+    $("required-model-current-detail").textContent = downloadModel
+      ? `${downloadModel.technicalName} · ${humanBytes(downloadModel.estimatedRamBytes)} RAM`
+      : t("Preparando el modelo…");
+  }
 
   $("model-required-title").textContent = downloading
     ? t("Descargando {model}", { model: shortModelName(downloadModel) })
@@ -2722,6 +2736,7 @@ function selectSettingsTab(name, focus = false) {
 }
 
 async function openSettings() {
+  closeWhisperModelPicker();
   let snapshot;
   [state.config, state.models, state.modelsDirectory, snapshot] = await Promise.all([
     invoke("get_config"),
@@ -2834,64 +2849,98 @@ function renderWhisperModelOptions(selected = $("cfg-model").value) {
     : selectableModels.find((model) => model.id === "large-v3-turbo-q5")?.id
       ?? selectableModels[0]?.id
       ?? "";
-  $("cfg-model").value = chosen;
-  const downloading = state.modelState.state === "downloading";
-  $("cfg-model-picker").replaceChildren(
+  $("cfg-model-menu").replaceChildren(
     ...selectableModels.map((model) => {
-      const choice = document.createElement("button");
-      choice.type = "button";
-      choice.className = "model-choice";
-      choice.dataset.modelId = model.id;
-      choice.setAttribute("role", "radio");
-      choice.setAttribute("aria-checked", String(model.id === chosen));
-      choice.tabIndex = model.id === chosen ? 0 : -1;
-      choice.disabled = downloading;
+      const option = document.createElement("button");
+      option.type = "button";
+      option.className = "model-select-option";
+      option.dataset.modelId = model.id;
+      option.setAttribute("role", "option");
+      option.setAttribute("aria-selected", String(model.id === chosen));
+      option.tabIndex = model.id === chosen ? 0 : -1;
 
-      const head = document.createElement("span");
-      head.className = "model-choice-head";
-      const name = document.createElement("span");
-      name.className = "model-choice-name";
+      const main = document.createElement("span");
+      main.className = "model-select-option-main";
+      const name = document.createElement("strong");
       name.textContent = t(model.displayName);
-      head.append(name);
+      main.append(name);
       if (model.recommended) {
         const badge = document.createElement("span");
-        badge.className = "model-choice-badge";
+        badge.className = "model-select-badge";
         badge.textContent = t("Recomendado");
-        head.append(badge);
+        main.append(badge);
       }
 
       const memory = document.createElement("span");
-      memory.className = "model-choice-memory";
+      memory.className = "model-select-option-memory";
       memory.textContent = t("≈ {memory} de RAM", {
         memory: humanBytes(model.estimatedRamBytes),
       });
       const description = document.createElement("span");
-      description.className = "model-choice-description";
+      description.className = "model-select-option-description";
       description.textContent = t(model.description);
       const technical = document.createElement("span");
-      technical.className = "model-choice-technical";
+      technical.className = "model-select-option-technical";
       technical.textContent = `${model.technicalName} · ${humanBytes(model.approxBytes)}`;
       if (model.downloaded) {
         const installed = document.createElement("span");
-        installed.className = "model-choice-download";
+        installed.className = "model-select-option-download";
         installed.textContent = t("Descargado");
         technical.append(" · ", installed);
       }
-      choice.append(head, memory, description, technical);
-      choice.addEventListener("click", () => selectWhisperModel(model.id));
-      return choice;
+      option.append(main, memory, description, technical);
+      option.addEventListener("click", () => {
+        selectWhisperModel(model.id);
+        closeWhisperModelPicker(true);
+      });
+      return option;
     }),
   );
+  selectWhisperModel(chosen, { updateHint: false });
 }
 
-function selectWhisperModel(modelId) {
+function selectWhisperModel(modelId, { updateHint = true } = {}) {
+  const model = state.models.find((candidate) => candidate.id === modelId);
+  if (!model) return;
   $("cfg-model").value = modelId;
-  for (const choice of $("cfg-model-picker").querySelectorAll(".model-choice")) {
-    const selected = choice.dataset.modelId === modelId;
-    choice.setAttribute("aria-checked", String(selected));
-    choice.tabIndex = selected ? 0 : -1;
+  $("cfg-model-selected-name").textContent = t(model.displayName);
+  $("cfg-model-selected-detail").textContent = `${model.technicalName} · ${humanBytes(model.estimatedRamBytes)} RAM`;
+  const badge = $("cfg-model-selected-badge");
+  badge.hidden = !model.recommended;
+  badge.textContent = model.recommended ? t("Recomendado") : "";
+  for (const option of $("cfg-model-menu").querySelectorAll(".model-select-option")) {
+    const selected = option.dataset.modelId === modelId;
+    option.setAttribute("aria-selected", String(selected));
+    option.tabIndex = selected ? 0 : -1;
   }
-  updateModelHint();
+  if (updateHint) updateModelHint();
+}
+
+function closeWhisperModelPicker(returnFocus = false) {
+  const picker = $("cfg-model-picker");
+  const menu = $("cfg-model-menu");
+  if (menu.hidden) return;
+  menu.hidden = true;
+  picker.classList.remove("open");
+  $("cfg-model-trigger").setAttribute("aria-expanded", "false");
+  if (returnFocus) $("cfg-model-trigger").focus();
+}
+
+function openWhisperModelPicker(edge = "selected") {
+  const trigger = $("cfg-model-trigger");
+  if (trigger.disabled) return;
+  const picker = $("cfg-model-picker");
+  const menu = $("cfg-model-menu");
+  menu.hidden = false;
+  picker.classList.add("open");
+  trigger.setAttribute("aria-expanded", "true");
+  const options = [...menu.querySelectorAll(".model-select-option")];
+  const target = edge === "first"
+    ? options[0]
+    : edge === "last"
+      ? options.at(-1)
+      : options.find((option) => option.getAttribute("aria-selected") === "true") ?? options[0];
+  requestAnimationFrame(() => target?.focus());
 }
 
 // --- webhooks -------------------------------------------------------------
@@ -3549,12 +3598,13 @@ function addCustomVocabulary() {
 function renderModelProgress() {
   const s = state.modelState;
   const row = $("download-row");
+  const picker = $("cfg-model-picker");
+  const trigger = $("cfg-model-trigger");
   if (s.state !== "downloading") {
     row.hidden = true;
     $("cfg-model").disabled = false;
-    for (const choice of $("cfg-model-picker").querySelectorAll(".model-choice")) {
-      choice.disabled = false;
-    }
+    trigger.disabled = false;
+    picker.classList.remove("is-downloading");
     updateModelHint();
     return;
   }
@@ -3562,9 +3612,9 @@ function renderModelProgress() {
   const downloadModel = downloadingWhisperModel();
   if (downloadModel) selectWhisperModel(downloadModel.id);
   $("cfg-model").disabled = true;
-  for (const choice of $("cfg-model-picker").querySelectorAll(".model-choice")) {
-    choice.disabled = true;
-  }
+  closeWhisperModelPicker();
+  trigger.disabled = true;
+  picker.classList.add("is-downloading");
   const pct = s.totalBytes ? Math.round((s.downloadedBytes / s.totalBytes) * 100) : 0;
   const modelName = shortModelName(downloadModel);
   $("progress-bar").style.width = `${pct}%`;
@@ -4167,19 +4217,43 @@ function wireUp() {
     event.currentTarget.setAttribute("aria-pressed", String(!revealed));
   });
 
-  $("cfg-model-picker").addEventListener("keydown", (event) => {
-    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
-    const choices = [...$("cfg-model-picker").querySelectorAll(".model-choice:not(:disabled)")];
-    const current = choices.indexOf(document.activeElement);
-    if (current < 0 || choices.length === 0) return;
+  $("cfg-model-trigger").addEventListener("click", () => {
+    if ($("cfg-model-menu").hidden) openWhisperModelPicker();
+    else closeWhisperModelPicker();
+  });
+  $("cfg-model-trigger").addEventListener("keydown", (event) => {
+    if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    let next = current;
-    if (["ArrowRight", "ArrowDown"].includes(event.key)) next = (current + 1) % choices.length;
-    else if (["ArrowLeft", "ArrowUp"].includes(event.key)) next = (current - 1 + choices.length) % choices.length;
-    else if (event.key === "Home") next = 0;
-    else if (event.key === "End") next = choices.length - 1;
-    choices[next].click();
-    choices[next].focus();
+    openWhisperModelPicker(
+      event.key === "Home" ? "first" : event.key === "End" ? "last" : "selected",
+    );
+  });
+  $("cfg-model-menu").addEventListener("keydown", (event) => {
+    const options = [...$("cfg-model-menu").querySelectorAll(".model-select-option")];
+    const current = options.indexOf(document.activeElement);
+    if (event.key === "Escape") {
+      event.preventDefault();
+      event.stopPropagation();
+      closeWhisperModelPicker(true);
+      return;
+    }
+    if (event.key === "Tab") {
+      closeWhisperModelPicker();
+      return;
+    }
+    if (!["ArrowUp", "ArrowDown", "Home", "End"].includes(event.key) || current < 0) return;
+    event.preventDefault();
+    const next = event.key === "Home"
+      ? 0
+      : event.key === "End"
+        ? options.length - 1
+        : event.key === "ArrowDown"
+          ? (current + 1) % options.length
+          : (current - 1 + options.length) % options.length;
+    options[next]?.focus();
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("cfg-model-picker").contains(event.target)) closeWhisperModelPicker();
   });
   $("cfg-models-directory").addEventListener("input", updateModelsDirectoryHint);
   $("btn-add-vocabulary").addEventListener("click", addCustomVocabulary);

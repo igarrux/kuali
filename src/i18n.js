@@ -78,6 +78,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
     "Download a local model and connect either integration or both. You can return here at any time.",
   Obligatorio: "Required",
   "Modelo de transcripción": "Transcription model",
+  "Descarga en curso": "Download in progress",
+  "Preparando el modelo…": "Preparing model…",
   Recomendado: "Recommended",
   "Large v3 Turbo Q5 es el recomendado por su equilibrio entre calidad y memoria.":
     "Large v3 Turbo Q5 is recommended for its balance of quality and memory use.",

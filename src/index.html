@@ -142,11 +142,15 @@
             </div>
           </div>
           <div class="model-required-controls">
-            <label class="guide-model-field" for="required-model-select">
-              <span>Modelo de transcripción</span>
+            <div class="guide-model-field" id="required-model-field">
+              <label for="required-model-select">Modelo de transcripción</label>
               <select id="required-model-select" name="required-whisper-model"></select>
+              <div class="required-model-current" id="required-model-current" role="status" hidden>
+                <strong id="required-model-current-name"></strong>
+                <small id="required-model-current-detail"></small>
+              </div>
               <small id="required-model-hint">Large v3 Turbo Q5 es el recomendado por su equilibrio entre calidad y memoria.</small>
-            </label>
+            </div>
             <div class="guide-model-action">
               <div class="download guide-model-download" id="required-model-download-row" aria-live="polite" hidden>
                 <div class="progress"><div class="progress-bar" id="required-model-progress-bar"></div></div>
@@ -754,12 +758,36 @@
                   <span id="cfg-model-label">Potencia del modelo</span>
                   <input type="hidden" id="cfg-model" name="whisper-model" />
                   <div
-                    class="model-picker"
+                    class="model-select"
                     id="cfg-model-picker"
-                    role="radiogroup"
-                    aria-labelledby="cfg-model-label"
                     data-i18n-skip
-                  ></div>
+                  >
+                    <button
+                      type="button"
+                      class="model-select-trigger"
+                      id="cfg-model-trigger"
+                      aria-haspopup="listbox"
+                      aria-expanded="false"
+                      aria-controls="cfg-model-menu"
+                      aria-labelledby="cfg-model-label cfg-model-selected-name"
+                    >
+                      <span class="model-select-trigger-copy">
+                        <span class="model-select-trigger-head">
+                          <strong id="cfg-model-selected-name"></strong>
+                          <span class="model-select-badge" id="cfg-model-selected-badge" hidden></span>
+                        </span>
+                        <small id="cfg-model-selected-detail"></small>
+                      </span>
+                      <span class="model-select-chevron" aria-hidden="true">⌄</span>
+                    </button>
+                    <div
+                      class="model-select-menu"
+                      id="cfg-model-menu"
+                      role="listbox"
+                      aria-labelledby="cfg-model-label"
+                      hidden
+                    ></div>
+                  </div>
                   <small id="model-hint"></small>
                 </div>
 

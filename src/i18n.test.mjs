@@ -150,7 +150,9 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.match(html, /id="btn-required-model"/);
   assert.match(html, /id="required-model-progress-bar"/);
   assert.ok(html.indexOf('id="model-required"') < html.indexOf('id="pane-setup"'));
-  assert.match(app, /\$\("model-required"\)\.hidden = !missingWeights && !downloading/);
+  assert.match(app, /panel\.hidden = !missingWeights && !downloading/);
+  assert.match(app, /selector\.hidden = downloading/);
+  assert.match(html, /id="required-model-current"/);
   assert.match(app, /Kuali sigue capturando el audio de la llamada/);
   assert.match(app, /La descarga continúa aunque cambies de sección dentro de Kuali/);
   assert.match(app, /if \(!model\?\.downloaded\) \{/);
@@ -172,11 +174,13 @@ test("the curated model catalog exposes four clear performance tiers", () => {
     ["Ligero", "Equilibrado", "Preciso", "Máxima precisión"].map((name) => t(name)),
     ["Light", "Balanced", "Precise", "Highest accuracy"],
   );
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
   assert.match(app, /model\.selectable !== false/);
   assert.match(app, /selectableModels\.map/);
-  assert.match(app, /role", "radio"/);
+  assert.match(html, /aria-haspopup="listbox"/);
+  assert.match(app, /role", "option"/);
   assert.match(app, /model\.estimatedRamBytes/);
   assert.match(app, /return selectableWhisperModels\(\)\.some\(\(model\) => model\.downloaded\)/);
   assert.match(commands, /selectable: model\.is_selectable\(\)/);
