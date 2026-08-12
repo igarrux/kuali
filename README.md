@@ -172,7 +172,8 @@ moved, and each installed weight can be removed individually.
 | Medium | 1.5 GB | Higher accuracy |
 | Large v3 Turbo | 1.6 GB | High quality without quantization |
 | **Large v3 Turbo Q5** | **574 MB** | **Recommended balance** |
-| Large v3 Q5 | 1.1 GB | Highest transcription accuracy; slower live output |
+| Large v3 | 3.1 GB | Highest accuracy without quantization; highest memory use |
+| Large v3 Q5 | 1.1 GB | High accuracy with lower memory use; slower live output than Turbo |
 | Large v3 Turbo LatAm | 1.6 GB | Latin American Spanish |
 | Large v3 Turbo LatAm Q5 | 574 MB | Lighter LatAm option |
 

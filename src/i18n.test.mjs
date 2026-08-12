@@ -124,6 +124,9 @@ test("a persistent model notice handles downloads and gates initial setup", () =
     new URL("../crates/kuali-engine/src/engine.rs", import.meta.url),
     "utf8",
   );
+  const tauriConfig = JSON.parse(
+    readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
+  );
 
   assert.match(html, /id="model-required"/);
   assert.match(html, /id="required-model-select"/);
@@ -138,13 +141,18 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.equal((app.match(/localStorage\.setItem\("kuali\.onboarding\.completed"/g) ?? []).length, 1);
   assert.doesNotMatch(main, /download_configured_model_if_missing/);
   assert.match(engine, /if download_configured_model \{/);
+  assert.doesNotMatch(JSON.stringify(tauriConfig.bundle.resources), /ggml-[^"]+\.bin/i);
 });
 
-test("the full Large v3 Q5 quality option is translated and distinct from Turbo", () => {
+test("the full Large v3 options are translated and distinct from Turbo", () => {
   setLanguagePreference("en", { notify: false });
   assert.equal(
-    t("Large v3 Q5 — máxima precisión, más lento"),
-    "Large v3 Q5 — highest accuracy, slower",
+    t("Large v3 — máxima precisión, sin cuantizar"),
+    "Large v3 — highest accuracy, unquantized",
+  );
+  assert.equal(
+    t("Large v3 Q5 — alta precisión, menos memoria"),
+    "Large v3 Q5 — high accuracy, lower memory",
   );
   assert.equal(
     t("Large v3 Turbo — alta calidad, rápido"),

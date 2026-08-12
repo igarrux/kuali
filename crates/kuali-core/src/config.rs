@@ -238,6 +238,9 @@ pub enum WhisperModel {
     /// Five-bit quantization with near-`large-v3-turbo` quality at roughly one
     /// third of the size; the best balance on Apple Silicon.
     LargeV3TurboQ5,
+    /// The complete, unquantized Large v3 model for the highest available
+    /// transcription accuracy, at a substantial memory and latency cost.
+    LargeV3,
     /// Five-bit quantization of the complete Large v3 model. It retains all 32
     /// decoder layers for higher accuracy at the cost of slower live inference.
     LargeV3Q5,
@@ -249,13 +252,14 @@ pub enum WhisperModel {
 }
 
 impl WhisperModel {
-    pub const ALL: [WhisperModel; 9] = [
+    pub const ALL: [WhisperModel; 10] = [
         Self::Tiny,
         Self::Base,
         Self::Small,
         Self::Medium,
         Self::LargeV3Turbo,
         Self::LargeV3TurboQ5,
+        Self::LargeV3,
         Self::LargeV3Q5,
         Self::LargeV3TurboLatam,
         Self::LargeV3TurboLatamQ5,
@@ -269,6 +273,7 @@ impl WhisperModel {
             Self::Medium => "ggml-medium.bin",
             Self::LargeV3Turbo => "ggml-large-v3-turbo.bin",
             Self::LargeV3TurboQ5 => "ggml-large-v3-turbo-q5_0.bin",
+            Self::LargeV3 => "ggml-large-v3.bin",
             Self::LargeV3Q5 => "ggml-large-v3-q5_0.bin",
             Self::LargeV3TurboLatam => "ggml-large-v3-turbo-latam.bin",
             Self::LargeV3TurboLatamQ5 => "ggml-large-v3-turbo-latam-q5_0.bin",
@@ -294,6 +299,7 @@ impl WhisperModel {
             Self::Medium => 1_533_763_059,
             Self::LargeV3Turbo => 1_624_555_275,
             Self::LargeV3TurboQ5 => 574_041_195,
+            Self::LargeV3 => 3_095_033_483,
             Self::LargeV3Q5 => 1_081_140_203,
             Self::LargeV3TurboLatam => 1_624_555_275,
             Self::LargeV3TurboLatamQ5 => 574_041_195,
@@ -313,6 +319,7 @@ impl WhisperModel {
             Self::LargeV3TurboQ5 => {
                 "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
             }
+            Self::LargeV3 => "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
             Self::LargeV3Q5 => "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
             Self::LargeV3TurboLatam => {
                 "b2e3f5e5b159a6978164d237f981fe95335693abb716fb1c229507b235ace540"
@@ -331,7 +338,8 @@ impl WhisperModel {
             Self::Medium => "Medium — buena calidad, más lento",
             Self::LargeV3Turbo => "Large v3 Turbo — alta calidad, rápido",
             Self::LargeV3TurboQ5 => "Large v3 Turbo Q5 — recomendado",
-            Self::LargeV3Q5 => "Large v3 Q5 — máxima precisión, más lento",
+            Self::LargeV3 => "Large v3 — máxima precisión, sin cuantizar",
+            Self::LargeV3Q5 => "Large v3 Q5 — alta precisión, menos memoria",
             Self::LargeV3TurboLatam => "Large v3 Turbo LatAm — español latino, F16",
             Self::LargeV3TurboLatamQ5 => "Large v3 Turbo LatAm Q5 — español latino, ligero",
         }
@@ -571,6 +579,7 @@ mod tests {
         assert_eq!(cfg.application.language, "auto");
         assert!(cfg.application.automatic_updates);
         assert!(cfg.llm.summarize_on_leave);
+        assert_eq!(cfg.whisper.model, WhisperModel::LargeV3TurboQ5);
         assert!(!cfg.is_ready());
         assert_eq!(
             cfg.missing_requirements(),
@@ -857,23 +866,34 @@ mod tests {
     }
 
     #[test]
-    fn large_v3_q5_matches_the_official_whisper_cpp_artifact() {
-        let model = WhisperModel::LargeV3Q5;
+    fn large_v3_variants_match_the_official_whisper_cpp_artifacts() {
+        let cases = [
+            (
+                WhisperModel::LargeV3,
+                "large-v3",
+                "ggml-large-v3.bin",
+                3_095_033_483,
+                "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
+            ),
+            (
+                WhisperModel::LargeV3Q5,
+                "large-v3-q5",
+                "ggml-large-v3-q5_0.bin",
+                1_081_140_203,
+                "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+            ),
+        ];
 
-        assert_eq!(
-            serde_json::to_value(model).unwrap().as_str(),
-            Some("large-v3-q5")
-        );
-        assert_eq!(model.file_name(), "ggml-large-v3-q5_0.bin");
-        assert_eq!(model.approx_bytes(), 1_081_140_203);
-        assert_eq!(
-            model.sha256(),
-            "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
-        );
-        assert_eq!(
-            model.download_url(),
-            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-q5_0.bin"
-        );
+        for (model, id, file_name, bytes, sha256) in cases {
+            assert_eq!(serde_json::to_value(model).unwrap().as_str(), Some(id));
+            assert_eq!(model.file_name(), file_name);
+            assert_eq!(model.approx_bytes(), bytes);
+            assert_eq!(model.sha256(), sha256);
+            assert_eq!(
+                model.download_url(),
+                format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file_name}")
+            );
+        }
     }
 
     #[test]
