@@ -168,6 +168,27 @@ test("landing pages show the real app and state the local data boundary", () => 
   }
 });
 
+test("landing pages substantiate the native runtime and measured resource use", () => {
+  const english = read("index.html");
+  const spanish = read("es/index.html");
+
+  for (const html of [english, spanish]) {
+    assert.match(html, /Rust/);
+    assert.match(html, /~20 MB/);
+    assert.match(html, /~600 MB/);
+    assert.match(html, /127\.0\.0\.1/);
+    assert.match(html, /Apple Silicon/);
+    assert.match(html, /Q5/);
+  }
+
+  assert.match(english, /first active meeting[\s\S]*released after the last one ends/);
+  assert.match(english, /actual memory use varies/);
+  assert.match(english, /Free and open source/);
+  assert.match(spanish, /primera reunión activa[\s\S]*se libera al terminar la última/);
+  assert.match(spanish, /consumo real varía/);
+  assert.match(spanish, /Gratis y open source/);
+});
+
 test("download actions lead to installation while the secondary action opens GitHub", () => {
   const english = read("index.html");
   const spanish = read("es/index.html");
@@ -193,6 +214,9 @@ test("both guides document model weights and Standard Webhooks", () => {
     assert.match(html, /webhook-timestamp/);
     assert.match(html, /webhook-signature/);
     assert.match(html, /<code>type<\/code>[\s\S]*<code>timestamp<\/code>[\s\S]*<code>data<\/code>/);
+    assert.match(html, /20 MB/);
+    assert.match(html, /600 MB/);
+    assert.match(html, /Apple Silicon/);
   }
 });
 
@@ -324,4 +348,22 @@ test("machine-readable project summary points to canonical product and contribut
   assert.match(summary, /https:\/\/kuali\.garrux\.dev\/discord-meeting-transcription\//);
   assert.match(summary, /https:\/\/kuali\.garrux\.dev\/google-meet-transcription\//);
   assert.match(summary, /https:\/\/github\.com\/igarrux\/kuali\/blob\/main\/CONTRIBUTING\.md/);
+  assert.match(summary, /native desktop core is written in Rust/);
+  assert.match(summary, /about 20 MB while waiting/);
+  assert.match(summary, /up to about 600 MB/);
+  assert.match(summary, /free and open source/);
+});
+
+test("repository readmes document the on-demand model lifecycle", () => {
+  const english = readRepository("README.md");
+  const spanish = readRepository("README.es.md");
+
+  assert.match(english, /## Resource use/);
+  assert.match(english, /Waiting for a meeting \| No \| About 20 MB/);
+  assert.match(english, /recommended Q5 model \| Yes \| Up to about 600 MB/);
+  assert.match(english, /Downloaded\s+weights remain on disk/);
+  assert.match(spanish, /## Uso de recursos/);
+  assert.match(spanish, /Esperando una reunión \| No \| Cerca de 20 MB/);
+  assert.match(spanish, /modelo Q5 recomendado \| Sí \| Hasta unos 600 MB/);
+  assert.match(spanish, /pesos descargados permanecen en disco/i);
 });

@@ -15,7 +15,7 @@
     <link rel="icon" href="../assets/kuali-logo.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="../assets/icon.png">
     <link rel="sitemap" type="application/xml" href="../sitemap.xml">
-    <link rel="stylesheet" href="../assets/site.css?v=20260811-2">
+    <link rel="stylesheet" href="../assets/site.css?v=20260811-3">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Kuali">
     <meta property="og:title" content="Install and configure Kuali">
@@ -67,7 +67,7 @@
         ]
       }
     </script>
-    <script src="../assets/site.js?v=20260811-2" defer></script>
+    <script src="../assets/site.js?v=20260811-3" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#guide-content">Skip to guide</a>
@@ -120,6 +120,7 @@
               <article class="guide-step"><div><h3>You can join a call while it downloads</h3><p>If a meeting starts before the model is ready, Kuali keeps the captured audio queued in memory and transcribes it when the download completes. Nothing already captured is discarded.</p></div></article>
               <article class="guide-step"><div><h3>Choose where weights live</h3><p>The default models folder is <code>~/.kuali</code>. Use <strong>Models folder → Choose…</strong> to move downloaded or partial weights elsewhere. Kuali preserves the selected language and special terminology when moving them.</p></div></article>
               <article class="guide-step"><div><h3>Manage downloaded weights</h3><p>Under <strong>Downloaded weights</strong>, delete only the models you no longer need. If you remove the last one, the persistent model panel appears again until another model is ready.</p></div></article>
+              <article class="guide-step"><div><h3>The model uses RAM only during meetings</h3><p>Kuali loads Whisper when the first active meeting needs it, shares that instance across concurrent meetings, and releases it after the final one ends. In testing on Apple Silicon, the Rust app used about <strong>20 MB while waiting</strong> and up to about <strong>600 MB while transcribing with the recommended Q5 model</strong>. Actual use varies. The downloaded weights remain on disk.</p></div></article>
               <article class="guide-step"><div><h3>Add product names to the vocabulary</h3><p>In <strong>Settings → Transcription → Custom vocabulary</strong>, add names such as internal products, acronyms, or people that Whisper should preserve.</p></div></article>
             </div>
           </section>

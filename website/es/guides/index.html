@@ -15,7 +15,7 @@
     <link rel="icon" href="../../assets/kuali-logo.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="../../assets/icon.png">
     <link rel="sitemap" type="application/xml" href="../../sitemap.xml">
-    <link rel="stylesheet" href="../../assets/site.css?v=20260811-2">
+    <link rel="stylesheet" href="../../assets/site.css?v=20260811-3">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Kuali">
     <meta property="og:title" content="Instala y configura Kuali">
@@ -67,7 +67,7 @@
         ]
       }
     </script>
-    <script src="../../assets/site.js?v=20260811-2" defer></script>
+    <script src="../../assets/site.js?v=20260811-3" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#contenido-guia">Saltar a la guía</a>
@@ -101,6 +101,7 @@
               <article class="guide-step"><div><h3>Puedes entrar a una llamada durante la descarga</h3><p>Si la reunión empieza antes de que el modelo esté listo, Kuali conserva en memoria el audio capturado y lo transcribe al terminar la descarga. Nada de lo que ya se capturó se descarta.</p></div></article>
               <article class="guide-step"><div><h3>Elige dónde guardar los pesos</h3><p>La carpeta predeterminada es <code>~/.kuali</code>. Usa <strong>Carpeta de los modelos → Elegir…</strong> para mover a otra ubicación los pesos completos o parciales. Kuali conserva el idioma y el vocabulario personalizado al moverlos.</p></div></article>
               <article class="guide-step"><div><h3>Administra los pesos descargados</h3><p>En <strong>Pesos descargados</strong>, elimina solamente los modelos que ya no necesites. Si borras el último, el panel persistente vuelve a aparecer hasta que otro modelo esté listo.</p></div></article>
+              <article class="guide-step"><div><h3>El modelo usa RAM solo durante las reuniones</h3><p>Kuali carga Whisper cuando la primera reunión activa lo necesita, comparte esa instancia entre reuniones simultáneas y la libera al terminar la última. En pruebas sobre Apple Silicon, la app escrita en Rust usó cerca de <strong>20 MB en espera</strong> y hasta unos <strong>600 MB al transcribir con el modelo Q5 recomendado</strong>. El consumo real varía. Los pesos descargados permanecen en disco.</p></div></article>
               <article class="guide-step"><div><h3>Añade nombres propios al vocabulario</h3><p>En <strong>Ajustes → Transcripción → Vocabulario personalizado</strong>, agrega productos, siglas o personas que Whisper deba conservar.</p></div></article>
             </div>
           </section>

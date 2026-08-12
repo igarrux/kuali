@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/igarrux/kuali/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/igarrux/kuali/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <a href="https://github.com/igarrux/kuali/releases/latest"><img alt="Latest release" src="https://img.shields.io/github/v/release/igarrux/kuali?style=flat-square&color=7ddab9"></a>
+  <img alt="Built with Rust" src="https://img.shields.io/badge/core-Rust-b7410e?style=flat-square&logo=rust&logoColor=white">
   <a href="LICENSE"><img alt="MIT license" src="https://img.shields.io/badge/desktop-MIT-7ddab9?style=flat-square"></a>
   <a href="browser-extension/LICENSE"><img alt="Apache 2.0 extension license" src="https://img.shields.io/badge/extension-Apache--2.0-7ddab9?style=flat-square"></a>
 </p>
@@ -44,6 +45,12 @@ segments, and tasks attached to the right person. The desktop app then adds a
 live transcript, local search, optional structured insights, polished Discord
 delivery, and signed Standard Webhooks without requiring a Kuali cloud account.
 
+The native desktop core is written in Rust. The Discord bot and gateway run
+from your Mac, while browser meetings use a loopback connection to the same
+machine. Kuali loads Whisper only when an active meeting needs it and releases
+the model from RAM after the final active meeting ends. The project is free and
+open source; no Kuali subscription or hosted account is required.
+
 Learn about the dedicated
 [Discord transcription](https://kuali.garrux.dev/discord-meeting-transcription/)
 and
@@ -56,6 +63,9 @@ workflows on the official website.
 - Experimental browser capture for Microsoft Teams and Zoom, with partial
   support while their integrations are validated and improved.
 - Separate concurrent meetings without shared participants, clocks, or state.
+- Native Rust desktop core with about 20 MB of observed memory use while idle.
+- On-demand Whisper lifecycle: one model is shared by active meetings and
+  released from RAM after the final meeting ends.
 - Local Whisper inference with Metal acceleration and Silero voice detection.
 - Searchable meeting library with transcript excerpts, channel folders, and
   Markdown or JSON export.
@@ -134,6 +144,18 @@ and labels mixed audio honestly instead of inventing an attribution.
 Teams and Zoom have not yet received the same depth of real-world testing as
 Discord and Google Meet. Their capture, participant identity, or speaker
 separation may be incomplete in some meeting modes while support improves.
+
+## Resource use
+
+| State | Whisper in RAM | Observed app memory |
+|---|---|---:|
+| Waiting for a meeting | No | About 20 MB |
+| Active meeting with the recommended Q5 model | Yes | Up to about 600 MB |
+| After the final active meeting ends | No | Returns toward the idle footprint |
+
+These are approximate observations on Apple Silicon; actual memory use varies
+by meeting and system. Concurrent meetings share one loaded model. Downloaded
+weights remain on disk when the model is released from RAM.
 
 ## Transcription models
 

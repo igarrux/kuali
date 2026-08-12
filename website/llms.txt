@@ -22,5 +22,9 @@
 - Microsoft Teams and Zoom are experimental with partial support.
 - Raw meeting audio is processed in memory and is not retained as an audio recording.
 - Whisper transcription and Silero voice detection run locally.
+- The native desktop core is written in Rust; the Discord bot and browser meeting receiver run from the user's computer.
+- Whisper loads when the first active meeting needs it, is shared across concurrent meetings, and is released from RAM after the final active meeting ends.
+- Observed Apple Silicon memory use is about 20 MB while waiting and up to about 600 MB while transcribing with the recommended Q5 model; actual use varies.
 - Summaries, tasks, Discord delivery, and webhooks are optional and user-configured.
+- Kuali is free and open source with no required Kuali account or subscription.
 - The desktop workspace is MIT licensed; the browser extension is Apache-2.0 licensed.

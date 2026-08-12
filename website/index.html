@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Kuali — Local Discord and Google Meet transcription</title>
-    <meta name="description" content="Kuali transcribes Discord and Google Meet calls locally in real time, preserves speaker identity, and creates searchable notes, summaries, tasks, and webhooks.">
+    <meta name="description" content="Kuali is a free, open-source Rust app that transcribes Discord and Google Meet locally, preserves speaker identity, and creates searchable meeting notes.">
     <meta name="author" content="Jhon Guerrero">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
@@ -16,11 +16,11 @@
     <link rel="apple-touch-icon" href="./assets/icon.png">
     <link rel="manifest" href="./site.webmanifest">
     <link rel="sitemap" type="application/xml" href="./sitemap.xml">
-    <link rel="stylesheet" href="./assets/site.css?v=20260811-2">
+    <link rel="stylesheet" href="./assets/site.css?v=20260811-3">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Kuali">
     <meta property="og:title" content="Kuali — Local transcription for Discord and Google Meet">
-    <meta property="og:description" content="Open-source live transcription with real speaker identity, searchable meetings, optional summaries, tasks, and signed webhooks.">
+    <meta property="og:description" content="Free, open-source meeting transcription built in Rust. The bot, speech models, and meeting library run locally on your computer.">
     <meta property="og:url" content="https://kuali.garrux.dev/">
     <meta property="og:image" content="https://kuali.garrux.dev/assets/kuali-app.png">
     <meta property="og:image:type" content="image/png">
@@ -31,7 +31,7 @@
     <meta property="og:locale:alternate" content="es_419">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Kuali — Local Discord and Google Meet transcription">
-    <meta name="twitter:description" content="Know who said what in real time. Local transcription, searchable meetings, optional summaries, and tasks.">
+    <meta name="twitter:description" content="Built in Rust, about 20 MB while waiting, and a local speech model loaded only when a meeting needs it.">
     <meta name="twitter:image" content="https://kuali.garrux.dev/assets/kuali-app.png">
     <meta name="twitter:image:alt" content="The Kuali desktop app showing its local meeting library and connection status">
     <script type="application/ld+json">
@@ -40,13 +40,15 @@
         "@type": "SoftwareApplication",
         "name": "Kuali",
         "url": "https://kuali.garrux.dev/",
-        "description": "Open-source local meeting transcription for Discord and Google Meet with live speaker attribution.",
+        "description": "Free, open-source meeting transcription built in Rust for Discord and Google Meet, with local processing and live speaker attribution.",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "macOS",
         "softwareVersion": "0.1.10",
         "screenshot": "https://kuali.garrux.dev/assets/kuali-app.png",
         "featureList": [
           "Live speaker-attributed transcription",
+          "Native desktop core built in Rust",
+          "Whisper model loaded only during active meetings",
           "Local Whisper and Silero processing",
           "Discord and Google Meet integrations",
           "Searchable meeting library",
@@ -99,11 +101,16 @@
             "@type": "Question",
             "name": "Are AI summaries required?",
             "acceptedAnswer": { "@type": "Answer", "text": "No. Summaries and tasks are optional and can be disabled completely. Transcription remains local whether summaries are enabled or not." }
+          },
+          {
+            "@type": "Question",
+            "name": "How much memory does Kuali use?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Kuali has been observed at about 20 MB while waiting and up to about 600 MB during transcription with the recommended Q5 model on Apple Silicon. Actual use varies by meeting and system. The model is released from memory after the final active meeting ends." }
           }
         ]
       }
     </script>
-    <script src="./assets/site.js?v=20260811-2" defer></script>
+    <script src="./assets/site.js?v=20260811-3" defer></script>
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
@@ -141,8 +148,8 @@
               <a class="button" href="https://github.com/igarrux/kuali">View on GitHub <span aria-hidden="true">↗</span></a>
             </div>
             <div class="hero-note" role="list" aria-label="Product highlights">
-              <span role="listitem">No Kuali cloud account</span>
-              <span role="listitem">Audio stays local</span>
+              <span role="listitem">Built in Rust</span>
+              <span role="listitem">About 20 MB while waiting</span>
               <span role="listitem">Free and open source</span>
             </div>
           </div>
@@ -167,6 +174,23 @@
           </div>
         </div>
       </div>
+
+      <section class="section runtime-section" id="runtime">
+        <div class="container">
+          <div class="runtime-intro" data-reveal>
+            <span class="eyebrow">Native by design</span>
+            <h2>Lightweight while waiting.<br>Powerful when it matters.</h2>
+            <p>Kuali is a native Rust app. Its Discord bot runs from your Mac, and browser meetings reach Kuali over <code>127.0.0.1</code>. There is no Kuali server in the middle. Whisper enters memory only when the first active meeting needs it and is released after the last one ends.</p>
+          </div>
+          <ul class="runtime-grid" aria-label="Kuali runtime facts">
+            <li class="runtime-card" data-reveal><strong>Rust</strong><h3>Native desktop core</h3><p>Fast startup, predictable memory use, and no web runtime carrying the app while it waits.</p></li>
+            <li class="runtime-card" data-reveal><strong>~20 MB</strong><h3>Observed while waiting</h3><p>The speech model stays out of RAM when no meeting is active.</p></li>
+            <li class="runtime-card accent" data-reveal><strong>~600 MB</strong><h3>With recommended Q5</h3><p>Observed peak memory while actively transcribing on Apple Silicon.</p></li>
+            <li class="runtime-card" data-reveal><strong>$0</strong><h3>Free and open source</h3><p>No subscription and no Kuali account. Inspect it, run it, improve it, and share it.</p></li>
+          </ul>
+          <p class="benchmark-note">Measurements are approximate observations on Apple Silicon; actual memory use varies by meeting and system. Downloaded weights remain on disk, but the loaded model releases RAM after the final active meeting ends. Concurrent meetings share one loaded model.</p>
+        </div>
+      </section>
 
       <section class="section" id="features">
         <div class="container">
@@ -280,6 +304,7 @@
             <details><summary>Does Kuali upload meeting audio?</summary><p>No. Whisper and Silero process raw audio in memory on your computer. Kuali does not retain an audio recording or send it to a Kuali-operated service.</p></details>
             <details><summary>Can it tell speakers apart?</summary><p>Yes. Kuali preserves participant identity when Discord or the browser meeting service exposes it. If a source provides mixed audio, Kuali labels it honestly instead of inventing attribution.</p></details>
             <details><summary>Do I need an external AI provider?</summary><p>No. Transcription works locally without an LLM. Summaries and tasks are optional and remain off whenever you disable them in Settings.</p></details>
+            <details><summary>How much memory does Kuali use?</summary><p>In testing on Apple Silicon, Kuali used about 20 MB while waiting and up to about 600 MB while transcribing with the recommended Q5 model. Actual use varies. Whisper is loaded for the first active meeting, shared by concurrent meetings, and released after the final one ends.</p></details>
             <details><summary>Does Kuali announce that it is transcribing?</summary><p>On Discord, Kuali plays and posts the consent notice when it joins and repeats it for people who arrive later. It also keeps an append-only consent audit log.</p></details>
             <details><summary>Is Kuali free?</summary><p>Yes. The desktop application is open source under MIT. The interoperable browser extension is distributed under Apache-2.0.</p></details>
           </div>

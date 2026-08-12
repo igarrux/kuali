@@ -11,6 +11,7 @@
 <p align="center">
   <a href="https://github.com/igarrux/kuali/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/igarrux/kuali/ci.yml?branch=main&style=flat-square&label=CI"></a>
   <a href="https://github.com/igarrux/kuali/releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/igarrux/kuali?style=flat-square&color=7ddab9"></a>
+  <img alt="Escrito en Rust" src="https://img.shields.io/badge/n%C3%BAcleo-Rust-b7410e?style=flat-square&logo=rust&logoColor=white">
   <a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/badge/escritorio-MIT-7ddab9?style=flat-square"></a>
   <a href="browser-extension/LICENSE"><img alt="Licencia Apache 2.0 de la extensión" src="https://img.shields.io/badge/extensi%C3%B3n-Apache--2.0-7ddab9?style=flat-square"></a>
 </p>
@@ -45,6 +46,13 @@ tareas unidos a la persona correcta. La app añade transcripción en vivo,
 búsqueda local, resultados estructurados opcionales, entrega cuidada en Discord
 y Standard Webhooks firmados sin exigir una cuenta en la nube de Kuali.
 
+El núcleo nativo de escritorio está escrito en Rust. El bot y el gateway de
+Discord corren desde tu Mac, mientras que las reuniones del navegador usan una
+conexión loopback hacia la misma computadora. Kuali carga Whisper solo cuando
+una reunión activa lo necesita y libera el modelo de la RAM al finalizar la
+última reunión activa. El proyecto es gratis y open source; no requiere una
+suscripción ni una cuenta alojada por Kuali.
+
 Conoce los flujos de
 [transcripción de Discord](https://kuali.garrux.dev/es/transcripcion-reuniones-discord/)
 y
@@ -57,6 +65,10 @@ en el sitio oficial.
 - Captura experimental para Microsoft Teams y Zoom, con soporte parcial mientras
   se validan y mejoran sus integraciones.
 - Varias reuniones simultáneas con participantes, relojes y estado independientes.
+- Núcleo de escritorio nativo en Rust con cerca de 20 MB de memoria observada
+  mientras está en espera.
+- Ciclo de Whisper bajo demanda: las reuniones activas comparten un modelo y se
+  libera de la RAM al finalizar la última.
 - Whisper local con aceleración Metal y detección de voz mediante Silero.
 - Biblioteca con búsqueda dentro de la transcripción, carpetas por canal y
   exportación Markdown o JSON.
@@ -139,6 +151,19 @@ Teams y Zoom todavía no tienen el mismo nivel de pruebas en reuniones reales
 que Discord y Google Meet. La captura, la identidad de participantes o la
 separación de hablantes pueden ser incompletas en algunos modos mientras mejora
 el soporte.
+
+## Uso de recursos
+
+| Estado | Whisper en RAM | Memoria observada de la app |
+|---|---|---:|
+| Esperando una reunión | No | Cerca de 20 MB |
+| Reunión activa con el modelo Q5 recomendado | Sí | Hasta unos 600 MB |
+| Después de finalizar la última reunión activa | No | Regresa hacia el consumo en espera |
+
+Estas cifras son mediciones aproximadas en Apple Silicon; el consumo real varía
+según la reunión y el equipo. Las reuniones simultáneas comparten un único
+modelo cargado. Los pesos descargados permanecen en disco cuando el modelo se
+libera de la RAM.
 
 ## Modelos de transcripción
 
