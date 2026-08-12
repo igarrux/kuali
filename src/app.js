@@ -2517,6 +2517,17 @@ function handleEvent(event) {
       if (["idle", "setup"].includes(state.currentPane)) renderRoot();
       break;
 
+    case "modelRecoveryStarted": {
+      const model = state.models.find((candidate) => candidate.id === event.model);
+      toast(
+        t("El archivo de {model} estaba dañado. Kuali descargará una copia limpia y conservará el audio de la llamada.", {
+          model: shortModelName(model),
+        }),
+        "Whisper",
+      );
+      break;
+    }
+
     case "webMeetingsStatusChanged":
       state.webMeetings = {
         enabled: event.enabled,

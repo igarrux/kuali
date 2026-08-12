@@ -74,6 +74,21 @@ pub fn verify_integrity(path: &Path, model: WhisperModel) -> Result<(), ModelErr
     verify_file_integrity(path, model.sha256())
 }
 
+/// Verifies a weight only after whisper.cpp rejects it and removes the file when
+/// its contents no longer match the official digest. The normal load path stays
+/// fast; this recovery path exists for same-size corruption after download.
+pub fn remove_if_corrupt(models_dir: &Path, model: WhisperModel) -> Result<bool, ModelError> {
+    let path = model_path(models_dir, model);
+    match verify_integrity(&path, model) {
+        Ok(()) => Ok(false),
+        Err(ModelError::HashMismatch { .. }) => {
+            remove(models_dir, model).map_err(|source| ModelError::Io { path, source })?;
+            Ok(true)
+        }
+        Err(error) => Err(error),
+    }
+}
+
 fn verify_file_integrity(path: &Path, expected: &'static str) -> Result<(), ModelError> {
     let file = std::fs::File::open(path).map_err(|source| ModelError::Io {
         path: path.to_path_buf(),
@@ -521,6 +536,22 @@ mod tests {
 
         let error = verify_digest(path, model, "0".repeat(64)).unwrap_err();
         assert!(matches!(error, ModelError::HashMismatch { .. }));
+    }
+
+    #[test]
+    fn a_weight_rejected_by_whisper_is_removed_only_when_its_digest_is_wrong() {
+        let root =
+            std::env::temp_dir().join(format!("kuali-model-recovery-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).unwrap();
+        let model = WhisperModel::Tiny;
+        let path = model_path(&root, model);
+        std::fs::write(&path, b"same-size checks are insufficient").unwrap();
+
+        assert!(remove_if_corrupt(&root, model).unwrap());
+        assert!(!path.exists());
+
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[test]

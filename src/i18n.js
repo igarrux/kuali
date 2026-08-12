@@ -113,6 +113,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
     "Local transcription will be available when it finishes. You can cancel the download if you chose the wrong model.",
   "Necesitas al menos un modelo descargado para transcribir.":
     "You need at least one downloaded model to transcribe.",
+  "El archivo de {model} estaba dañado. Kuali descargará una copia limpia y conservará el audio de la llamada.":
+    "The {model} file was corrupted. Kuali will download a clean copy and preserve the call audio.",
   "La descarga continúa aunque cambies de sección dentro de Kuali.":
     "The download continues even if you switch sections in Kuali.",
   "Descarga fallida": "Download failed",

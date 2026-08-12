@@ -65,6 +65,11 @@ pub enum KualiEvent {
     ModelStateChanged {
         state: ModelState,
     },
+    /// A same-size weight failed its delayed integrity check and will be fetched
+    /// again without requiring the user to leave or rejoin the meeting.
+    ModelRecoveryStarted {
+        model: WhisperModel,
+    },
     /// State of the local port used by the browser extension.
     WebMeetingsStatusChanged {
         enabled: bool,
@@ -162,5 +167,16 @@ mod tests {
         assert_eq!(json["model"], "large-v3");
         assert_eq!(json["downloadedBytes"], 49_000_000u64);
         assert_eq!(json["totalBytes"], 3_095_033_483u64);
+    }
+
+    #[test]
+    fn model_recovery_identifies_the_weight_that_will_be_replaced() {
+        let json = serde_json::to_value(KualiEvent::ModelRecoveryStarted {
+            model: WhisperModel::LargeV3,
+        })
+        .unwrap();
+
+        assert_eq!(json["type"], "modelRecoveryStarted");
+        assert_eq!(json["model"], "large-v3");
     }
 }

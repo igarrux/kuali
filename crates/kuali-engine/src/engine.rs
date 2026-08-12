@@ -1084,21 +1084,14 @@ async fn start_meeting(
             inner.set_status(EngineStatus::Watching);
             return Err("No se pudieron preparar los pesos de Whisper.".to_string());
         }
-        // `ensure_downloaded` computes and verifies SHA-256 while streaming, so
-        // no second full-file read is needed here.
         inner.set_model_state(ModelState::Loading);
-        if let Err(e) = inner
-            .stt
-            .load(kuali_stt::model_path(&models_dir, model), &config.whisper)
-            .await
-        {
+        if let Err(message) = load_model_for_meeting(inner, model, &models_dir, &config).await {
             *inner.loaded_model.write() = None;
             inner.set_model_state(ModelState::Failed {
-                message: e.to_string(),
+                message: message.clone(),
             });
-            inner.emit(KualiEvent::error("whisper", e));
             inner.set_status(EngineStatus::Watching);
-            return Err("Whisper no pudo cargar el modelo elegido.".to_string());
+            return Err(message);
         }
     }
     inner.set_model_state(ModelState::Active);
@@ -1123,6 +1116,77 @@ async fn start_meeting(
     inner.emit(KualiEvent::MeetingStarted { meeting: meta });
     inner.set_status(EngineStatus::Recording);
     Ok(())
+}
+
+/// Loads an already downloaded weight without hashing it on every meeting. If
+/// whisper.cpp rejects the file, Kuali then pays the one-time verification cost
+/// to distinguish damaged contents from a Metal or memory failure.
+async fn load_model_for_meeting(
+    inner: &Arc<Inner>,
+    model: WhisperModel,
+    models_dir: &std::path::Path,
+    config: &KualiConfig,
+) -> Result<(), String> {
+    let path = kuali_stt::model_path(models_dir, model);
+    let first_error = match inner.stt.load(path.clone(), &config.whisper).await {
+        Ok(()) => return Ok(()),
+        Err(error) => error,
+    };
+
+    inner.set_model_state(ModelState::Verifying);
+    let verification_dir = models_dir.to_path_buf();
+    let corrupt = tokio::task::spawn_blocking(move || {
+        kuali_stt::model::remove_if_corrupt(&verification_dir, model)
+    })
+    .await
+    .map_err(|error| format!("No se pudo comprobar la integridad de Whisper: {error}"))?
+    .map_err(|error| format!("No se pudo comprobar la integridad de Whisper: {error}"))?;
+
+    if corrupt {
+        tracing::warn!(
+            ?model,
+            "replacing a corrupt Whisper weight after a load failure"
+        );
+        inner.emit(KualiEvent::ModelRecoveryStarted { model });
+        download_model(inner, model)
+            .await
+            .map_err(|error| format!("No se pudo reemplazar el modelo dañado: {error}"))?;
+        inner.set_model_state(ModelState::Loading);
+        let clean_error = match inner.stt.load(path.clone(), &config.whisper).await {
+            Ok(()) => return Ok(()),
+            Err(error) => error,
+        };
+        return load_model_without_gpu(inner, path, &config.whisper, clean_error).await;
+    }
+
+    inner.set_model_state(ModelState::Loading);
+    load_model_without_gpu(inner, path, &config.whisper, first_error).await
+}
+
+async fn load_model_without_gpu(
+    inner: &Arc<Inner>,
+    path: std::path::PathBuf,
+    config: &kuali_core::WhisperConfig,
+    gpu_error: crate::stt_worker::WorkerError,
+) -> Result<(), String> {
+    if !config.gpu {
+        return Err(format!(
+            "Whisper no pudo cargar el modelo aunque sus pesos están íntegros. Libera memoria o elige Large v3 Q5. Detalle: {gpu_error}"
+        ));
+    }
+
+    let mut cpu_config = config.clone();
+    cpu_config.gpu = false;
+    tracing::warn!(%gpu_error, "Whisper failed with Metal; retrying on CPU");
+    match inner.stt.load(path, &cpu_config).await {
+        Ok(()) => {
+            tracing::warn!("Whisper is using the CPU fallback for this meeting");
+            Ok(())
+        }
+        Err(cpu_error) => Err(format!(
+            "Whisper no pudo cargar el modelo aunque sus pesos están íntegros. Fallaron Metal ({gpu_error}) y CPU ({cpu_error}). Libera memoria o elige Large v3 Q5."
+        )),
+    }
 }
 
 async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {

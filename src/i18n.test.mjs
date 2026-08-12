@@ -173,6 +173,33 @@ test("the curated model catalog keeps the three quality tiers distinct", () => {
   setLanguagePreference("es", { notify: false });
 });
 
+test("a corrupt model is recovered only after Whisper rejects it", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const engine = readFileSync(
+    new URL("../crates/kuali-engine/src/engine.rs", import.meta.url),
+    "utf8",
+  );
+  const model = readFileSync(
+    new URL("../crates/kuali-stt/src/model.rs", import.meta.url),
+    "utf8",
+  );
+
+  assert.match(engine, /remove_if_corrupt/);
+  assert.match(engine, /ModelRecoveryStarted/);
+  assert.match(engine, /load_model_without_gpu/);
+  assert.match(model, /same-size corruption after download/);
+  assert.match(app, /case "modelRecoveryStarted"/);
+
+  setLanguagePreference("en", { notify: false });
+  assert.equal(
+    t("El archivo de {model} estaba dañado. Kuali descargará una copia limpia y conservará el audio de la llamada.", {
+      model: "Large v3",
+    }),
+    "The Large v3 file was corrupted. Kuali will download a clean copy and preserve the call audio.",
+  );
+  setLanguagePreference("es", { notify: false });
+});
+
 test("webhooks use Standard Webhooks without the legacy Kuali protocol", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
