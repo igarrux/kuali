@@ -195,14 +195,16 @@ test("landing pages lead with Kuali's distinctive meeting workflow", () => {
 
   assert.match(english, /Voices are separated at the source/);
   assert.match(english, /NO DIARIZATION/);
-  assert.match(english, /Interactive, bilingual guides connect Discord or Google Meet in three steps/);
+  assert.match(english, /Three steps\. That is it\./);
+  assert.match(english, /No configuration files, manual OAuth URLs, or developer mode/);
   assert.match(english, /Claude Code, Codex, or Gemini CLI/);
   assert.match(english, /It can follow you on Discord/);
   assert.match(english, /summary, key points, decisions, open questions, and paginated full transcript/);
 
   assert.match(spanish, /Las voces se separan desde el origen/);
   assert.match(spanish, /SIN DIARIZACIÓN/);
-  assert.match(spanish, /guías interactivas y bilingües conectan Discord o Google Meet en tres pasos/i);
+  assert.match(spanish, /Tres pasos\. Eso es todo\./);
+  assert.match(spanish, /Sin archivos de configuración, URLs de OAuth manuales ni modo desarrollador/);
   assert.match(spanish, /Claude Code, Codex o Gemini CLI/);
   assert.match(spanish, /Puede seguirte en Discord/);
   assert.match(spanish, /resumen, puntos clave, decisiones, preguntas y la transcripción completa paginada/);
@@ -271,6 +273,7 @@ test("browser setup is a three-step store installation flow", () => {
     assert.match(section, /Chrome Web Store/);
     assert.match(section, /(?:pin|fija)/i);
     assert.match(section, /9099/);
+    assert.match(section, /(?:no developer mode|sin modo desarrollador)/i);
   }
 });
 

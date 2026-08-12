@@ -44,9 +44,9 @@ Kuali is built around participants, not around one mixed system-audio file:
   and stable identity per user, while the Meet integration transports
   participant context with live audio. Kuali does not need to guess afterward
   with post-recording diarization.
-- **Discord and Google Meet each have a three-step interactive setup.** The
-  bilingual guide shows the real controls, saves progress, and does not assume
-  prior experience with bots, OAuth, or configuration files.
+- **Discord and Google Meet setup is deliberately simple: three short steps.**
+  The bilingual guide shows the real controls, saves progress, and avoids
+  manual OAuth URLs, configuration files, and browser developer mode.
 - **Your existing AI setup can generate the insights.** Kuali can reuse an
   authenticated Claude Code, Codex, or Gemini CLI session. It also supports
   Anthropic, OpenAI, and Gemini API keys plus OpenAI-compatible endpoints such
