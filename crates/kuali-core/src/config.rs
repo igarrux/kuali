@@ -239,11 +239,15 @@ pub enum WhisperModel {
     /// third of the size; the best balance on Apple Silicon.
     LargeV3TurboQ5,
     /// The complete, unquantized Large v3 model for the highest available
-    /// transcription accuracy, at a substantial memory and latency cost.
+    /// transcription accuracy. Retained only so existing downloads can be
+    /// recognized and removed after the Q8 replacement shipped.
     LargeV3,
     /// Five-bit quantization of the complete Large v3 model. It retains all 32
     /// decoder layers for higher accuracy at the cost of slower live inference.
     LargeV3Q5,
+    /// Eight-bit quantization of the complete Large v3 model. It preserves more
+    /// weight precision than Q5 without the impractical footprint of F16.
+    LargeV3Q8,
     /// Large v3 Turbo fine-tuned on Latin American Spanish from Common Voice,
     /// retained in F16 for unquantized quality comparisons.
     LargeV3TurboLatam,
@@ -254,7 +258,7 @@ pub enum WhisperModel {
 impl WhisperModel {
     /// Every weight Kuali recognizes on disk. Retired choices stay here so old
     /// configurations remain readable and their files can still be removed.
-    pub const ALL: [WhisperModel; 10] = [
+    pub const ALL: [WhisperModel; 11] = [
         Self::Tiny,
         Self::Base,
         Self::Small,
@@ -263,20 +267,18 @@ impl WhisperModel {
         Self::LargeV3TurboQ5,
         Self::LargeV3,
         Self::LargeV3Q5,
+        Self::LargeV3Q8,
         Self::LargeV3TurboLatam,
         Self::LargeV3TurboLatamQ5,
     ];
 
-    /// Curated choices offered for new downloads. Tiny was too inaccurate for
-    /// meetings, while the LatAm fine-tunes performed poorly with anglicisms.
-    pub const SELECTABLE: [WhisperModel; 7] = [
-        Self::Base,
-        Self::Small,
-        Self::Medium,
-        Self::LargeV3Turbo,
+    /// Curated choices offered for new downloads, ordered from the lightest
+    /// everyday option to the highest-fidelity local option.
+    pub const SELECTABLE: [WhisperModel; 4] = [
         Self::LargeV3TurboQ5,
+        Self::LargeV3Turbo,
         Self::LargeV3Q5,
-        Self::LargeV3,
+        Self::LargeV3Q8,
     ];
 
     pub fn is_selectable(self) -> bool {
@@ -293,6 +295,7 @@ impl WhisperModel {
             Self::LargeV3TurboQ5 => "ggml-large-v3-turbo-q5_0.bin",
             Self::LargeV3 => "ggml-large-v3.bin",
             Self::LargeV3Q5 => "ggml-large-v3-q5_0.bin",
+            Self::LargeV3Q8 => "ggml-large-v3-q8_0.bin",
             Self::LargeV3TurboLatam => "ggml-large-v3-turbo-latam.bin",
             Self::LargeV3TurboLatamQ5 => "ggml-large-v3-turbo-latam-q5_0.bin",
         }
@@ -300,6 +303,9 @@ impl WhisperModel {
 
     pub fn download_url(self) -> String {
         let base = match self {
+            Self::LargeV3Q8 => {
+                "https://github.com/igarrux/kuali-models/releases/download/large-v3-q8-v1"
+            }
             Self::LargeV3TurboLatam | Self::LargeV3TurboLatamQ5 => {
                 "https://github.com/igarrux/kuali-models/releases/download/v1"
             }
@@ -319,6 +325,7 @@ impl WhisperModel {
             Self::LargeV3TurboQ5 => 574_041_195,
             Self::LargeV3 => 3_095_033_483,
             Self::LargeV3Q5 => 1_081_140_203,
+            Self::LargeV3Q8 => 1_656_538_283,
             Self::LargeV3TurboLatam => 1_624_555_275,
             Self::LargeV3TurboLatamQ5 => 574_041_195,
         }
@@ -339,6 +346,7 @@ impl WhisperModel {
             }
             Self::LargeV3 => "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2",
             Self::LargeV3Q5 => "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
+            Self::LargeV3Q8 => "24bc434f372355688ab9a623077a63e5361a1c41f4d8d648977e39f9b060f09e",
             Self::LargeV3TurboLatam => {
                 "b2e3f5e5b159a6978164d237f981fe95335693abb716fb1c229507b235ace540"
             }
@@ -358,9 +366,71 @@ impl WhisperModel {
             Self::LargeV3TurboQ5 => "Large v3 Turbo Q5 — recomendado: rápido y eficiente",
             Self::LargeV3 => "Large v3 — máxima precisión, más lento y mayor uso de memoria",
             Self::LargeV3Q5 => "Large v3 Q5 — mayor precisión, más memoria",
+            Self::LargeV3Q8 => "Large v3 Q8 — máxima precisión local",
             Self::LargeV3TurboLatam => "Large v3 Turbo LatAm — español latino, F16",
             Self::LargeV3TurboLatamQ5 => "Large v3 Turbo LatAm Q5 — español latino, ligero",
         }
+    }
+
+    /// Short, non-technical names used by the model picker.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            Self::LargeV3TurboQ5 => "Ligero",
+            Self::LargeV3Turbo => "Equilibrado",
+            Self::LargeV3Q5 => "Preciso",
+            Self::LargeV3Q8 => "Máxima precisión",
+            _ => self.label(),
+        }
+    }
+
+    pub fn technical_name(self) -> &'static str {
+        match self {
+            Self::Tiny => "Whisper Tiny",
+            Self::Base => "Whisper Base",
+            Self::Small => "Whisper Small",
+            Self::Medium => "Whisper Medium",
+            Self::LargeV3Turbo => "Whisper Large v3 Turbo (F16)",
+            Self::LargeV3TurboQ5 => "Whisper Large v3 Turbo (Q5_0)",
+            Self::LargeV3 => "Whisper Large v3 (F16)",
+            Self::LargeV3Q5 => "Whisper Large v3 (Q5_0)",
+            Self::LargeV3Q8 => "Whisper Large v3 (Q8_0)",
+            Self::LargeV3TurboLatam => "Whisper Large v3 Turbo LatAm (F16)",
+            Self::LargeV3TurboLatamQ5 => "Whisper Large v3 Turbo LatAm (Q5_0)",
+        }
+    }
+
+    pub fn description(self) -> &'static str {
+        match self {
+            Self::LargeV3TurboQ5 => {
+                "Transcripción en vivo rápida y precisa para la mayoría de reuniones."
+            }
+            Self::LargeV3Turbo => {
+                "Más fidelidad sin dejar de priorizar una transcripción ágil en tiempo real."
+            }
+            Self::LargeV3Q5 => {
+                "Mejor reconocimiento en audio difícil, acentos y vocabulario mixto."
+            }
+            Self::LargeV3Q8 => {
+                "La mayor fidelidad disponible en Kuali, con una cuantización conservadora."
+            }
+            _ => "Modelo anterior conservado para administrar instalaciones existentes.",
+        }
+    }
+
+    /// Working-memory estimate for a single loaded model. Actual use varies by
+    /// platform, backend and concurrent speakers.
+    pub fn estimated_ram_bytes(self) -> u64 {
+        match self {
+            Self::LargeV3TurboQ5 => 700_000_000,
+            Self::LargeV3Turbo => 1_800_000_000,
+            Self::LargeV3Q5 => 1_300_000_000,
+            Self::LargeV3Q8 => 1_900_000_000,
+            _ => self.approx_bytes().saturating_add(150_000_000),
+        }
+    }
+
+    pub fn is_recommended(self) -> bool {
+        self == Self::LargeV3TurboQ5
     }
 }
 
@@ -531,7 +601,9 @@ impl KualiConfig {
     /// Idempotently migrates a configuration immediately after loading it.
     pub fn migrated(mut self) -> Self {
         self.llm.migrate_model_override();
-        if !self.whisper.model.is_selectable() {
+        if self.whisper.model == WhisperModel::LargeV3 {
+            self.whisper.model = WhisperModel::LargeV3Q8;
+        } else if !self.whisper.model.is_selectable() {
             self.whisper.model = WhisperConfig::default().model;
         }
         self
@@ -612,6 +684,9 @@ mod tests {
     fn retired_models_migrate_to_the_recommended_choice() {
         for retired in [
             WhisperModel::Tiny,
+            WhisperModel::Base,
+            WhisperModel::Small,
+            WhisperModel::Medium,
             WhisperModel::LargeV3TurboLatam,
             WhisperModel::LargeV3TurboLatamQ5,
         ] {
@@ -619,6 +694,13 @@ mod tests {
             cfg.whisper.model = retired;
             assert_eq!(cfg.migrated().whisper.model, WhisperModel::LargeV3TurboQ5);
         }
+
+        let mut full_precision = KualiConfig::default();
+        full_precision.whisper.model = WhisperModel::LargeV3;
+        assert_eq!(
+            full_precision.migrated().whisper.model,
+            WhisperModel::LargeV3Q8
+        );
     }
 
     #[test]
@@ -901,11 +983,16 @@ mod tests {
 
     #[test]
     fn the_public_catalog_is_curated_without_removing_legacy_file_support() {
-        assert_eq!(WhisperModel::SELECTABLE.len(), 7);
+        assert_eq!(WhisperModel::SELECTABLE.len(), 4);
         assert!(WhisperModel::LargeV3TurboQ5.is_selectable());
+        assert!(WhisperModel::LargeV3Turbo.is_selectable());
         assert!(WhisperModel::LargeV3Q5.is_selectable());
-        assert!(WhisperModel::LargeV3.is_selectable());
+        assert!(WhisperModel::LargeV3Q8.is_selectable());
         assert!(!WhisperModel::Tiny.is_selectable());
+        assert!(!WhisperModel::Base.is_selectable());
+        assert!(!WhisperModel::Small.is_selectable());
+        assert!(!WhisperModel::Medium.is_selectable());
+        assert!(!WhisperModel::LargeV3.is_selectable());
         assert!(!WhisperModel::LargeV3TurboLatam.is_selectable());
         assert!(!WhisperModel::LargeV3TurboLatamQ5.is_selectable());
         assert!(WhisperModel::ALL.contains(&WhisperModel::Tiny));
@@ -941,6 +1028,25 @@ mod tests {
                 format!("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/{file_name}")
             );
         }
+    }
+
+    #[test]
+    fn large_v3_q8_points_to_kualis_reproducible_quantization() {
+        let model = WhisperModel::LargeV3Q8;
+        assert_eq!(
+            serde_json::to_value(model).unwrap().as_str(),
+            Some("large-v3-q8")
+        );
+        assert_eq!(model.file_name(), "ggml-large-v3-q8_0.bin");
+        assert_eq!(model.approx_bytes(), 1_656_538_283);
+        assert_eq!(
+            model.sha256(),
+            "24bc434f372355688ab9a623077a63e5361a1c41f4d8d648977e39f9b060f09e"
+        );
+        assert_eq!(
+            model.download_url(),
+            "https://github.com/igarrux/kuali-models/releases/download/large-v3-q8-v1/ggml-large-v3-q8_0.bin"
+        );
     }
 
     #[test]

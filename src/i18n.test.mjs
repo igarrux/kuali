@@ -60,6 +60,7 @@ test("summaries and tasks have an explicit privacy switch", () => {
 test("signed updates are checked at startup and deferred during active work", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
   const tauriConfig = JSON.parse(
     readFileSync(new URL("../src-tauri/tauri.conf.json", import.meta.url), "utf8"),
   );
@@ -81,11 +82,24 @@ test("signed updates are checked at startup and deferred during active work", ()
     /function scheduleUpdateChecks\(\)[\s\S]*?\["automatic-updates"\] === false/,
   );
   assert.match(app, /state\.liveMeetings\.size === 0/);
+  assert.match(commands, /if !engine\.safe_for_update\(\)/);
+  assert.match(commands, /while !engine\.safe_for_update\(\)/);
+  assert.match(commands, /kuali:\/\/update-waiting/);
   assert.equal(tauriConfig.bundle.createUpdaterArtifacts, true);
   assert.match(tauriConfig.plugins.updater.pubkey, /^[A-Za-z0-9+/=]+$/);
   assert.deepEqual(tauriConfig.plugins.updater.endpoints, [
     "https://github.com/igarrux/kuali/releases/latest/download/latest.json",
   ]);
+});
+
+test("connected Discord settings stay protected until the user chooses to edit", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  assert.match(html, /id="btn-edit-discord"/);
+  assert.match(html, /id="btn-add-discord-server"/);
+  assert.match(app, /state\.discordEditing = !\(/);
+  assert.match(app, /\$\(id\)\.readOnly = locked/);
+  assert.match(app, /invoke\("open_discord_install"/);
 });
 
 test("browser onboarding prefers the verified store and keeps manual installation as a fallback", () => {
@@ -150,26 +164,21 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.doesNotMatch(JSON.stringify(tauriConfig.bundle.resources), /ggml-[^"]+\.bin/i);
 });
 
-test("the curated model catalog keeps the three quality tiers distinct", () => {
+test("the curated model catalog exposes four clear performance tiers", () => {
   setLanguagePreference("en", { notify: false });
-  assert.equal(
-    t("Large v3 — máxima precisión, más lento y mayor uso de memoria"),
-    "Large v3 — highest accuracy, slower and higher memory use",
-  );
-  assert.equal(
-    t("Large v3 Q5 — mayor precisión, más memoria"),
-    "Large v3 Q5 — higher accuracy, higher memory use",
-  );
-  assert.equal(
-    t("Large v3 Turbo Q5 — recomendado: rápido y eficiente"),
-    "Large v3 Turbo Q5 — recommended: fast and efficient",
+  assert.deepEqual(
+    ["Ligero", "Equilibrado", "Preciso", "Máxima precisión"].map((name) => t(name)),
+    ["Light", "Balanced", "Precise", "Highest accuracy"],
   );
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
   assert.match(app, /model\.selectable !== false/);
   assert.match(app, /selectableModels\.map/);
+  assert.match(app, /role", "radio"/);
+  assert.match(app, /model\.estimatedRamBytes/);
   assert.match(app, /return selectableWhisperModels\(\)\.some\(\(model\) => model\.downloaded\)/);
   assert.match(commands, /selectable: model\.is_selectable\(\)/);
+  assert.match(commands, /estimated_ram_bytes: model\.estimated_ram_bytes\(\)/);
   setLanguagePreference("es", { notify: false });
 });
 

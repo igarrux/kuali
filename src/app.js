@@ -19,6 +19,7 @@ const state = {
   status: "offline",
   modelState: { state: "absent" },
   webMeetings: { enabled: true, port: 9099, listening: false },
+  discordConnected: false,
   meetings: [],
   /** Complete meeting currently displayed. */
   viewing: null,
@@ -32,6 +33,7 @@ const state = {
   modelsDirectory: "",
   customVocabulary: [],
   settingsTab: "discord",
+  discordEditing: true,
   /** Provider catalog with availability state. */
   providers: [],
   /** Unsaved provider settings while the modal is open. */
@@ -151,7 +153,7 @@ function canRestartForUpdate() {
 
 function renderUpdateState() {
   const info = state.updateInfo;
-  const busy = ["checking", "installing"].includes(state.updateStatus);
+  const busy = ["checking", "installing", "waiting"].includes(state.updateStatus);
   const safeToRestart = canRestartForUpdate();
   const version = info?.version || "";
   let statusText = t("Kuali busca actualizaciones al iniciar y periódicamente.");
@@ -167,6 +169,8 @@ function renderUpdateState() {
     statusText = progress
       ? t("Descargando Kuali {version}: {progress}", { version, progress })
       : t("Descargando Kuali {version}…", { version });
+  } else if (state.updateStatus === "waiting") {
+    statusText = t("Actualización lista. Kuali esperará a que termine la actividad actual.");
   } else if (info) {
     statusText = safeToRestart
       ? t("Kuali {version} está disponible.", { version })
@@ -181,7 +185,7 @@ function renderUpdateState() {
   if (settingsStatus) settingsStatus.textContent = statusText;
   const versionBadge = $("app-version");
   if (versionBadge) {
-    versionBadge.textContent = state.appVersion ? `Kuali ${state.appVersion}` : "Kuali";
+    versionBadge.textContent = state.appVersion || "—";
   }
   const checkButton = $("btn-check-update");
   if (checkButton) {
@@ -196,9 +200,11 @@ function renderUpdateState() {
     if (!button) continue;
     button.hidden = !info;
     button.disabled = busy || !safeToRestart;
-    button.textContent = state.updateStatus === "installing"
-      ? t("Descargando Kuali {version}…", { version })
-      : t("Actualizar y reiniciar");
+    button.textContent = state.updateStatus === "waiting"
+      ? t("Esperando a que termine la actividad…")
+      : state.updateStatus === "installing"
+        ? t("Descargando Kuali {version}…", { version })
+        : t("Actualizar y reiniciar");
     button.title = info && !safeToRestart
       ? t("Termina la reunión o el resumen antes de reiniciar Kuali.")
       : "";
@@ -208,7 +214,7 @@ function renderUpdateState() {
   if (banner) {
     banner.hidden = !info;
     $("update-banner-title").textContent = t("Hay una actualización de Kuali");
-    $("update-banner-detail").textContent = state.updateStatus === "installing"
+    $("update-banner-detail").textContent = ["installing", "waiting"].includes(state.updateStatus)
       ? statusText
       : safeToRestart
         ? t("Versión {version} lista para instalar.", { version })
@@ -2024,7 +2030,7 @@ function downloadingWhisperModel() {
 }
 
 function shortModelName(model) {
-  return model ? t(model.label).split(" — ")[0] : t("Modelo de transcripción");
+  return model ? t(model.displayName ?? model.label).split(" — ")[0] : t("Modelo de transcripción");
 }
 
 function modelDownloadWasCancelled(error) {
@@ -2080,10 +2086,14 @@ function renderRequiredModelActivity() {
 
   const describedModel = downloadModel ?? selected;
   $("required-model-hint").textContent = describedModel?.downloaded
-    ? t("Ya está descargado en {directory}.", { directory: state.modelsDirectory })
-    : t("Se descargarán {size} en {directory}.", {
+    ? t("{technicalName} · ≈ {memory} de RAM · ya está descargado.", {
+        technicalName: describedModel.technicalName,
+        memory: humanBytes(describedModel.estimatedRamBytes),
+      })
+    : t("{technicalName} · ≈ {memory} de RAM · descarga de {size}.", {
+        technicalName: describedModel?.technicalName ?? "Whisper",
+        memory: humanBytes(describedModel?.estimatedRamBytes ?? 0),
         size: humanBytes(describedModel?.approxBytes ?? 0),
-        directory: state.modelsDirectory,
       });
   $("required-model-note").textContent = downloading
     ? t("La descarga continúa aunque cambies de sección dentro de Kuali.")
@@ -2092,21 +2102,6 @@ function renderRequiredModelActivity() {
       : state.modelState.state === "failed"
         ? t("No se pudo completar la descarga. Puedes intentarlo nuevamente.")
         : t("Necesitas al menos un modelo descargado para transcribir.");
-
-  const stateBadge = $("model-required-state");
-  stateBadge.className = "guide-state";
-  if (downloading) {
-    stateBadge.textContent = t("Descargando…");
-    stateBadge.classList.add("downloading");
-  } else if (state.modelState.state === "failed") {
-    stateBadge.textContent = t("Descarga fallida");
-    stateBadge.classList.add("failed");
-  } else if (selected?.downloaded) {
-    stateBadge.textContent = t("Modelo listo");
-    stateBadge.classList.add("ready");
-  } else {
-    stateBadge.textContent = t("Obligatorio");
-  }
 
   const button = $("btn-required-model");
   const selectedIsConfigured = selected?.id === configured;
@@ -2147,7 +2142,7 @@ function renderRequiredModelNotice(requestedModel = "") {
     ...selectableModels.map((model) => {
       const option = document.createElement("option");
       option.value = model.id;
-      option.textContent = `${t(model.label)} — ${humanBytes(model.approxBytes)}${model.downloaded ? " ✓" : ""}`;
+      option.textContent = `${t(model.displayName)} · ${humanBytes(model.estimatedRamBytes)} RAM${model.downloaded ? " ✓" : ""}`;
       return option;
     }),
   );
@@ -2727,11 +2722,14 @@ function selectSettingsTab(name, focus = false) {
 }
 
 async function openSettings() {
-  [state.config, state.models, state.modelsDirectory] = await Promise.all([
+  let snapshot;
+  [state.config, state.models, state.modelsDirectory, snapshot] = await Promise.all([
     invoke("get_config"),
     invoke("whisper_models"),
     invoke("resolved_models_directory"),
+    invoke("get_snapshot"),
   ]);
+  state.discordConnected = snapshot.discordConnected;
   renderRequiredModelNotice(state.config.whisper.model);
   try {
     state.providers = await invoke("provider_catalog");
@@ -2755,6 +2753,8 @@ async function openSettings() {
   $("cfg-follow-automatically").checked = c.discord["follow-automatically"] !== false;
   $("cfg-leave-empty").checked = c.discord["leave-when-empty"];
   $("cfg-post-summary").checked = c.discord["post-summary-to-channel"];
+  state.discordEditing = !(c.discord["bot-token"]?.trim() && state.discordConnected);
+  renderDiscordSettingsAccess();
   $("cfg-web-enabled").checked = c.meet?.enabled !== false;
   $("cfg-web-port").value = c.meet?.port ?? 9099;
   $("cfg-web-port").disabled = !$("cfg-web-enabled").checked;
@@ -2792,6 +2792,27 @@ async function openSettings() {
   renderModelProgress();
 }
 
+function renderDiscordSettingsAccess() {
+  const panel = $("settings-panel-discord");
+  const configuredAndConnected = Boolean(
+    state.config?.discord?.["bot-token"]?.trim() && state.discordConnected,
+  );
+  const locked = configuredAndConnected && !state.discordEditing;
+  panel.classList.toggle("discord-settings-locked", locked);
+
+  for (const id of ["cfg-token", "cfg-follow"]) $(id).readOnly = locked;
+  for (const id of ["cfg-follow-automatically", "cfg-leave-empty", "cfg-post-summary"]) {
+    $(id).disabled = locked;
+  }
+
+  const connection = $("discord-settings-state");
+  connection.className = "connection-state";
+  connection.textContent = configuredAndConnected ? t("Conectado") : t("Sin conexión");
+  connection.classList.toggle("connected", configuredAndConnected);
+  $("btn-edit-discord").hidden = !configuredAndConnected || state.discordEditing;
+  $("btn-add-discord-server").hidden = !configuredAndConnected;
+}
+
 function renderWhisperModelOptions(selected = $("cfg-model").value) {
   const selectableModels = selectableWhisperModels();
   const chosen = selectableModels.some((model) => model.id === selected)
@@ -2799,15 +2820,64 @@ function renderWhisperModelOptions(selected = $("cfg-model").value) {
     : selectableModels.find((model) => model.id === "large-v3-turbo-q5")?.id
       ?? selectableModels[0]?.id
       ?? "";
-  $("cfg-model").replaceChildren(
-    ...selectableModels.map((m) => {
-      const opt = document.createElement("option");
-      opt.value = m.id;
-      opt.textContent = `${t(m.label)} — ${humanBytes(m.approxBytes)}${m.downloaded ? " ✓" : ""}`;
-      return opt;
+  $("cfg-model").value = chosen;
+  const downloading = state.modelState.state === "downloading";
+  $("cfg-model-picker").replaceChildren(
+    ...selectableModels.map((model) => {
+      const choice = document.createElement("button");
+      choice.type = "button";
+      choice.className = "model-choice";
+      choice.dataset.modelId = model.id;
+      choice.setAttribute("role", "radio");
+      choice.setAttribute("aria-checked", String(model.id === chosen));
+      choice.tabIndex = model.id === chosen ? 0 : -1;
+      choice.disabled = downloading;
+
+      const head = document.createElement("span");
+      head.className = "model-choice-head";
+      const name = document.createElement("span");
+      name.className = "model-choice-name";
+      name.textContent = t(model.displayName);
+      head.append(name);
+      if (model.recommended) {
+        const badge = document.createElement("span");
+        badge.className = "model-choice-badge";
+        badge.textContent = t("Recomendado");
+        head.append(badge);
+      }
+
+      const memory = document.createElement("span");
+      memory.className = "model-choice-memory";
+      memory.textContent = t("≈ {memory} de RAM", {
+        memory: humanBytes(model.estimatedRamBytes),
+      });
+      const description = document.createElement("span");
+      description.className = "model-choice-description";
+      description.textContent = t(model.description);
+      const technical = document.createElement("span");
+      technical.className = "model-choice-technical";
+      technical.textContent = `${model.technicalName} · ${humanBytes(model.approxBytes)}`;
+      if (model.downloaded) {
+        const installed = document.createElement("span");
+        installed.className = "model-choice-download";
+        installed.textContent = t("Descargado");
+        technical.append(" · ", installed);
+      }
+      choice.append(head, memory, description, technical);
+      choice.addEventListener("click", () => selectWhisperModel(model.id));
+      return choice;
     }),
   );
-  $("cfg-model").value = chosen;
+}
+
+function selectWhisperModel(modelId) {
+  $("cfg-model").value = modelId;
+  for (const choice of $("cfg-model-picker").querySelectorAll(".model-choice")) {
+    const selected = choice.dataset.modelId === modelId;
+    choice.setAttribute("aria-checked", String(selected));
+    choice.tabIndex = selected ? 0 : -1;
+  }
+  updateModelHint();
 }
 
 // --- webhooks -------------------------------------------------------------
@@ -3350,8 +3420,11 @@ function updateModelHint() {
   const chosen = state.models.find((m) => m.id === $("cfg-model").value);
   if (!chosen) return;
   $("model-hint").textContent = chosen.downloaded
-    ? t("Ya está descargado en {directory}.", { directory: state.modelsDirectory })
-    : t("Sin descargar. Ocupa {size}; se guardará fuera del ejecutable.", {
+    ? t("{technicalName}. Listo para usar; la RAM indicada es una estimación y varía según el sistema.", {
+        technicalName: chosen.technicalName,
+      })
+    : t("{technicalName}. Descarga de {size}; la RAM indicada es una estimación y varía según el sistema.", {
+        technicalName: chosen.technicalName,
         size: humanBytes(chosen.approxBytes),
       });
   const downloading = state.modelState.state === "downloading";
@@ -3384,11 +3457,11 @@ function renderInstalledModels() {
 
       const info = document.createElement("span");
       const name = document.createElement("strong");
-      name.textContent = t(model.label);
+      name.textContent = model.selectable ? t(model.displayName) : model.technicalName;
       const size = document.createElement("small");
-      size.textContent = t("{size} aprox. · {id}", {
+      size.textContent = t("{technicalName} · {size} aprox.", {
+        technicalName: model.technicalName,
         size: humanBytes(model.approxBytes),
-        id: model.id,
       });
       info.append(name, size);
 
@@ -3396,7 +3469,7 @@ function renderInstalledModels() {
       remove.type = "button";
       remove.className = "ghost danger";
       remove.textContent = t("Eliminar");
-      remove.setAttribute("aria-label", t("Eliminar los pesos de {model}", { model: model.label }));
+      remove.setAttribute("aria-label", t("Eliminar los pesos de {model}", { model: model.technicalName }));
       remove.addEventListener("click", () => deleteModel(model, remove));
       row.append(info, remove);
       return row;
@@ -3465,13 +3538,19 @@ function renderModelProgress() {
   if (s.state !== "downloading") {
     row.hidden = true;
     $("cfg-model").disabled = false;
+    for (const choice of $("cfg-model-picker").querySelectorAll(".model-choice")) {
+      choice.disabled = false;
+    }
     updateModelHint();
     return;
   }
   row.hidden = false;
   const downloadModel = downloadingWhisperModel();
-  if (downloadModel) $("cfg-model").value = downloadModel.id;
+  if (downloadModel) selectWhisperModel(downloadModel.id);
   $("cfg-model").disabled = true;
+  for (const choice of $("cfg-model-picker").querySelectorAll(".model-choice")) {
+    choice.disabled = true;
+  }
   const pct = s.totalBytes ? Math.round((s.downloadedBytes / s.totalBytes) * 100) : 0;
   const modelName = shortModelName(downloadModel);
   $("progress-bar").style.width = `${pct}%`;
@@ -3561,6 +3640,7 @@ async function saveSettings() {
     state.status = snapshot.status;
     state.modelState = snapshot.modelState;
     state.webMeetings = snapshot.webMeetings;
+    state.discordConnected = snapshot.discordConnected;
     $("save-note").textContent = t("Guardado");
     setTimeout(() => ($("settings-modal").hidden = true), 550);
     renderStatus();
@@ -3624,7 +3704,7 @@ async function deleteModel(model, button) {
   const accepted = await askForConfirmation({
     kind: t("Eliminar pesos"),
     title: t("¿Eliminar este modelo?"),
-    target: `${t(model.label)}\n${model.id}`,
+    target: `${model.selectable ? t(model.displayName) : model.technicalName}\n${model.technicalName}`,
     description: t(
       "Liberará aproximadamente {size} de {directory}. No eliminará Whisper, Silero ni los demás modelos.{selectedWarning} Esta acción no se puede deshacer.",
       {
@@ -3637,12 +3717,15 @@ async function deleteModel(model, button) {
   });
   if (!accepted) return;
 
-  const selected = $("cfg-model").value;
   button.disabled = true;
   button.textContent = t("Eliminando…");
   try {
     const removedBytes = await invoke("delete_model", { model: model.id });
-    state.models = await invoke("whisper_models");
+    [state.models, state.config] = await Promise.all([
+      invoke("whisper_models"),
+      invoke("get_config"),
+    ]);
+    const selected = state.config.whisper.model;
     renderRequiredModelNotice(selected);
     renderWhisperModelOptions(selected);
     const snapshot = await invoke("get_snapshot");
@@ -4014,6 +4097,24 @@ function wireUp() {
   for (const tab of settingsTabs) {
     tab.addEventListener("click", () => selectSettingsTab(tab.dataset.settingsTab));
   }
+  $("btn-edit-discord").addEventListener("click", () => {
+    state.discordEditing = true;
+    renderDiscordSettingsAccess();
+    $("cfg-token").focus();
+  });
+  $("btn-add-discord-server").addEventListener("click", async () => {
+    const button = $("btn-add-discord-server");
+    button.disabled = true;
+    try {
+      await invoke("open_discord_install", {
+        botToken: state.config?.discord?.["bot-token"] ?? "",
+      });
+    } catch (error) {
+      toast(String(error), "Discord", true);
+    } finally {
+      button.disabled = false;
+    }
+  });
   $("settings-modal").querySelector("[role='tablist']").addEventListener("keydown", (event) => {
     const current = settingsTabs.indexOf(document.activeElement);
     if (current < 0) return;
@@ -4051,7 +4152,20 @@ function wireUp() {
     event.currentTarget.setAttribute("aria-pressed", String(!revealed));
   });
 
-  $("cfg-model").addEventListener("change", updateModelHint);
+  $("cfg-model-picker").addEventListener("keydown", (event) => {
+    if (!["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End"].includes(event.key)) return;
+    const choices = [...$("cfg-model-picker").querySelectorAll(".model-choice:not(:disabled)")];
+    const current = choices.indexOf(document.activeElement);
+    if (current < 0 || choices.length === 0) return;
+    event.preventDefault();
+    let next = current;
+    if (["ArrowRight", "ArrowDown"].includes(event.key)) next = (current + 1) % choices.length;
+    else if (["ArrowLeft", "ArrowUp"].includes(event.key)) next = (current - 1 + choices.length) % choices.length;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = choices.length - 1;
+    choices[next].click();
+    choices[next].focus();
+  });
   $("cfg-models-directory").addEventListener("input", updateModelsDirectoryHint);
   $("btn-add-vocabulary").addEventListener("click", addCustomVocabulary);
   $("cfg-vocabulary-input").addEventListener("keydown", (event) => {
@@ -4284,6 +4398,10 @@ async function boot() {
     state.updateProgress = event.payload;
     if (state.updateStatus === "installing") renderUpdateState();
   });
+  await listen("kuali://update-waiting", () => {
+    state.updateStatus = "waiting";
+    renderUpdateState();
+  });
 
   const [snapshot, config, appVersion] = await Promise.all([
     invoke("get_snapshot"),
@@ -4295,6 +4413,7 @@ async function boot() {
   state.status = snapshot.status;
   state.modelState = snapshot.modelState;
   state.webMeetings = snapshot.webMeetings;
+  state.discordConnected = snapshot.discordConnected;
   state.config = config;
   state.appVersion = appVersion;
   applyLiveSnapshot(snapshot, true);

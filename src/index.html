@@ -134,13 +134,12 @@
       <section class="content" id="content">
         <section class="model-required" id="model-required" aria-labelledby="model-required-title" hidden>
           <div class="model-required-copy">
-            <span class="integration-logo whisper" aria-hidden="true">W</span>
+            <span class="model-required-mark" aria-hidden="true"></span>
             <div>
               <span class="eyebrow">Transcripción local</span>
               <h2 id="model-required-title">Descarga un modelo para transcribir</h2>
               <p id="model-required-message">No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.</p>
             </div>
-            <span class="guide-state" id="model-required-state">Obligatorio</span>
           </div>
           <div class="model-required-controls">
             <label class="guide-model-field" for="required-model-select">
@@ -154,7 +153,7 @@
                 <span class="progress-text" id="required-model-progress-text"></span>
               </div>
               <button type="button" class="primary" id="btn-required-model">Descargar modelo</button>
-              <p id="required-model-note">Necesitas al menos un modelo descargado para transcribir.</p>
+              <p id="required-model-note" role="status" aria-live="polite">Necesitas al menos un modelo descargado para transcribir.</p>
             </div>
           </div>
         </section>
@@ -655,6 +654,11 @@
                   <h3>Discord</h3>
                   <p>El bot que entra contigo al canal y publica los resultados.</p>
                 </div>
+                <div class="discord-settings-actions">
+                  <span class="connection-state" id="discord-settings-state" role="status"></span>
+                  <button type="button" class="ghost" id="btn-add-discord-server" hidden>Añadir a un servidor</button>
+                  <button type="button" class="ghost" id="btn-edit-discord">Editar</button>
+                </div>
               </div>
 
               <label class="field">
@@ -745,11 +749,18 @@
                   <h4>Reconocimiento</h4>
                   <p>Calidad, velocidad e idioma del audio.</p>
                 </div>
-                <label class="field">
-                  <span>Modelo de Whisper</span>
-                  <select id="cfg-model" name="whisper-model"></select>
+                <div class="field">
+                  <span id="cfg-model-label">Potencia del modelo</span>
+                  <input type="hidden" id="cfg-model" name="whisper-model" />
+                  <div
+                    class="model-picker"
+                    id="cfg-model-picker"
+                    role="radiogroup"
+                    aria-labelledby="cfg-model-label"
+                    data-i18n-skip
+                  ></div>
                   <small id="model-hint"></small>
-                </label>
+                </div>
 
                 <label class="field">
                   <span>Idioma del audio</span>
@@ -1068,7 +1079,6 @@
                 <div>
                   <div class="settings-update-heading">
                     <strong>Actualizaciones</strong>
-                    <span class="app-version-badge" id="app-version">Kuali</span>
                   </div>
                   <p id="update-settings-status">Kuali busca actualizaciones al iniciar y periódicamente.</p>
                 </div>
@@ -1082,14 +1092,10 @@
                 <button type="button" class="ghost" id="btn-settings-open-guide">Abrir guía</button>
               </div>
               <div class="settings-danger-zone">
-                <div>
-                  <span class="eyebrow">Zona de peligro</span>
-                  <strong>Borrar todos los datos de Kuali</strong>
-                  <p>Devuelve la aplicación al estado de una instalación nueva.</p>
-                </div>
-                <button type="button" class="ghost danger" id="btn-open-factory-reset">
-                  Borrar todos los datos…
+                <button type="button" id="btn-open-factory-reset">
+                  Borrar todos los datos de Kuali…
                 </button>
+                <span>Configuración, reuniones y pesos descargados.</span>
               </div>
             </section>
           </div>
@@ -1097,6 +1103,7 @@
 
         <div class="modal-foot">
           <span class="save-note" id="save-note" role="status" aria-live="polite"></span>
+          <span class="settings-version-footer"><span>Kuali</span> <span id="app-version">—</span></span>
           <button type="button" class="ghost" id="btn-cancel-settings">Cancelar</button>
           <button type="button" class="primary" id="btn-save-settings">Guardar cambios</button>
         </div>

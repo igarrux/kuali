@@ -204,9 +204,10 @@ test("both guides document model weights and Standard Webhooks", () => {
     const html = read(page);
     assert.match(html, /id="(?:model|modelo)"/);
     assert.match(html, /Large v3 Turbo Q5/);
-    assert.match(html, /Large v3 Turbo Q5<\/strong> (?:remains|mantiene)/);
+    assert.match(html, /(?:Light<\/strong> uses|Ligero<\/strong> usa) Large v3 Turbo Q5/);
     assert.match(html, /Large v3 Q5/);
-    assert.match(html, /(?:highest accuracy|máxima precisión)/);
+    assert.match(html, /Large v3 Q8/);
+    assert.match(html, /(?:highest accuracy|máxima precisión)/i);
     assert.match(html, /~\/\.kuali/);
     assert.match(html, /id="webhooks"/);
     assert.match(html, /Standard Webhooks/);

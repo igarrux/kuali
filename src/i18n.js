@@ -81,6 +81,30 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   Recomendado: "Recommended",
   "Large v3 Turbo Q5 es el recomendado por su equilibrio entre calidad y memoria.":
     "Large v3 Turbo Q5 is recommended for its balance of quality and memory use.",
+  "Potencia del modelo": "Model performance",
+  Ligero: "Light",
+  Equilibrado: "Balanced",
+  Preciso: "Precise",
+  "Máxima precisión": "Highest accuracy",
+  "Transcripción en vivo rápida y precisa para la mayoría de reuniones.":
+    "Fast, accurate live transcription for most meetings.",
+  "Más fidelidad sin dejar de priorizar una transcripción ágil en tiempo real.":
+    "Higher fidelity while still prioritizing responsive real-time transcription.",
+  "Mejor reconocimiento en audio difícil, acentos y vocabulario mixto.":
+    "Better recognition for difficult audio, accents, and mixed-language vocabulary.",
+  "La mayor fidelidad disponible en Kuali, con una cuantización conservadora.":
+    "Kuali's highest available fidelity, with conservative quantization.",
+  "≈ {memory} de RAM": "≈ {memory} RAM",
+  Descargado: "Downloaded",
+  "{technicalName}. Listo para usar; la RAM indicada es una estimación y varía según el sistema.":
+    "{technicalName}. Ready to use; listed RAM is an estimate and varies by system.",
+  "{technicalName}. Descarga de {size}; la RAM indicada es una estimación y varía según el sistema.":
+    "{technicalName}. {size} download; listed RAM is an estimate and varies by system.",
+  "{technicalName} · ≈ {memory} de RAM · ya está descargado.":
+    "{technicalName} · ≈ {memory} RAM · already downloaded.",
+  "{technicalName} · ≈ {memory} de RAM · descarga de {size}.":
+    "{technicalName} · ≈ {memory} RAM · {size} download.",
+  "{technicalName} · {size} aprox.": "{technicalName} · approx. {size}",
   "Modelo listo": "Model ready",
   "Usar este modelo": "Use this model",
   "Descargar · {size}": "Download · {size}",
@@ -387,6 +411,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Abrir guía": "Open guide",
   "Zona de peligro": "Danger zone",
   "Borrar todos los datos de Kuali": "Delete all Kuali data",
+  "Borrar todos los datos de Kuali…": "Delete all Kuali data…",
+  "Configuración, reuniones y pesos descargados.": "Settings, meetings, and downloaded weights.",
   "Devuelve la aplicación al estado de una instalación nueva.":
     "Returns the app to the state of a fresh installation.",
   "Borrar todos los datos…": "Delete all data…",
@@ -427,6 +453,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Cargando Whisper…": "Loading Whisper…",
   Desactivado: "Disabled",
   "Sin conexión": "Not connected",
+  Editar: "Edit",
   "En llamada": "In a call",
   Automático: "Automatic",
   Manual: "Manual",
@@ -499,6 +526,9 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Descargando Kuali {version}: {progress}": "Downloading Kuali {version}: {progress}",
   "La actualización se instalará cuando termine la actividad actual.":
     "The update will install when the current activity finishes.",
+  "Actualización lista. Kuali esperará a que termine la actividad actual.":
+    "Update ready. Kuali will wait for the current activity to finish.",
+  "Esperando a que termine la actividad…": "Waiting for current activity to finish…",
   "Hay una actualización de Kuali": "A Kuali update is available",
   "Versión {version} lista para instalar.": "Version {version} is ready to install.",
   "Termina la reunión o el resumen antes de reiniciar Kuali.":

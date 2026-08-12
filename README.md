@@ -164,15 +164,12 @@ default directory is `~/.kuali`; it can be changed from Settings, including to
 external storage. Kuali verifies model integrity when weights are downloaded or
 moved, and each installed weight can be removed individually.
 
-| Model | Download | Best for |
-|---|---:|---|
-| Base | 148 MB | Lightweight transcription |
-| Small | 488 MB | Balanced resource use |
-| Medium | 1.5 GB | Higher accuracy |
-| Large v3 Turbo | 1.6 GB | High quality without quantization |
-| **Large v3 Turbo Q5** | **574 MB** | **Recommended balance of speed, accuracy, and memory** |
-| Large v3 Q5 | 1.1 GB | Higher accuracy with greater memory use and latency |
-| Large v3 | 3.1 GB | Highest accuracy; slowest and highest memory use |
+| Level | Technical model | Download | Best for |
+|---|---|---:|---|
+| **Light** | **Large v3 Turbo Q5** | **574 MB** | **Recommended for fast, accurate live transcription** |
+| Balanced | Large v3 Turbo | 1.6 GB | Higher fidelity while prioritizing real-time speed |
+| Precise | Large v3 Q5 | 1.1 GB | Difficult audio, accents, and mixed vocabulary |
+| Highest accuracy | Large v3 Q8 | 1.7 GB | Kuali's highest local fidelity with conservative quantization |
 
 ## Summaries and tasks
 

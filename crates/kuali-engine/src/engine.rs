@@ -4,7 +4,7 @@
 //! and storage; every other subsystem remains isolated.
 
 use std::collections::{HashMap, HashSet};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -135,6 +135,12 @@ struct Inner {
     web_ingest: AsyncMutex<Option<tokio::task::JoinHandle<()>>>,
     /// UI-readable state that avoids blocking on the async mutex.
     web_ingest_ready: AtomicBool,
+    /// Successful Discord gateway state, kept separately from the aggregate
+    /// engine status because web meetings can be active without Discord.
+    discord_connected: AtomicBool,
+    /// Final transcription, summaries and completion delivery that must finish
+    /// before an application update may restart Kuali.
+    post_processing: AtomicUsize,
     stt: SttWorker,
     /// Each meeting owns its task group. Whisper serializes inference globally,
     /// but closing one meeting waits only for its work and never blocks audio
@@ -181,6 +187,17 @@ fn configured_model_target_changed(previous: &KualiConfig, next: &KualiConfig) -
         || previous.whisper.resolved_models_directory() != next.whisper.resolved_models_directory()
 }
 
+fn replacement_model_after_deletion(
+    models_dir: &std::path::Path,
+    deleted: WhisperModel,
+) -> WhisperModel {
+    WhisperModel::SELECTABLE
+        .iter()
+        .copied()
+        .find(|candidate| *candidate != deleted && kuali_stt::is_downloaded(models_dir, *candidate))
+        .unwrap_or(WhisperModel::LargeV3TurboQ5)
+}
+
 impl Engine {
     /// Creates the engine and returns the event receiver consumed by the interface.
     pub fn new(config: KualiConfig) -> (Self, UnboundedReceiver<KualiEvent>) {
@@ -201,6 +218,8 @@ impl Engine {
             voice_rx: Mutex::new(Some((discord_voice_rx, web_voice_rx))),
             web_ingest: AsyncMutex::new(None),
             web_ingest_ready: AtomicBool::new(false),
+            discord_connected: AtomicBool::new(false),
+            post_processing: AtomicUsize::new(0),
             stt: SttWorker::spawn(),
             transcriptions: AsyncMutex::new(HashMap::new()),
             previews_in_flight: Mutex::new(HashSet::new()),
@@ -225,6 +244,25 @@ impl Engine {
 
     pub fn model_state(&self) -> ModelState {
         self.inner.model_state.read().clone()
+    }
+
+    pub fn discord_connected(&self) -> bool {
+        self.inner.discord_connected.load(Ordering::Acquire)
+    }
+
+    /// Updates are allowed only when no capture, transcription, model work or
+    /// meeting post-processing can be interrupted by the restart.
+    pub fn safe_for_update(&self) -> bool {
+        self.inner.active.lock().is_empty()
+            && self.inner.post_processing.load(Ordering::Acquire) == 0
+            && matches!(
+                self.status(),
+                EngineStatus::Offline | EngineStatus::Watching
+            )
+            && matches!(
+                self.model_state(),
+                ModelState::Absent | ModelState::Ready | ModelState::Failed { .. }
+            )
     }
 
     /// Requests cancellation without waiting for the network stream or the
@@ -376,6 +414,7 @@ impl Engine {
             kuali_discord::start(config.discord.clone(), self.inner.discord_voice_tx.clone())
                 .await?;
         *self.inner.discord.lock().await = Some(handle);
+        self.inner.discord_connected.store(true, Ordering::Release);
 
         if self.inner.active.lock().is_empty() {
             self.inner.set_status(EngineStatus::Watching);
@@ -385,6 +424,7 @@ impl Engine {
 
     /// Disconnects from Discord after closing any active meeting cleanly.
     pub async fn disconnect(&self) {
+        self.inner.discord_connected.store(false, Ordering::Release);
         for session in session_keys_for_source(&self.inner, VoiceSource::Discord) {
             finish_meeting(&self.inner, session).await;
         }
@@ -515,6 +555,15 @@ impl Engine {
         }
 
         let models_dir = self.config().whisper.resolved_models_directory();
+        let mut config = self.config();
+        if config.whisper.model == model {
+            config.whisper.model = replacement_model_after_deletion(&models_dir, model);
+            // Persist the safe replacement before removing the weight. A disk
+            // error can leave an extra model installed, but never a saved
+            // selection stranded on a file Kuali already deleted.
+            kuali_core::paths::save_config(&config)?;
+            *self.inner.config.write() = config;
+        }
         let removed_bytes = tokio::task::spawn_blocking(move || {
             let paths = [
                 kuali_stt::model_path(&models_dir, model),
@@ -722,9 +771,12 @@ impl Engine {
             return Err(EngineError::SummariesDisabled);
         }
         let mut meeting = self.load_meeting(meeting_id)?;
-        summarize_and_sync(&self.inner, &mut meeting, &config, 0)
+        begin_post_processing(&self.inner);
+        let result = summarize_and_sync(&self.inner, &mut meeting, &config, 0)
             .await
-            .map_err(Into::into)
+            .map_err(Into::into);
+        finish_post_processing(&self.inner);
+        result
     }
 
     pub fn export(
@@ -1231,6 +1283,7 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
     let Some(mut active) = inner.active.lock().remove(&session) else {
         return;
     };
+    begin_post_processing(inner);
 
     active.meeting.meta.ended_at = Some(Utc::now());
     if active.meeting.meta.display_title.is_none() {
@@ -1256,7 +1309,7 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
                 inner.emit(KualiEvent::error("whisper", message));
             }
         }
-        inner.set_status(EngineStatus::Watching);
+        inner.set_status(EngineStatus::Summarizing);
     } else {
         inner.set_model_state(ModelState::Active);
         inner.set_status(EngineStatus::Recording);
@@ -1300,7 +1353,9 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
                 &config.integrations.webhooks,
                 &active.meeting,
                 summary_status,
-            );
+            )
+            .await;
+            finish_post_processing(&inner);
         }
     };
 
@@ -1324,12 +1379,13 @@ fn validate_webhook_config(config: &KualiConfig) -> Result<(), EngineError> {
     Ok(())
 }
 
-fn dispatch_completed_webhooks(
+async fn dispatch_completed_webhooks(
     inner: &Arc<Inner>,
     subscriptions: &[kuali_core::WebhookSubscription],
     meeting: &Meeting,
     summary_status: crate::webhooks::SummaryStatus,
 ) {
+    let mut deliveries = JoinSet::new();
     for subscription in subscriptions
         .iter()
         .filter(|subscription| subscription.enabled && subscription.matches(&meeting.meta))
@@ -1337,7 +1393,7 @@ fn dispatch_completed_webhooks(
     {
         let meeting = meeting.clone();
         let events = inner.events.clone();
-        tokio::spawn(async move {
+        deliveries.spawn(async move {
             match crate::webhooks::deliver_completed(&subscription, &meeting, summary_status).await
             {
                 Ok(()) => tracing::info!(
@@ -1354,6 +1410,14 @@ fn dispatch_completed_webhooks(
                 }
             }
         });
+    }
+    while let Some(result) = deliveries.join_next().await {
+        if let Err(error) = result {
+            inner.emit(KualiEvent::error(
+                "webhook",
+                format!("a completion delivery ended unexpectedly: {error}"),
+            ));
+        }
     }
 }
 
@@ -1632,9 +1696,6 @@ async fn summarize_with_retries(
     provider: &dyn kuali_llm::LlmProvider,
     language: &str,
 ) -> Result<MeetingSummary, kuali_llm::LlmError> {
-    if inner.active.lock().is_empty() {
-        inner.set_status(EngineStatus::Summarizing);
-    }
     inner.emit(KualiEvent::SummaryStarted {
         meeting_id: meeting.meta.id.clone(),
     });
@@ -1657,11 +1718,6 @@ async fn summarize_with_retries(
                 tokio::time::sleep(Duration::from_millis(400 * attempt as u64)).await;
             }
             Err(error) => {
-                inner.set_status(if inner.active.lock().is_empty() {
-                    EngineStatus::Watching
-                } else {
-                    EngineStatus::Recording
-                });
                 return Err(error);
             }
         }
@@ -1678,12 +1734,27 @@ async fn summarize_with_retries(
         meeting_id: meeting.meta.id.clone(),
         summary: summary.clone(),
     });
-    inner.set_status(if inner.active.lock().is_empty() {
+    Ok(summary)
+}
+
+fn begin_post_processing(inner: &Arc<Inner>) {
+    inner.post_processing.fetch_add(1, Ordering::AcqRel);
+    if inner.active.lock().is_empty() {
+        inner.set_status(EngineStatus::Summarizing);
+    }
+}
+
+fn finish_post_processing(inner: &Arc<Inner>) {
+    let previous = inner.post_processing.fetch_sub(1, Ordering::AcqRel);
+    debug_assert!(previous > 0, "post-processing counter underflow");
+    if previous != 1 || !inner.active.lock().is_empty() {
+        return;
+    }
+    inner.set_status(if inner.discord_connected.load(Ordering::Acquire) {
         EngineStatus::Watching
     } else {
-        EngineStatus::Recording
+        EngineStatus::Offline
     });
-    Ok(summary)
 }
 
 fn prepare_discord_summary_delivery(meeting: &mut Meeting, text_channel_id: u64) {
@@ -2263,6 +2334,45 @@ mod tests {
         assert!(!path.exists());
         assert!(vad_path.exists(), "borrar el último peso conserva Silero");
         std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn deleting_the_selected_weight_prefers_another_installed_public_model() {
+        let root = std::env::temp_dir().join(format!(
+            "kuali-engine-model-replacement-{}",
+            uuid::Uuid::new_v4()
+        ));
+        std::fs::create_dir_all(&root).unwrap();
+
+        assert_eq!(
+            replacement_model_after_deletion(&root, WhisperModel::LargeV3TurboQ5),
+            WhisperModel::LargeV3TurboQ5
+        );
+
+        let installed = WhisperModel::LargeV3Q5;
+        let file = std::fs::File::create(kuali_stt::model_path(&root, installed)).unwrap();
+        file.set_len(installed.approx_bytes()).unwrap();
+        assert_eq!(
+            replacement_model_after_deletion(&root, WhisperModel::LargeV3TurboQ5),
+            installed
+        );
+
+        std::fs::remove_dir_all(&root).unwrap();
+    }
+
+    #[test]
+    fn updates_wait_for_post_processing_and_model_activity() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        *engine.inner.status.write() = EngineStatus::Watching;
+        *engine.inner.model_state.write() = ModelState::Ready;
+        assert!(engine.safe_for_update());
+
+        engine.inner.post_processing.store(1, Ordering::Release);
+        assert!(!engine.safe_for_update());
+        engine.inner.post_processing.store(0, Ordering::Release);
+
+        *engine.inner.model_state.write() = ModelState::Loading;
+        assert!(!engine.safe_for_update());
     }
 
     #[test]

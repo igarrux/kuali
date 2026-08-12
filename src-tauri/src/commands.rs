@@ -62,6 +62,8 @@ pub fn missing_requirements(engine: State<'_, Engine>) -> Vec<String> {
 pub struct Snapshot {
     pub status: EngineStatus,
     pub model_state: ModelState,
+    pub discord_connected: bool,
+    pub safe_for_update: bool,
     pub current_meeting: Option<Meeting>,
     pub current_meetings: Vec<Meeting>,
     pub missing: Vec<String>,
@@ -88,6 +90,8 @@ pub fn get_snapshot(engine: State<'_, Engine>) -> Snapshot {
     Snapshot {
         status: engine.status(),
         model_state: engine.model_state(),
+        discord_connected: engine.discord_connected(),
+        safe_for_update: engine.safe_for_update(),
         current_meeting,
         current_meetings,
         missing: config
@@ -348,9 +352,14 @@ pub async fn provider_models(
 pub struct ModelInfo {
     pub id: String,
     pub label: String,
+    pub display_name: String,
+    pub technical_name: String,
+    pub description: String,
     pub approx_bytes: u64,
+    pub estimated_ram_bytes: u64,
     pub downloaded: bool,
     pub selectable: bool,
+    pub recommended: bool,
 }
 
 #[tauri::command]
@@ -366,9 +375,14 @@ pub fn whisper_models(engine: State<'_, Engine>) -> Vec<ModelInfo> {
                 .and_then(|v| v.as_str().map(str::to_string))
                 .unwrap_or_default(),
             label: model.label().to_string(),
+            display_name: model.display_name().to_string(),
+            technical_name: model.technical_name().to_string(),
+            description: model.description().to_string(),
             approx_bytes: model.approx_bytes(),
+            estimated_ram_bytes: model.estimated_ram_bytes(),
             downloaded: kuali_stt::is_downloaded(&models_dir, *model),
             selectable: model.is_selectable(),
+            recommended: model.is_recommended(),
         })
         .collect()
 }
@@ -635,15 +649,23 @@ pub async fn check_for_update(app: tauri::AppHandle) -> Result<Option<AppUpdateI
 
 /// Downloads, verifies, and installs the newest signed release before restarting.
 #[tauri::command]
-pub async fn install_update(app: tauri::AppHandle) -> Result<bool, String> {
+pub async fn install_update(
+    app: tauri::AppHandle,
+    engine: State<'_, Engine>,
+) -> Result<bool, String> {
+    if !engine.safe_for_update() {
+        return Err(
+            "Kuali terminará primero la reunión, transcripción y resumen en curso".to_string(),
+        );
+    }
     let Some(update) = app.updater().map_err(fail)?.check().await.map_err(fail)? else {
         return Ok(false);
     };
 
     let progress_app = app.clone();
     let mut downloaded_bytes = 0u64;
-    update
-        .download_and_install(
+    let package = update
+        .download(
             move |chunk_length, total_bytes| {
                 downloaded_bytes = downloaded_bytes.saturating_add(chunk_length as u64);
                 let _ = progress_app.emit(
@@ -658,6 +680,17 @@ pub async fn install_update(app: tauri::AppHandle) -> Result<bool, String> {
         )
         .await
         .map_err(fail)?;
+
+    // A call may begin while the package is downloading. Keep the verified
+    // package in memory and defer installation instead of interrupting capture,
+    // final transcription, summaries or their completion work.
+    if !engine.safe_for_update() {
+        let _ = app.emit("kuali://update-waiting", ());
+    }
+    while !engine.safe_for_update() {
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+    update.install(package).map_err(fail)?;
     app.restart();
 }
 

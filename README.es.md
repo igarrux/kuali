@@ -172,15 +172,12 @@ ubicación predeterminada es `~/.kuali`, pero se puede cambiar desde Ajustes,
 incluido un almacenamiento externo. Kuali verifica la integridad al descargar o
 mover los pesos, y cada modelo instalado se puede eliminar individualmente.
 
-| Modelo | Descarga | Recomendado para |
-|---|---:|---|
-| Base | 148 MB | Transcripción ligera |
-| Small | 488 MB | Uso equilibrado de recursos |
-| Medium | 1,5 GB | Mayor precisión |
-| Large v3 Turbo | 1,6 GB | Alta calidad sin cuantización |
-| **Large v3 Turbo Q5** | **574 MB** | **Equilibrio recomendado entre velocidad, precisión y memoria** |
-| Large v3 Q5 | 1,1 GB | Mayor precisión con más uso de memoria y latencia |
-| Large v3 | 3,1 GB | Máxima precisión; el más lento y con mayor uso de memoria |
+| Nivel | Modelo técnico | Descarga | Recomendado para |
+|---|---|---:|---|
+| **Ligero** | **Large v3 Turbo Q5** | **574 MB** | **Recomendado para transcripción en vivo rápida y precisa** |
+| Equilibrado | Large v3 Turbo | 1,6 GB | Más fidelidad sin dejar de priorizar el tiempo real |
+| Preciso | Large v3 Q5 | 1,1 GB | Audio difícil, acentos y vocabulario mixto |
+| Máxima precisión | Large v3 Q8 | 1,7 GB | La mayor fidelidad local de Kuali con cuantización conservadora |
 
 ## Resúmenes y tareas
 
