@@ -1,1 +1,6 @@
 tests/
+assets/discord/**/bot-permissions.png
+assets/discord/**/copy-username.png
+assets/discord/**/guild-install.png
+assets/discord/**/install-link-scopes.png
+assets/discord/**/reset-token.png

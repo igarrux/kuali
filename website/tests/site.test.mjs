@@ -126,8 +126,10 @@ test("markup keeps identifiers and image descriptions coherent", () => {
     assert.equal(new Set(ids).size, ids.length, `${page} contains duplicate IDs`);
     assert.doesNotMatch(html, /\son(?:click|load|error)=/i, `${page} contains inline event handlers`);
     assert.doesNotMatch(html, /\sstyle="/i, `${page} contains inline styles`);
+    assert.doesNotMatch(html, /<div(?=[^>]*\baria-label=)(?![^>]*\brole=)[^>]*>/i, `${page} labels a generic div without a role`);
 
     for (const image of html.matchAll(/<img\b([^>]*)>/g)) {
+      assert.match(image[1], /\bsrc="[^"]+"/, `${page} image is missing a source`);
       assert.match(image[1], /\balt="[^"]*"/, `${page} image is missing alt text`);
       if (!image[1].includes("data-lightbox-image")) {
         assert.match(image[1], /\bwidth="\d+"/, `${page} image is missing width`);
@@ -154,6 +156,8 @@ test("landing pages show the real app and state the local data boundary", () => 
 
   assert.match(english, /assets\/kuali-app\.png/);
   assert.match(spanish, /assets\/kuali-app\.es\.png/);
+  assert.match(english, /<img src="\.\/assets\/kuali-app\.webp"/);
+  assert.match(spanish, /<img src="\.\.\/assets\/kuali-app\.es\.webp"/);
   assert.match(english, /Everything Kuali creates lives on your PC/);
   assert.match(spanish, /Todo lo que Kuali genera vive en tu PC/);
   for (const html of [english, spanish]) {
@@ -203,7 +207,7 @@ test("Discord setup is a three-step token-driven authorization flow", () => {
     assert.ok(section, `${page} is missing the Discord guide`);
     assert.equal((section.match(/<article class="guide-step">/g) ?? []).length, 3);
     assert.equal((section.match(/data-lightbox-source/g) ?? []).length, 3);
-    assert.match(section, /copy-username\.png/);
+    assert.match(section, /copy-username\.webp/);
     assert.match(section, /Attach Files|Adjuntar archivos/);
     assert.match(section, /Embed Links|Insertar enlaces/);
     assert.match(section, automaticCopy);
@@ -277,6 +281,24 @@ test("deployment metadata, security policy, and duplicate-host indexing rules ar
   assert.match(read("_headers"), /workers\.dev\/\*/);
   assert.match(read("_headers"), /X-Robots-Tag: noindex, nofollow/);
   assert.match(read("404.html"), /<meta name="robots" content="noindex, follow">/);
+});
+
+test("the public interface includes baseline keyboard and motion accessibility", () => {
+  for (const page of publicPages) {
+    const html = read(page);
+    const skipTarget = html.match(/<a class="skip-link" href="#([^"]+)"/)?.[1];
+    assert.ok(skipTarget, `${page} has no skip link`);
+    assert.match(html, new RegExp(`id="${skipTarget}"`), `${page} skip target is missing`);
+  }
+
+  const styles = read("assets/site.css");
+  assert.match(styles, /:focus-visible/);
+  assert.match(styles, /@media \(prefers-reduced-motion: reduce\)/);
+  assert.match(styles, /touch-action: manipulation/);
+  assert.match(styles, /overscroll-behavior: contain/);
+  assert.doesNotMatch(styles, /transition:\s*all/);
+  assert.doesNotMatch(styles, /outline:\s*none/);
+  assert.match(read("assets/site.js"), /aria-live", "polite"/);
 });
 
 test("all deployable files fit Cloudflare static asset limits", () => {

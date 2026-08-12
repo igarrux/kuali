@@ -28,3 +28,4 @@ config.toml
 # JavaScript dependencies and reports
 node_modules/
 coverage/
+.wrangler/

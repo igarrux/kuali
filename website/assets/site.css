@@ -82,6 +82,7 @@ input {
 button,
 a {
   -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
 }
 
 a {
@@ -104,6 +105,11 @@ h4 {
   font-family: var(--display);
   letter-spacing: -0.035em;
   line-height: 1.08;
+  text-wrap: balance;
+}
+
+[id] {
+  scroll-margin-top: 96px;
 }
 
 h1 {
@@ -170,6 +176,18 @@ kbd {
 
 .skip-link:focus {
   transform: translateY(0);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
 }
 
 .container {
@@ -1749,6 +1767,7 @@ a.platform-badge:hover {
   max-height: calc(100svh - 28px);
   padding: 0;
   overflow: hidden;
+  overscroll-behavior: contain;
   border: 1px solid var(--line-strong);
   border-radius: 20px;
   background: var(--surface);

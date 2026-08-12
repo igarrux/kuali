@@ -55,6 +55,7 @@ function commandText(element) {
 }
 
 for (const button of document.querySelectorAll("[data-copy-target]")) {
+  button.setAttribute("aria-live", "polite");
   button.addEventListener("click", async () => {
     const target = document.getElementById(button.dataset.copyTarget);
     if (!target) return;
