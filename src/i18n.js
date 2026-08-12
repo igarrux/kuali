@@ -454,6 +454,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   Desactivado: "Disabled",
   "Sin conexión": "Not connected",
   Editar: "Edit",
+  "Cancelar edición": "Cancel editing",
   "En llamada": "In a call",
   Automático: "Automatic",
   Manual: "Manual",

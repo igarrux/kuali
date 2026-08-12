@@ -2810,7 +2810,21 @@ function renderDiscordSettingsAccess() {
   connection.textContent = configuredAndConnected ? t("Conectado") : t("Sin conexión");
   connection.classList.toggle("connected", configuredAndConnected);
   $("btn-edit-discord").hidden = !configuredAndConnected || state.discordEditing;
+  $("btn-cancel-edit-discord").hidden = !configuredAndConnected || !state.discordEditing;
   $("btn-add-discord-server").hidden = !configuredAndConnected;
+}
+
+function cancelDiscordSettingsEdit() {
+  const discord = state.config?.discord;
+  if (!discord) return;
+  $("cfg-token").value = discord["bot-token"] ?? "";
+  $("cfg-follow").value = discord["follow-username"] ?? "";
+  $("cfg-follow-automatically").checked = discord["follow-automatically"] !== false;
+  $("cfg-leave-empty").checked = discord["leave-when-empty"];
+  $("cfg-post-summary").checked = discord["post-summary-to-channel"];
+  state.discordEditing = false;
+  renderDiscordSettingsAccess();
+  $("btn-edit-discord").focus();
 }
 
 function renderWhisperModelOptions(selected = $("cfg-model").value) {
@@ -4102,6 +4116,7 @@ function wireUp() {
     renderDiscordSettingsAccess();
     $("cfg-token").focus();
   });
+  $("btn-cancel-edit-discord").addEventListener("click", cancelDiscordSettingsEdit);
   $("btn-add-discord-server").addEventListener("click", async () => {
     const button = $("btn-add-discord-server");
     button.disabled = true;

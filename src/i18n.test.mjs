@@ -96,9 +96,11 @@ test("connected Discord settings stay protected until the user chooses to edit",
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   assert.match(html, /id="btn-edit-discord"/);
+  assert.match(html, /id="btn-cancel-edit-discord"/);
   assert.match(html, /id="btn-add-discord-server"/);
   assert.match(app, /state\.discordEditing = !\(/);
   assert.match(app, /\$\(id\)\.readOnly = locked/);
+  assert.match(app, /function cancelDiscordSettingsEdit\(\)/);
   assert.match(app, /invoke\("open_discord_install"/);
 });
 
