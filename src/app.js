@@ -2010,8 +2010,12 @@ function selectedRequiredModel() {
   return state.models.find((model) => model.id === $("required-model-select").value);
 }
 
+function selectableWhisperModels() {
+  return state.models.filter((model) => model.selectable !== false);
+}
+
 function hasDownloadedWhisperWeight() {
-  return state.models.some((model) => model.downloaded);
+  return selectableWhisperModels().some((model) => model.downloaded);
 }
 
 function downloadingWhisperModel() {
@@ -2125,27 +2129,25 @@ function renderRequiredModelActivity() {
 
 function renderRequiredModelNotice(requestedModel = "") {
   const select = $("required-model-select");
+  const selectableModels = selectableWhisperModels();
   const configured = state.config?.whisper?.model;
-  const requested = state.models.find((model) => model.id === requestedModel);
-  const configuredModel = state.models.find((model) => model.id === configured);
-  const installedFallback = state.models.find((model) => model.downloaded);
-  const recommended = state.models.find((model) => model.id === "large-v3-turbo-q5");
+  const requested = selectableModels.find((model) => model.id === requestedModel);
+  const configuredModel = selectableModels.find((model) => model.id === configured);
+  const installedFallback = selectableModels.find((model) => model.downloaded);
+  const recommended = selectableModels.find((model) => model.id === "large-v3-turbo-q5");
   const chosen = downloadingWhisperModel()
     ?? requested
     ?? (configuredModel?.downloaded ? configuredModel : null)
     ?? installedFallback
     ?? configuredModel
     ?? recommended
-    ?? state.models[0];
+    ?? selectableModels[0];
 
   select.replaceChildren(
-    ...state.models.map((model) => {
+    ...selectableModels.map((model) => {
       const option = document.createElement("option");
       option.value = model.id;
-      const recommendation = model.id === "large-v3-turbo-q5"
-        ? ` · ${t("Recomendado")}`
-        : "";
-      option.textContent = `${t(model.label)} — ${humanBytes(model.approxBytes)}${recommendation}${model.downloaded ? " ✓" : ""}`;
+      option.textContent = `${t(model.label)} — ${humanBytes(model.approxBytes)}${model.downloaded ? " ✓" : ""}`;
       return option;
     }),
   );
@@ -2780,15 +2782,21 @@ async function openSettings() {
 }
 
 function renderWhisperModelOptions(selected = $("cfg-model").value) {
+  const selectableModels = selectableWhisperModels();
+  const chosen = selectableModels.some((model) => model.id === selected)
+    ? selected
+    : selectableModels.find((model) => model.id === "large-v3-turbo-q5")?.id
+      ?? selectableModels[0]?.id
+      ?? "";
   $("cfg-model").replaceChildren(
-    ...state.models.map((m) => {
+    ...selectableModels.map((m) => {
       const opt = document.createElement("option");
       opt.value = m.id;
       opt.textContent = `${t(m.label)} — ${humanBytes(m.approxBytes)}${m.downloaded ? " ✓" : ""}`;
       return opt;
     }),
   );
-  $("cfg-model").value = selected;
+  $("cfg-model").value = chosen;
 }
 
 // --- webhooks -------------------------------------------------------------

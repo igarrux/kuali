@@ -174,16 +174,13 @@ mover los pesos, y cada modelo instalado se puede eliminar individualmente.
 
 | Modelo | Descarga | Recomendado para |
 |---|---:|---|
-| Tiny | 78 MB | Comprobar la instalación rápidamente |
 | Base | 148 MB | Transcripción ligera |
 | Small | 488 MB | Uso equilibrado de recursos |
 | Medium | 1,5 GB | Mayor precisión |
 | Large v3 Turbo | 1,6 GB | Alta calidad sin cuantización |
-| **Large v3 Turbo Q5** | **574 MB** | **Equilibrio recomendado** |
-| Large v3 | 3,1 GB | Máxima precisión sin cuantización; mayor consumo de memoria |
-| Large v3 Q5 | 1,1 GB | Alta precisión con menos memoria; salida en vivo más lenta que Turbo |
-| Large v3 Turbo LatAm | 1,6 GB | Español latinoamericano |
-| Large v3 Turbo LatAm Q5 | 574 MB | Alternativa LatAm más ligera |
+| **Large v3 Turbo Q5** | **574 MB** | **Equilibrio recomendado entre velocidad, precisión y memoria** |
+| Large v3 Q5 | 1,1 GB | Mayor precisión con más uso de memoria y latencia |
+| Large v3 | 3,1 GB | Máxima precisión; el más lento y con mayor uso de memoria |
 
 ## Resúmenes y tareas
 

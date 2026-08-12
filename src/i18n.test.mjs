@@ -150,20 +150,26 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.doesNotMatch(JSON.stringify(tauriConfig.bundle.resources), /ggml-[^"]+\.bin/i);
 });
 
-test("the full Large v3 options are translated and distinct from Turbo", () => {
+test("the curated model catalog keeps the three quality tiers distinct", () => {
   setLanguagePreference("en", { notify: false });
   assert.equal(
-    t("Large v3 — máxima precisión, sin cuantizar"),
-    "Large v3 — highest accuracy, unquantized",
+    t("Large v3 — máxima precisión, más lento y mayor uso de memoria"),
+    "Large v3 — highest accuracy, slower and higher memory use",
   );
   assert.equal(
-    t("Large v3 Q5 — alta precisión, menos memoria"),
-    "Large v3 Q5 — high accuracy, lower memory",
+    t("Large v3 Q5 — mayor precisión, más memoria"),
+    "Large v3 Q5 — higher accuracy, higher memory use",
   );
   assert.equal(
-    t("Large v3 Turbo — alta calidad, rápido"),
-    "Large v3 Turbo — high quality, fast",
+    t("Large v3 Turbo Q5 — recomendado: rápido y eficiente"),
+    "Large v3 Turbo Q5 — recommended: fast and efficient",
   );
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  assert.match(app, /model\.selectable !== false/);
+  assert.match(app, /selectableModels\.map/);
+  assert.match(app, /return selectableWhisperModels\(\)\.some\(\(model\) => model\.downloaded\)/);
+  assert.match(commands, /selectable: model\.is_selectable\(\)/);
   setLanguagePreference("es", { notify: false });
 });
 

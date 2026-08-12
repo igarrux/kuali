@@ -252,6 +252,8 @@ pub enum WhisperModel {
 }
 
 impl WhisperModel {
+    /// Every weight Kuali recognizes on disk. Retired choices stay here so old
+    /// configurations remain readable and their files can still be removed.
     pub const ALL: [WhisperModel; 10] = [
         Self::Tiny,
         Self::Base,
@@ -264,6 +266,22 @@ impl WhisperModel {
         Self::LargeV3TurboLatam,
         Self::LargeV3TurboLatamQ5,
     ];
+
+    /// Curated choices offered for new downloads. Tiny was too inaccurate for
+    /// meetings, while the LatAm fine-tunes performed poorly with anglicisms.
+    pub const SELECTABLE: [WhisperModel; 7] = [
+        Self::Base,
+        Self::Small,
+        Self::Medium,
+        Self::LargeV3Turbo,
+        Self::LargeV3TurboQ5,
+        Self::LargeV3Q5,
+        Self::LargeV3,
+    ];
+
+    pub fn is_selectable(self) -> bool {
+        Self::SELECTABLE.contains(&self)
+    }
 
     pub fn file_name(self) -> &'static str {
         match self {
@@ -337,9 +355,9 @@ impl WhisperModel {
             Self::Small => "Small — equilibrio decente",
             Self::Medium => "Medium — buena calidad, más lento",
             Self::LargeV3Turbo => "Large v3 Turbo — alta calidad, rápido",
-            Self::LargeV3TurboQ5 => "Large v3 Turbo Q5 — recomendado",
-            Self::LargeV3 => "Large v3 — máxima precisión, sin cuantizar",
-            Self::LargeV3Q5 => "Large v3 Q5 — alta precisión, menos memoria",
+            Self::LargeV3TurboQ5 => "Large v3 Turbo Q5 — recomendado: rápido y eficiente",
+            Self::LargeV3 => "Large v3 — máxima precisión, más lento y mayor uso de memoria",
+            Self::LargeV3Q5 => "Large v3 Q5 — mayor precisión, más memoria",
             Self::LargeV3TurboLatam => "Large v3 Turbo LatAm — español latino, F16",
             Self::LargeV3TurboLatamQ5 => "Large v3 Turbo LatAm Q5 — español latino, ligero",
         }
@@ -513,6 +531,9 @@ impl KualiConfig {
     /// Idempotently migrates a configuration immediately after loading it.
     pub fn migrated(mut self) -> Self {
         self.llm.migrate_model_override();
+        if !self.whisper.model.is_selectable() {
+            self.whisper.model = WhisperConfig::default().model;
+        }
         self
     }
 
@@ -585,6 +606,19 @@ mod tests {
             cfg.missing_requirements(),
             vec!["El token del bot de Discord"]
         );
+    }
+
+    #[test]
+    fn retired_models_migrate_to_the_recommended_choice() {
+        for retired in [
+            WhisperModel::Tiny,
+            WhisperModel::LargeV3TurboLatam,
+            WhisperModel::LargeV3TurboLatamQ5,
+        ] {
+            let mut cfg = KualiConfig::default();
+            cfg.whisper.model = retired;
+            assert_eq!(cfg.migrated().whisper.model, WhisperModel::LargeV3TurboQ5);
+        }
     }
 
     #[test]
@@ -863,6 +897,19 @@ mod tests {
                 .chars()
                 .all(|character| character.is_ascii_hexdigit()));
         }
+    }
+
+    #[test]
+    fn the_public_catalog_is_curated_without_removing_legacy_file_support() {
+        assert_eq!(WhisperModel::SELECTABLE.len(), 7);
+        assert!(WhisperModel::LargeV3TurboQ5.is_selectable());
+        assert!(WhisperModel::LargeV3Q5.is_selectable());
+        assert!(WhisperModel::LargeV3.is_selectable());
+        assert!(!WhisperModel::Tiny.is_selectable());
+        assert!(!WhisperModel::LargeV3TurboLatam.is_selectable());
+        assert!(!WhisperModel::LargeV3TurboLatamQ5.is_selectable());
+        assert!(WhisperModel::ALL.contains(&WhisperModel::Tiny));
+        assert!(WhisperModel::ALL.contains(&WhisperModel::LargeV3TurboLatam));
     }
 
     #[test]

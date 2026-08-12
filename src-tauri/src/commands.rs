@@ -350,6 +350,7 @@ pub struct ModelInfo {
     pub label: String,
     pub approx_bytes: u64,
     pub downloaded: bool,
+    pub selectable: bool,
 }
 
 #[tauri::command]
@@ -367,6 +368,7 @@ pub fn whisper_models(engine: State<'_, Engine>) -> Vec<ModelInfo> {
             label: model.label().to_string(),
             approx_bytes: model.approx_bytes(),
             downloaded: kuali_stt::is_downloaded(&models_dir, *model),
+            selectable: model.is_selectable(),
         })
         .collect()
 }

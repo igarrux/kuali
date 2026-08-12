@@ -204,11 +204,9 @@ test("both guides document model weights and Standard Webhooks", () => {
     const html = read(page);
     assert.match(html, /id="(?:model|modelo)"/);
     assert.match(html, /Large v3 Turbo Q5/);
-    assert.match(
-      html,
-      /(?:unquantized <strong>Large v3<\/strong>|<strong>Large v3<\/strong> sin cuantizar)/,
-    );
+    assert.match(html, /Large v3 Turbo Q5<\/strong> (?:remains|mantiene)/);
     assert.match(html, /Large v3 Q5/);
+    assert.match(html, /(?:highest accuracy|máxima precisión)/);
     assert.match(html, /~\/\.kuali/);
     assert.match(html, /id="webhooks"/);
     assert.match(html, /Standard Webhooks/);
@@ -371,4 +369,8 @@ test("repository readmes document the on-demand model lifecycle", () => {
   assert.match(spanish, /Esperando una reunión \| No \| Cerca de 20 MB/);
   assert.match(spanish, /modelo Q5 recomendado \| Sí \| Hasta unos 600 MB/);
   assert.match(spanish, /pesos descargados permanecen en disco/i);
+  for (const readme of [english, spanish]) {
+    assert.doesNotMatch(readme, /^\| Tiny \|/m);
+    assert.doesNotMatch(readme, /^\| Large v3 Turbo LatAm/m);
+  }
 });
