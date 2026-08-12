@@ -735,8 +735,9 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Base — rápido, útil para pruebas": "Base — fast, useful for testing",
   "Small — equilibrio decente": "Small — decent balance",
   "Medium — buena calidad, más lento": "Medium — good quality, slower",
-  "Large v3 Turbo — máxima calidad": "Large v3 Turbo — highest quality",
+  "Large v3 Turbo — alta calidad, rápido": "Large v3 Turbo — high quality, fast",
   "Large v3 Turbo Q5 — recomendado": "Large v3 Turbo Q5 — recommended",
+  "Large v3 Q5 — máxima precisión, más lento": "Large v3 Q5 — highest accuracy, slower",
   "Large v3 Turbo LatAm — español latino, F16": "Large v3 Turbo LatAm — Latin American Spanish, F16",
   "Large v3 Turbo LatAm Q5 — español latino, ligero":
     "Large v3 Turbo LatAm Q5 — Latin American Spanish, lightweight",

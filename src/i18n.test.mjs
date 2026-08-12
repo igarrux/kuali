@@ -140,6 +140,19 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.match(engine, /if download_configured_model \{/);
 });
 
+test("the full Large v3 Q5 quality option is translated and distinct from Turbo", () => {
+  setLanguagePreference("en", { notify: false });
+  assert.equal(
+    t("Large v3 Q5 — máxima precisión, más lento"),
+    "Large v3 Q5 — highest accuracy, slower",
+  );
+  assert.equal(
+    t("Large v3 Turbo — alta calidad, rápido"),
+    "Large v3 Turbo — high quality, fast",
+  );
+  setLanguagePreference("es", { notify: false });
+});
+
 test("webhooks use Standard Webhooks without the legacy Kuali protocol", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");

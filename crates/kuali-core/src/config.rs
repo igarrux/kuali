@@ -238,6 +238,9 @@ pub enum WhisperModel {
     /// Five-bit quantization with near-`large-v3-turbo` quality at roughly one
     /// third of the size; the best balance on Apple Silicon.
     LargeV3TurboQ5,
+    /// Five-bit quantization of the complete Large v3 model. It retains all 32
+    /// decoder layers for higher accuracy at the cost of slower live inference.
+    LargeV3Q5,
     /// Large v3 Turbo fine-tuned on Latin American Spanish from Common Voice,
     /// retained in F16 for unquantized quality comparisons.
     LargeV3TurboLatam,
@@ -246,13 +249,14 @@ pub enum WhisperModel {
 }
 
 impl WhisperModel {
-    pub const ALL: [WhisperModel; 8] = [
+    pub const ALL: [WhisperModel; 9] = [
         Self::Tiny,
         Self::Base,
         Self::Small,
         Self::Medium,
         Self::LargeV3Turbo,
         Self::LargeV3TurboQ5,
+        Self::LargeV3Q5,
         Self::LargeV3TurboLatam,
         Self::LargeV3TurboLatamQ5,
     ];
@@ -265,6 +269,7 @@ impl WhisperModel {
             Self::Medium => "ggml-medium.bin",
             Self::LargeV3Turbo => "ggml-large-v3-turbo.bin",
             Self::LargeV3TurboQ5 => "ggml-large-v3-turbo-q5_0.bin",
+            Self::LargeV3Q5 => "ggml-large-v3-q5_0.bin",
             Self::LargeV3TurboLatam => "ggml-large-v3-turbo-latam.bin",
             Self::LargeV3TurboLatamQ5 => "ggml-large-v3-turbo-latam-q5_0.bin",
         }
@@ -289,6 +294,7 @@ impl WhisperModel {
             Self::Medium => 1_533_763_059,
             Self::LargeV3Turbo => 1_624_555_275,
             Self::LargeV3TurboQ5 => 574_041_195,
+            Self::LargeV3Q5 => 1_081_140_203,
             Self::LargeV3TurboLatam => 1_624_555_275,
             Self::LargeV3TurboLatamQ5 => 574_041_195,
         }
@@ -307,6 +313,7 @@ impl WhisperModel {
             Self::LargeV3TurboQ5 => {
                 "394221709cd5ad1f40c46e6031ca61bce88931e6e088c188294c6d5a55ffa7e2"
             }
+            Self::LargeV3Q5 => "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1",
             Self::LargeV3TurboLatam => {
                 "b2e3f5e5b159a6978164d237f981fe95335693abb716fb1c229507b235ace540"
             }
@@ -322,8 +329,9 @@ impl WhisperModel {
             Self::Base => "Base — rápido, útil para pruebas",
             Self::Small => "Small — equilibrio decente",
             Self::Medium => "Medium — buena calidad, más lento",
-            Self::LargeV3Turbo => "Large v3 Turbo — máxima calidad",
+            Self::LargeV3Turbo => "Large v3 Turbo — alta calidad, rápido",
             Self::LargeV3TurboQ5 => "Large v3 Turbo Q5 — recomendado",
+            Self::LargeV3Q5 => "Large v3 Q5 — máxima precisión, más lento",
             Self::LargeV3TurboLatam => "Large v3 Turbo LatAm — español latino, F16",
             Self::LargeV3TurboLatamQ5 => "Large v3 Turbo LatAm Q5 — español latino, ligero",
         }
@@ -846,6 +854,26 @@ mod tests {
                 .chars()
                 .all(|character| character.is_ascii_hexdigit()));
         }
+    }
+
+    #[test]
+    fn large_v3_q5_matches_the_official_whisper_cpp_artifact() {
+        let model = WhisperModel::LargeV3Q5;
+
+        assert_eq!(
+            serde_json::to_value(model).unwrap().as_str(),
+            Some("large-v3-q5")
+        );
+        assert_eq!(model.file_name(), "ggml-large-v3-q5_0.bin");
+        assert_eq!(model.approx_bytes(), 1_081_140_203);
+        assert_eq!(
+            model.sha256(),
+            "d75795ecff3f83b5faa89d1900604ad8c780abd5739fae406de19f23ecd98ad1"
+        );
+        assert_eq!(
+            model.download_url(),
+            "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-large-v3-q5_0.bin"
+        );
     }
 
     #[test]

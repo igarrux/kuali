@@ -170,8 +170,9 @@ moved, and each installed weight can be removed individually.
 | Base | 148 MB | Lightweight transcription |
 | Small | 488 MB | Balanced resource use |
 | Medium | 1.5 GB | Higher accuracy |
-| Large v3 Turbo | 1.6 GB | Maximum multilingual quality |
+| Large v3 Turbo | 1.6 GB | High quality without quantization |
 | **Large v3 Turbo Q5** | **574 MB** | **Recommended balance** |
+| Large v3 Q5 | 1.1 GB | Highest transcription accuracy; slower live output |
 | Large v3 Turbo LatAm | 1.6 GB | Latin American Spanish |
 | Large v3 Turbo LatAm Q5 | 574 MB | Lighter LatAm option |
 

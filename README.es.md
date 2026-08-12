@@ -178,8 +178,9 @@ mover los pesos, y cada modelo instalado se puede eliminar individualmente.
 | Base | 148 MB | Transcripción ligera |
 | Small | 488 MB | Uso equilibrado de recursos |
 | Medium | 1,5 GB | Mayor precisión |
-| Large v3 Turbo | 1,6 GB | Máxima calidad multilingüe |
+| Large v3 Turbo | 1,6 GB | Alta calidad sin cuantización |
 | **Large v3 Turbo Q5** | **574 MB** | **Equilibrio recomendado** |
+| Large v3 Q5 | 1,1 GB | Máxima precisión de transcripción; salida en vivo más lenta |
 | Large v3 Turbo LatAm | 1,6 GB | Español latinoamericano |
 | Large v3 Turbo LatAm Q5 | 574 MB | Alternativa LatAm más ligera |
 
