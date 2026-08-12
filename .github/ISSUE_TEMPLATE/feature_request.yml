@@ -1,0 +1,55 @@
+name: Focused feature request
+description: Propose a bounded improvement to an existing Kuali workflow.
+title: "[Feature]: "
+labels: ["type: enhancement", "status: needs triage"]
+body:
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched issues and discussions for this idea.
+          required: true
+        - label: This request solves a concrete meeting or contribution problem.
+          required: true
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem
+      description: Explain what is difficult today without prescribing an implementation.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+      description: Describe what a successful user experience would look like.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Discord
+        - Google Meet
+        - Microsoft Teams or Zoom
+        - Transcription and models
+        - Summaries and tasks
+        - Library and search
+        - Standard Webhooks
+        - Accessibility
+        - Packaging or updates
+        - Documentation or contributor tooling
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: boundaries
+    attributes:
+      label: Privacy, consent, and compatibility considerations
+      description: Note any data movement, platform limitation, or behavior that must remain compatible.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered

@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Setup and usage questions
+    url: https://github.com/igarrux/kuali/discussions/categories/q-a
+    about: Ask the community without opening a bug report.
+  - name: Large ideas and architecture proposals
+    url: https://github.com/igarrux/kuali/discussions/categories/ideas
+    about: Discuss broad changes before implementation begins.
+  - name: Security or private-data report
+    url: https://github.com/igarrux/kuali/security/advisories/new
+    about: Report vulnerabilities or accidental sensitive-data exposure privately.
