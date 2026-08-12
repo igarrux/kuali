@@ -5,11 +5,12 @@
 <h1 align="center">Kuali</h1>
 
 <p align="center">
-  <strong>Transcripción privada y local de reuniones con atribución real por hablante.</strong>
+  <strong>Transcripción local y open source para Discord y Google Meet con atribución real por hablante.</strong>
 </p>
 
 <p align="center">
   <a href="https://github.com/igarrux/kuali/actions/workflows/ci.yml"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/igarrux/kuali/ci.yml?branch=main&style=flat-square&label=CI"></a>
+  <a href="https://github.com/igarrux/kuali/releases/latest"><img alt="Última versión" src="https://img.shields.io/github/v/release/igarrux/kuali?style=flat-square&color=7ddab9"></a>
   <a href="LICENSE"><img alt="Licencia MIT" src="https://img.shields.io/badge/escritorio-MIT-7ddab9?style=flat-square"></a>
   <a href="browser-extension/LICENSE"><img alt="Licencia Apache 2.0 de la extensión" src="https://img.shields.io/badge/extensi%C3%B3n-Apache--2.0-7ddab9?style=flat-square"></a>
 </p>
@@ -20,10 +21,12 @@
   <a href="#funciones">Funciones</a> ·
   <a href="#inicio-rápido">Inicio rápido</a> ·
   <a href="#privacidad">Privacidad</a> ·
-  <a href="#desarrollo">Desarrollo</a>
+  <a href="#desarrollo">Desarrollo</a> ·
+  <a href="#comunidad">Comunidad</a> ·
+  <a href="https://kuali.garrux.dev/es/">Sitio web</a>
 </p>
 
-![Flujo local de Kuali](browser-extension/store/assets/screenshot-local.es.png)
+![Aplicación de Kuali mostrando su biblioteca local y el estado de las integraciones](website/assets/kuali-app.es.png)
 
 Kuali escucha llamadas en vivo, las transcribe en tu computadora y conserva
 quién dijo cada cosa. Las reuniones se convierten en una biblioteca con
@@ -32,6 +35,21 @@ participante.
 
 Whisper y Silero procesan el audio en memoria. Kuali no conserva una grabación
 de audio ni la envía a un servicio operado por el proyecto.
+
+## Por qué Kuali
+
+Kuali no comienza con una sola grabación mezclada del sistema. Sus integraciones
+con Discord y Google Meet conservan la identidad de la plataforma y el audio
+separado cuando está disponible, manteniendo nombres, avatares, fragmentos y
+tareas unidos a la persona correcta. La app añade transcripción en vivo,
+búsqueda local, resultados estructurados opcionales, entrega cuidada en Discord
+y Standard Webhooks firmados sin exigir una cuenta en la nube de Kuali.
+
+Conoce los flujos de
+[transcripción de Discord](https://kuali.garrux.dev/es/transcripcion-reuniones-discord/)
+y
+[transcripción de Google Meet](https://kuali.garrux.dev/es/transcripcion-google-meet/)
+en el sitio oficial.
 
 ## Funciones
 
@@ -244,9 +262,23 @@ npm run test:e2e:meet
 | `src-tauri` / `src` | Backend de escritorio e interfaz bilingüe |
 | `browser-extension` | Extensión de captura para el navegador |
 
-Las contribuciones son bienvenidas. Lee [CONTRIBUTING.md](CONTRIBUTING.md) antes
-de abrir un pull request y reporta problemas de seguridad mediante el canal
-privado indicado en [SECURITY.md](SECURITY.md).
+## Comunidad
+
+Kuali se construye públicamente y las contribuciones son bienvenidas:
+
+- Consulta el [roadmap](ROADMAP.md) para conocer las áreas activas.
+- Elige un issue marcado como
+  [`good first issue`](https://github.com/igarrux/kuali/labels/good%20first%20issue)
+  o [`help wanted`](https://github.com/igarrux/kuali/labels/help%20wanted).
+- Haz preguntas y propón cambios amplios en
+  [GitHub Discussions](https://github.com/igarrux/kuali/discussions).
+- Sigue [CONTRIBUTING.md](CONTRIBUTING.md) para preparar el entorno, comprender
+  la arquitectura, ejecutar pruebas y abrir el PR contra `sandbox`.
+- Usa el canal privado indicado en [SECURITY.md](SECURITY.md) para problemas de
+  seguridad o exposición accidental de datos sensibles.
+
+Los reportes reproducibles, pruebas controladas de plataformas, documentación,
+traducciones, accesibilidad y cambios de código enfocados son valiosos.
 
 ## Licencia
 
