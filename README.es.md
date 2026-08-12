@@ -65,7 +65,7 @@ en el sitio oficial.
 - Captura experimental para Microsoft Teams y Zoom, con soporte parcial mientras
   se validan y mejoran sus integraciones.
 - Varias reuniones simultáneas con participantes, relojes y estado independientes.
-- Núcleo de escritorio nativo en Rust con cerca de 20 MB de memoria observada
+- Núcleo de escritorio nativo en Rust con cerca de 40 MB de memoria observada
   mientras está en espera.
 - Ciclo de Whisper bajo demanda: las reuniones activas comparten un modelo y se
   libera de la RAM al finalizar la última.
@@ -156,7 +156,7 @@ el soporte.
 
 | Estado | Whisper en RAM | Memoria observada de la app |
 |---|---|---:|
-| Esperando una reunión | No | Cerca de 20 MB |
+| Esperando una reunión | No | Cerca de 40 MB |
 | Reunión activa con el modelo Q5 recomendado | Sí | Hasta unos 600 MB |
 | Después de finalizar la última reunión activa | No | Regresa hacia el consumo en espera |
 

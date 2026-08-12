@@ -31,7 +31,7 @@
     <meta property="og:locale:alternate" content="en_US">
     <meta name="twitter:card" content="summary_large_image">
     <meta name="twitter:title" content="Kuali — Transcripción local para Discord y Google Meet">
-    <meta name="twitter:description" content="Escrito en Rust, cerca de 20 MB en espera y un modelo local que solo se carga cuando una reunión lo necesita.">
+    <meta name="twitter:description" content="Escrito en Rust, cerca de 40 MB en espera y un modelo local que solo se carga cuando una reunión lo necesita.">
     <meta name="twitter:image" content="https://kuali.garrux.dev/assets/kuali-app.es.png">
     <meta name="twitter:image:alt" content="Aplicación de Kuali mostrando su biblioteca local y el estado de las integraciones">
     <script type="application/ld+json">
@@ -105,7 +105,7 @@
           {
             "@type": "Question",
             "name": "¿Cuánta memoria consume Kuali?",
-            "acceptedAnswer": { "@type": "Answer", "text": "En pruebas sobre Apple Silicon, Kuali usó cerca de 20 MB en espera y hasta unos 600 MB al transcribir con el modelo Q5 recomendado. El consumo real varía según la reunión y el equipo. El modelo se libera de la memoria al finalizar la última reunión activa." }
+            "acceptedAnswer": { "@type": "Answer", "text": "En pruebas sobre Apple Silicon, Kuali usó cerca de 40 MB en espera y hasta unos 600 MB al transcribir con el modelo Q5 recomendado. El consumo real varía según la reunión y el equipo. El modelo se libera de la memoria al finalizar la última reunión activa." }
           }
         ]
       }
@@ -133,7 +133,7 @@
             <h1>Tus reuniones se convierten en <span class="text-gradient">memoria útil.</span></h1>
             <p class="hero-lead">Kuali se conecta a Discord y Google Meet, transcribe en vivo a cada participante dentro de tu computadora y convierte el resultado en decisiones y tareas fáciles de buscar.</p>
             <div class="hero-actions"><a class="button button-primary" href="https://kuali.garrux.dev/es/guides/#instalar">Descargar para macOS <span aria-hidden="true">↓</span></a><a class="button" href="https://github.com/igarrux/kuali">Ver en GitHub <span aria-hidden="true">↗</span></a></div>
-            <div class="hero-note" role="list" aria-label="Ventajas principales"><span role="listitem">Escrito en Rust</span><span role="listitem">Cerca de 20 MB en espera</span><span role="listitem">Gratis y open source</span></div>
+            <div class="hero-note" role="list" aria-label="Ventajas principales"><span role="listitem">Escrito en Rust</span><span role="listitem">Cerca de 40 MB en espera</span><span role="listitem">Gratis y open source</span></div>
           </div>
 
           <div class="hero-visual" data-reveal>
@@ -158,7 +158,7 @@
           </div>
           <ul class="runtime-grid" aria-label="Datos de ejecución de Kuali">
             <li class="runtime-card" data-reveal><strong>Rust</strong><h3>Núcleo de escritorio nativo</h3><p>Inicio rápido, memoria predecible y ningún runtime web cargando la aplicación mientras espera.</p></li>
-            <li class="runtime-card" data-reveal><strong>~20 MB</strong><h3>Observados en espera</h3><p>El modelo de voz permanece fuera de la RAM cuando no hay reuniones activas.</p></li>
+            <li class="runtime-card" data-reveal><strong>~40 MB</strong><h3>Observados en espera</h3><p>El modelo de voz permanece fuera de la RAM cuando no hay reuniones activas.</p></li>
             <li class="runtime-card accent" data-reveal><strong>~600 MB</strong><h3>Con el Q5 recomendado</h3><p>Pico observado mientras transcribe activamente en Apple Silicon.</p></li>
             <li class="runtime-card" data-reveal><strong>$0</strong><h3>Gratis y open source</h3><p>Sin suscripción ni cuenta de Kuali. Puedes revisarlo, ejecutarlo, mejorarlo y compartirlo.</p></li>
           </ul>
@@ -227,7 +227,7 @@
           <details><summary>¿Kuali sube el audio de la reunión?</summary><p>No. Whisper y Silero procesan el audio en memoria dentro de tu computadora. Kuali no conserva una grabación ni la envía a un servicio operado por el proyecto.</p></details>
           <details><summary>¿Puede distinguir a los participantes?</summary><p>Sí. Kuali conserva la identidad cuando Discord o el servicio de reuniones la expone. Si una fuente entrega audio mezclado, lo indica claramente en lugar de inventar una atribución.</p></details>
           <details><summary>¿Necesito un proveedor de IA externo?</summary><p>No. La transcripción funciona localmente sin un LLM. Los resúmenes y tareas son opcionales y permanecen desactivados cuando apagas su interruptor.</p></details>
-          <details><summary>¿Cuánta memoria consume Kuali?</summary><p>En pruebas sobre Apple Silicon, Kuali usó cerca de 20 MB en espera y hasta unos 600 MB al transcribir con el modelo Q5 recomendado. El consumo real varía. Whisper se carga para la primera reunión activa, se comparte entre reuniones simultáneas y se libera al finalizar la última.</p></details>
+          <details><summary>¿Cuánta memoria consume Kuali?</summary><p>En pruebas sobre Apple Silicon, Kuali usó cerca de 40 MB en espera y hasta unos 600 MB al transcribir con el modelo Q5 recomendado. El consumo real varía. Whisper se carga para la primera reunión activa, se comparte entre reuniones simultáneas y se libera al finalizar la última.</p></details>
           <details><summary>¿Kuali avisa que está transcribiendo?</summary><p>En Discord, Kuali reproduce y publica el aviso de consentimiento al entrar, lo repite para quienes llegan después y conserva un registro cronológico.</p></details>
           <details><summary>¿Kuali es gratis?</summary><p>Sí. La aplicación de escritorio es de código abierto bajo MIT. La extensión interoperable se distribuye bajo Apache-2.0.</p></details>
         </div></div>

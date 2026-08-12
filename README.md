@@ -63,7 +63,7 @@ workflows on the official website.
 - Experimental browser capture for Microsoft Teams and Zoom, with partial
   support while their integrations are validated and improved.
 - Separate concurrent meetings without shared participants, clocks, or state.
-- Native Rust desktop core with about 20 MB of observed memory use while idle.
+- Native Rust desktop core with about 40 MB of observed memory use while idle.
 - On-demand Whisper lifecycle: one model is shared by active meetings and
   released from RAM after the final meeting ends.
 - Local Whisper inference with Metal acceleration and Silero voice detection.
@@ -149,7 +149,7 @@ separation may be incomplete in some meeting modes while support improves.
 
 | State | Whisper in RAM | Observed app memory |
 |---|---|---:|
-| Waiting for a meeting | No | About 20 MB |
+| Waiting for a meeting | No | About 40 MB |
 | Active meeting with the recommended Q5 model | Yes | Up to about 600 MB |
 | After the final active meeting ends | No | Returns toward the idle footprint |
 
