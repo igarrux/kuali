@@ -33,7 +33,7 @@ body:
     id: version
     attributes:
       label: Kuali and extension versions
-      placeholder: Desktop v0.1.10, extension v0.1.4
+      placeholder: Desktop v0.1.11, extension v0.1.4
     validations:
       required: true
   - type: input
