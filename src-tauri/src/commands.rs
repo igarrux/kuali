@@ -417,6 +417,11 @@ pub async fn download_model(engine: State<'_, Engine>, model: String) -> Result<
 }
 
 #[tauri::command]
+pub fn cancel_model_download(engine: State<'_, Engine>) -> bool {
+    engine.cancel_model_download()
+}
+
+#[tauri::command]
 pub async fn delete_model(engine: State<'_, Engine>, model: String) -> Result<u64, String> {
     let model: WhisperModel =
         serde_json::from_value(serde_json::Value::String(model)).map_err(fail)?;

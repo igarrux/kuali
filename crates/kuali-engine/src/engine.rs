@@ -17,6 +17,7 @@ use kuali_discord::{CallInfo, DiscordHandle, DiscordSummaryState, VoiceEvent};
 use kuali_stt::{i16_to_f32, Segment, Segmenter};
 use parking_lot::{Mutex, RwLock};
 use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
+use tokio::sync::watch;
 use tokio::sync::Mutex as AsyncMutex;
 use tokio::task::JoinSet;
 
@@ -50,6 +51,8 @@ pub enum EngineError {
     ModelStorage(String),
     #[error("that model cannot be deleted while Kuali is using it in a call")]
     ActiveModelDeletion,
+    #[error("model download cancelled")]
+    ModelDownloadCancelled,
     #[error(transparent)]
     Model(Box<kuali_stt::ModelError>),
     #[error("there is no meeting in progress")]
@@ -145,6 +148,9 @@ struct Inner {
     /// Prevents concurrent writes to one `.part` and coordinates relocation with
     /// any in-progress download.
     model_download: AsyncMutex<()>,
+    /// A generation change cancels the active download and every duplicate
+    /// request that was queued before the user pressed Cancel.
+    model_download_cancellation: watch::Sender<u64>,
     discord: AsyncMutex<Option<DiscordHandle>>,
 }
 
@@ -181,6 +187,7 @@ impl Engine {
         let (events, rx) = mpsc::unbounded_channel();
         let (discord_voice_tx, discord_voice_rx) = mpsc::unbounded_channel();
         let (web_voice_tx, web_voice_rx) = mpsc::unbounded_channel();
+        let (model_download_cancellation, _) = watch::channel(0);
 
         let inner = Arc::new(Inner {
             config: RwLock::new(config),
@@ -199,6 +206,7 @@ impl Engine {
             previews_in_flight: Mutex::new(HashSet::new()),
             closed_segments: Mutex::new(HashSet::new()),
             model_download: AsyncMutex::new(()),
+            model_download_cancellation,
             discord: AsyncMutex::new(None),
         });
 
@@ -217,6 +225,23 @@ impl Engine {
 
     pub fn model_state(&self) -> ModelState {
         self.inner.model_state.read().clone()
+    }
+
+    /// Requests cancellation without waiting for the network stream or the
+    /// download mutex. The active task performs safe partial-file cleanup.
+    pub fn cancel_model_download(&self) -> bool {
+        if !matches!(
+            *self.inner.model_state.read(),
+            ModelState::Downloading { .. }
+        ) {
+            return false;
+        }
+
+        let generation = *self.inner.model_download_cancellation.borrow();
+        self.inner
+            .model_download_cancellation
+            .send_replace(generation.wrapping_add(1));
+        true
     }
 
     /// `true` only after successfully binding the local port.
@@ -243,21 +268,7 @@ impl Engine {
     }
 
     fn refresh_model_state(&self) {
-        if !self.inner.active.lock().is_empty() {
-            *self.inner.model_state.write() = ModelState::Active;
-            return;
-        }
-        let whisper = self.inner.config.read().whisper.clone();
-        let model = whisper.model;
-        let models_dir = whisper.resolved_models_directory();
-        let state = if kuali_stt::is_downloaded(&models_dir, model)
-            && kuali_stt::is_vad_downloaded(&models_dir)
-        {
-            ModelState::Ready
-        } else {
-            ModelState::Absent
-        };
-        *self.inner.model_state.write() = state;
+        *self.inner.model_state.write() = resting_model_state(&self.inner);
     }
 
     /// Starts the voice loop on first use.
@@ -582,7 +593,9 @@ impl Engine {
         let inner = Arc::clone(&self.inner);
         tokio::spawn(async move {
             if let Err(error) = download_model(&inner, model).await {
-                tracing::warn!(%error, "failed to download the model automatically");
+                if !matches!(error, EngineError::ModelDownloadCancelled) {
+                    tracing::warn!(%error, "failed to download the model automatically");
+                }
             }
         });
     }
@@ -1728,7 +1741,12 @@ async fn verify_models_after_relocation(
 }
 
 async fn download_model(inner: &Arc<Inner>, model: WhisperModel) -> Result<(), EngineError> {
+    let mut cancellation = inner.model_download_cancellation.subscribe();
+    let generation = *cancellation.borrow();
     let _download_guard = inner.model_download.lock().await;
+    if *cancellation.borrow() != generation {
+        return Err(EngineError::ModelDownloadCancelled);
+    }
     let models_dir = inner.config.read().whisper.resolved_models_directory();
     let model_ready = kuali_stt::is_downloaded(&models_dir, model);
     let vad_ready = kuali_stt::is_vad_downloaded(&models_dir);
@@ -1744,6 +1762,7 @@ async fn download_model(inner: &Arc<Inner>, model: WhisperModel) -> Result<(), E
 
     if !model_ready {
         inner.set_model_state(ModelState::Downloading {
+            model,
             downloaded_bytes: 0,
             total_bytes: Some(model.approx_bytes()),
         });
@@ -1751,18 +1770,26 @@ async fn download_model(inner: &Arc<Inner>, model: WhisperModel) -> Result<(), E
         // Per-chunk progress would flood the UI, so emit every half percentage point.
         let mut last_emitted = 0u64;
         let step = model.approx_bytes() / 200;
-        let result = kuali_stt::ensure_downloaded(&models_dir, model, |downloaded, total| {
-            if downloaded.saturating_sub(last_emitted) >= step {
-                last_emitted = downloaded;
-                let _ = inner.events.send(KualiEvent::ModelStateChanged {
-                    state: ModelState::Downloading {
-                        downloaded_bytes: downloaded,
-                        total_bytes: total,
-                    },
-                });
-            }
-        })
-        .await;
+        let result = tokio::select! {
+            result = kuali_stt::ensure_downloaded(&models_dir, model, |downloaded, total| {
+                if downloaded.saturating_sub(last_emitted) >= step {
+                    last_emitted = downloaded;
+                    let _ = inner.events.send(KualiEvent::ModelStateChanged {
+                        state: ModelState::Downloading {
+                            model,
+                            downloaded_bytes: downloaded,
+                            total_bytes: total,
+                        },
+                    });
+                }
+            }) => Some(result),
+            _ = cancellation.changed() => None,
+        };
+        let Some(result) = result else {
+            cleanup_cancelled_download(&models_dir, model).await;
+            inner.set_model_state(resting_model_state(inner));
+            return Err(EngineError::ModelDownloadCancelled);
+        };
         if let Err(e) = result {
             let message = e.to_string();
             inner.set_model_state(ModelState::Failed {
@@ -1776,7 +1803,16 @@ async fn download_model(inner: &Arc<Inner>, model: WhisperModel) -> Result<(), E
     if !vad_ready {
         // Silero prevents noise from reaching Whisper. Never silently fall back
         // to RMS; report and retry a failed small download instead of decoding noise.
-        if let Err(error) = kuali_stt::ensure_vad_downloaded(&models_dir, |_, _| {}).await {
+        let result = tokio::select! {
+            result = kuali_stt::ensure_vad_downloaded(&models_dir, |_, _| {}) => Some(result),
+            _ = cancellation.changed() => None,
+        };
+        let Some(result) = result else {
+            cleanup_cancelled_download(&models_dir, model).await;
+            inner.set_model_state(resting_model_state(inner));
+            return Err(EngineError::ModelDownloadCancelled);
+        };
+        if let Err(error) = result {
             let message = error.to_string();
             inner.set_model_state(ModelState::Failed {
                 message: message.clone(),
@@ -1793,6 +1829,35 @@ async fn download_model(inner: &Arc<Inner>, model: WhisperModel) -> Result<(), E
     };
     inner.set_model_state(state);
     Ok(())
+}
+
+fn resting_model_state(inner: &Inner) -> ModelState {
+    if !inner.active.lock().is_empty() {
+        return ModelState::Active;
+    }
+    let whisper = inner.config.read().whisper.clone();
+    let model = whisper.model;
+    let models_dir = whisper.resolved_models_directory();
+    if kuali_stt::is_downloaded(&models_dir, model) && kuali_stt::is_vad_downloaded(&models_dir) {
+        ModelState::Ready
+    } else {
+        ModelState::Absent
+    }
+}
+
+async fn cleanup_cancelled_download(models_dir: &std::path::Path, model: WhisperModel) {
+    for path in [
+        kuali_stt::model::partial_path(models_dir, model),
+        kuali_stt::vad_model_path(models_dir).with_extension("part"),
+    ] {
+        match tokio::fs::remove_file(&path).await {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(%error, path = %path.display(), "failed to clean a cancelled model download")
+            }
+        }
+    }
 }
 
 /// Waits for a specific engine state. Test-only helper.
@@ -2062,6 +2127,47 @@ mod tests {
             engine.model_state(),
             ModelState::Absent | ModelState::Ready
         ));
+    }
+
+    #[tokio::test]
+    async fn cancellation_is_available_only_while_a_model_is_downloading() {
+        let root = std::env::temp_dir().join(format!(
+            "kuali-engine-model-cancel-{}",
+            uuid::Uuid::new_v4()
+        ));
+        let mut config = KualiConfig::default();
+        config.whisper.models_directory = Some(root.clone());
+        let (engine, _events) = Engine::new(config);
+        let mut cancellation = engine.inner.model_download_cancellation.subscribe();
+
+        assert!(!engine.cancel_model_download());
+        *engine.inner.model_state.write() = ModelState::Downloading {
+            model: WhisperModel::LargeV3,
+            downloaded_bytes: 49_000_000,
+            total_bytes: Some(3_095_033_483),
+        };
+
+        assert!(engine.cancel_model_download());
+        cancellation.changed().await.unwrap();
+        assert_eq!(*cancellation.borrow(), 1);
+
+        std::fs::create_dir_all(&root).unwrap();
+        std::fs::write(
+            kuali_stt::model::partial_path(&root, WhisperModel::LargeV3),
+            b"partial model",
+        )
+        .unwrap();
+        std::fs::write(
+            kuali_stt::vad_model_path(&root).with_extension("part"),
+            b"partial vad",
+        )
+        .unwrap();
+        cleanup_cancelled_download(&root, WhisperModel::LargeV3).await;
+        assert!(!kuali_stt::model::partial_path(&root, WhisperModel::LargeV3).exists());
+        assert!(!kuali_stt::vad_model_path(&root)
+            .with_extension("part")
+            .exists());
+        std::fs::remove_dir_all(&root).unwrap();
     }
 
     #[tokio::test]

@@ -120,6 +120,7 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   const main = readFileSync(new URL("../src-tauri/src/main.rs", import.meta.url), "utf8");
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
   const engine = readFileSync(
     new URL("../crates/kuali-engine/src/engine.rs", import.meta.url),
     "utf8",
@@ -138,8 +139,13 @@ test("a persistent model notice handles downloads and gates initial setup", () =
   assert.match(app, /La descarga continúa aunque cambies de sección dentro de Kuali/);
   assert.match(app, /if \(!model\?\.downloaded\) \{/);
   assert.match(app, /await invoke\("download_model", \{ model: model\.id \}\)/);
+  assert.match(app, /state\.modelState\.model/);
+  assert.match(app, /invoke\("cancel_model_download"\)/);
+  assert.match(app, /Tus modelos instalados siguen disponibles/);
   assert.equal((app.match(/localStorage\.setItem\("kuali\.onboarding\.completed"/g) ?? []).length, 1);
   assert.doesNotMatch(main, /download_configured_model_if_missing/);
+  assert.match(main, /commands::cancel_model_download/);
+  assert.match(commands, /pub fn cancel_model_download/);
   assert.match(engine, /if download_configured_model \{/);
   assert.doesNotMatch(JSON.stringify(tauriConfig.bundle.resources), /ggml-[^"]+\.bin/i);
 });

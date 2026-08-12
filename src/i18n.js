@@ -92,12 +92,25 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Descarga el modelo elegido antes de completar la configuración.":
     "Download the selected model before completing setup.",
   "Descargando…": "Downloading…",
+  "Descargando {model}": "Downloading {model}",
+  "Cancelar descarga": "Cancel download",
+  "Cancelando…": "Cancelling…",
+  "Descarga cancelada": "Download cancelled",
+  "{model} · {percentage}% · {downloaded} de {total}":
+    "{model} · {percentage}% · {downloaded} of {total}",
+  "{percentage}% · {downloaded} de {total}":
+    "{percentage}% · {downloaded} of {total}",
+  "{model} · {downloaded}": "{model} · {downloaded}",
   "Transcripción local": "Local transcription",
   "Descarga un modelo para transcribir": "Download a model to transcribe",
   "No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.":
     "No Whisper weights are downloaded. Choose one to enable local transcription.",
   "Kuali sigue capturando el audio de la llamada. Cuando termine la descarga, transcribirá todo lo pendiente; no se perderá nada.":
     "Kuali is still capturing the call audio. Once the download finishes, it will transcribe everything waiting; nothing will be lost.",
+  "Tus modelos instalados siguen disponibles. El nuevo peso se guarda por separado y puedes cancelar la descarga.":
+    "Your installed models remain available. The new weight is stored separately, and you can cancel the download.",
+  "La transcripción local estará disponible cuando termine. Puedes cancelar la descarga si elegiste el modelo equivocado.":
+    "Local transcription will be available when it finishes. You can cancel the download if you chose the wrong model.",
   "Necesitas al menos un modelo descargado para transcribir.":
     "You need at least one downloaded model to transcribe.",
   "La descarga continúa aunque cambies de sección dentro de Kuali.":

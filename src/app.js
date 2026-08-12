@@ -83,6 +83,7 @@ const state = {
   updateProgress: null,
   updateTimer: null,
   updateAutomaticAttempted: null,
+  modelDownloadCancelPending: false,
   /** IDs with an open speech turn, used by the speaking indicator. */
   talking: new Map(),
   /** Ephemeral drafts keyed by turn ID; never included in summaries. */
@@ -2013,6 +2014,19 @@ function hasDownloadedWhisperWeight() {
   return state.models.some((model) => model.downloaded);
 }
 
+function downloadingWhisperModel() {
+  if (state.modelState.state !== "downloading") return null;
+  return state.models.find((model) => model.id === state.modelState.model) ?? null;
+}
+
+function shortModelName(model) {
+  return model ? t(model.label).split(" — ")[0] : t("Modelo de transcripción");
+}
+
+function modelDownloadWasCancelled(error) {
+  return String(error).includes("model download cancelled");
+}
+
 function audioIsWaitingForWhisper() {
   return state.liveMeetings.size > 0
     || ["joining", "recording", "finalizing"].includes(state.status);
@@ -2028,16 +2042,52 @@ function renderRequiredModelProgress() {
   const downloaded = state.modelState.downloadedBytes;
   const percentage = total ? Math.round((downloaded / total) * 100) : 0;
   $("required-model-progress-bar").style.width = `${percentage}%`;
-  $("required-model-progress-text").textContent = `${percentage}% · ${humanBytes(downloaded)}`;
+  $("required-model-progress-text").textContent = total
+    ? t("{percentage}% · {downloaded} de {total}", {
+        percentage,
+        downloaded: humanBytes(downloaded),
+        total: humanBytes(total),
+      })
+    : humanBytes(downloaded);
 }
 
 function renderRequiredModelActivity() {
-  const selected = selectedRequiredModel();
+  const downloadModel = downloadingWhisperModel();
   const configured = state.config?.whisper?.model;
   const downloading = state.modelState.state === "downloading";
   const missingWeights = !hasDownloadedWhisperWeight();
+  if (downloadModel) $("required-model-select").value = downloadModel.id;
+  const selected = selectedRequiredModel();
   $("model-required").hidden = !missingWeights && !downloading;
   $("required-model-select").disabled = state.models.length === 0 || downloading;
+
+  $("model-required-title").textContent = downloading
+    ? t("Descargando {model}", { model: shortModelName(downloadModel) })
+    : t("Descarga un modelo para transcribir");
+  $("model-required-message").textContent = downloading
+    ? missingWeights
+      ? audioIsWaitingForWhisper()
+        ? t("Kuali sigue capturando el audio de la llamada. Cuando termine la descarga, transcribirá todo lo pendiente; no se perderá nada.")
+        : t("La transcripción local estará disponible cuando termine. Puedes cancelar la descarga si elegiste el modelo equivocado.")
+      : t("Tus modelos instalados siguen disponibles. El nuevo peso se guarda por separado y puedes cancelar la descarga.")
+    : audioIsWaitingForWhisper()
+      ? t("Kuali sigue capturando el audio de la llamada. Cuando termine la descarga, transcribirá todo lo pendiente; no se perderá nada.")
+      : t("No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.");
+
+  const describedModel = downloadModel ?? selected;
+  $("required-model-hint").textContent = describedModel?.downloaded
+    ? t("Ya está descargado en {directory}.", { directory: state.modelsDirectory })
+    : t("Se descargarán {size} en {directory}.", {
+        size: humanBytes(describedModel?.approxBytes ?? 0),
+        directory: state.modelsDirectory,
+      });
+  $("required-model-note").textContent = downloading
+    ? t("La descarga continúa aunque cambies de sección dentro de Kuali.")
+    : selected?.downloaded
+      ? t("Este modelo está listo. Ya puedes completar la configuración inicial.")
+      : state.modelState.state === "failed"
+        ? t("No se pudo completar la descarga. Puedes intentarlo nuevamente.")
+        : t("Necesitas al menos un modelo descargado para transcribir.");
 
   const stateBadge = $("model-required-state");
   stateBadge.className = "guide-state";
@@ -2056,15 +2106,21 @@ function renderRequiredModelActivity() {
 
   const button = $("btn-required-model");
   const selectedIsConfigured = selected?.id === configured;
-  button.disabled = !selected || downloading || (selected.downloaded && selectedIsConfigured);
+  button.className = downloading ? "ghost danger" : "primary";
+  button.disabled = downloading
+    ? state.modelDownloadCancelPending
+    : !selected || (selected.downloaded && selectedIsConfigured);
   button.textContent = downloading
-    ? t("Descargando…")
+    ? state.modelDownloadCancelPending
+      ? t("Cancelando…")
+      : t("Cancelar descarga")
     : selected?.downloaded
-      ? selectedIsConfigured
-        ? t("Modelo listo")
-        : t("Usar este modelo")
-      : t("Descargar · {size}", { size: humanBytes(selected?.approxBytes ?? 0) });
+        ? selectedIsConfigured
+          ? t("Modelo listo")
+          : t("Usar este modelo")
+        : t("Descargar · {size}", { size: humanBytes(selected?.approxBytes ?? 0) });
   renderRequiredModelProgress();
+  renderModelProgress();
 }
 
 function renderRequiredModelNotice(requestedModel = "") {
@@ -2074,7 +2130,8 @@ function renderRequiredModelNotice(requestedModel = "") {
   const configuredModel = state.models.find((model) => model.id === configured);
   const installedFallback = state.models.find((model) => model.downloaded);
   const recommended = state.models.find((model) => model.id === "large-v3-turbo-q5");
-  const chosen = requested
+  const chosen = downloadingWhisperModel()
+    ?? requested
     ?? (configuredModel?.downloaded ? configuredModel : null)
     ?? installedFallback
     ?? configuredModel
@@ -2093,25 +2150,6 @@ function renderRequiredModelNotice(requestedModel = "") {
     }),
   );
   if (chosen) select.value = chosen.id;
-
-  const selected = selectedRequiredModel();
-  $("model-required-message").textContent = audioIsWaitingForWhisper()
-    ? t("Kuali sigue capturando el audio de la llamada. Cuando termine la descarga, transcribirá todo lo pendiente; no se perderá nada.")
-    : t("No hay pesos de Whisper descargados. Elige uno para habilitar la transcripción local.");
-
-  $("required-model-hint").textContent = selected?.downloaded
-    ? t("Ya está descargado en {directory}.", { directory: state.modelsDirectory })
-    : t("Se descargarán {size} en {directory}.", {
-        size: humanBytes(selected?.approxBytes ?? 0),
-        directory: state.modelsDirectory,
-      });
-  $("required-model-note").textContent = selected?.downloaded
-    ? t("Este modelo está listo. Ya puedes completar la configuración inicial.")
-    : state.modelState.state === "downloading"
-      ? t("La descarga continúa aunque cambies de sección dentro de Kuali.")
-      : state.modelState.state === "failed"
-        ? t("No se pudo completar la descarga. Puedes intentarlo nuevamente.")
-      : t("Necesitas al menos un modelo descargado para transcribir.");
 
   const finish = $("btn-finish-guide");
   finish.textContent = initialSetupCompleted()
@@ -2139,12 +2177,12 @@ async function downloadRequiredModel() {
   button.disabled = true;
   try {
     const config = structuredClone(state.config);
-    config.whisper.model = model.id;
-    await invoke("set_config", { config });
-    state.config = config;
     // Calling this even for an existing weight also ensures that the small
     // Silero VAD model is present before setup is considered complete.
     await invoke("download_model", { model: model.id });
+    config.whisper.model = model.id;
+    await invoke("set_config", { config });
+    state.config = config;
     await refreshRequiredModelNotice(model.id);
     const snapshot = await invoke("get_snapshot");
     state.modelState = snapshot.modelState;
@@ -2152,8 +2190,29 @@ async function downloadRequiredModel() {
     renderStatus();
     toast(t("Modelo descargado"), "Whisper");
   } catch (error) {
-    toast(String(error), "Whisper", true);
+    if (!modelDownloadWasCancelled(error)) toast(String(error), "Whisper", true);
     renderRequiredModelNotice(model.id);
+  }
+}
+
+async function cancelModelDownload() {
+  if (state.modelState.state !== "downloading" || state.modelDownloadCancelPending) return;
+  state.modelDownloadCancelPending = true;
+  renderRequiredModelActivity();
+  try {
+    const cancelled = await invoke("cancel_model_download");
+    if (cancelled) {
+      toast(t("Descarga cancelada"), "Whisper");
+    } else {
+      state.modelDownloadCancelPending = false;
+      const snapshot = await invoke("get_snapshot");
+      state.modelState = snapshot.modelState;
+      renderRequiredModelActivity();
+    }
+  } catch (error) {
+    state.modelDownloadCancelPending = false;
+    renderRequiredModelActivity();
+    toast(String(error), "Whisper", true);
   }
 }
 
@@ -2445,6 +2504,7 @@ function handleEvent(event) {
 
     case "modelStateChanged":
       state.modelState = event.state;
+      if (event.state.state !== "downloading") state.modelDownloadCancelPending = false;
       renderModelProgress();
       renderRequiredModelActivity();
       if (!["downloading", "verifying"].includes(event.state.state)) {
@@ -3275,7 +3335,16 @@ function updateModelHint() {
     : t("Sin descargar. Ocupa {size}; se guardará fuera del ejecutable.", {
         size: humanBytes(chosen.approxBytes),
       });
-  $("btn-download").hidden = chosen.downloaded;
+  const downloading = state.modelState.state === "downloading";
+  const button = $("btn-download");
+  button.hidden = !downloading && chosen.downloaded;
+  button.disabled = downloading && state.modelDownloadCancelPending;
+  button.classList.toggle("danger", downloading);
+  button.textContent = downloading
+    ? state.modelDownloadCancelPending
+      ? t("Cancelando…")
+      : t("Cancelar descarga")
+    : t("Descargar el modelo seleccionado");
 }
 
 function renderInstalledModels() {
@@ -3376,12 +3445,29 @@ function renderModelProgress() {
   const row = $("download-row");
   if (s.state !== "downloading") {
     row.hidden = true;
+    $("cfg-model").disabled = false;
+    updateModelHint();
     return;
   }
   row.hidden = false;
+  const downloadModel = downloadingWhisperModel();
+  if (downloadModel) $("cfg-model").value = downloadModel.id;
+  $("cfg-model").disabled = true;
   const pct = s.totalBytes ? Math.round((s.downloadedBytes / s.totalBytes) * 100) : 0;
+  const modelName = shortModelName(downloadModel);
   $("progress-bar").style.width = `${pct}%`;
-  $("progress-text").textContent = `${pct}% · ${humanBytes(s.downloadedBytes)}`;
+  $("progress-text").textContent = s.totalBytes
+    ? t("{model} · {percentage}% · {downloaded} de {total}", {
+        model: modelName,
+        percentage: pct,
+        downloaded: humanBytes(s.downloadedBytes),
+        total: humanBytes(s.totalBytes),
+      })
+    : t("{model} · {downloaded}", {
+        model: modelName,
+        downloaded: humanBytes(s.downloadedBytes),
+      });
+  updateModelHint();
 }
 
 async function saveSettings() {
@@ -3773,7 +3859,10 @@ function wireUp() {
   $("btn-finish-guide").addEventListener("click", finishInitialSetup);
   $("required-model-select").addEventListener("change", (event) =>
     renderRequiredModelNotice(event.currentTarget.value));
-  $("btn-required-model").addEventListener("click", downloadRequiredModel);
+  $("btn-required-model").addEventListener("click", () =>
+    state.modelState.state === "downloading"
+      ? cancelModelDownload()
+      : downloadRequiredModel());
   $("btn-discord-guide-back").addEventListener("click", () =>
     setDiscordGuideStep(state.discordGuideStep - 1));
   $("btn-discord-guide-next").addEventListener("click", advanceDiscordGuide);
@@ -3972,21 +4061,28 @@ function wireUp() {
   });
 
   $("btn-download").addEventListener("click", async () => {
+    if (state.modelState.state === "downloading") {
+      await cancelModelDownload();
+      return;
+    }
     const model = $("cfg-model").value;
     if ($("cfg-vocabulary-input").value.trim()) addCustomVocabulary();
     $("btn-download").disabled = true;
     try {
       // Download into the directory shown in the form even if the user selected
       // it moments ago and has not saved Settings yet.
-      const c = structuredClone(state.config);
-      c.whisper.model = model;
-      c.whisper["models-directory"] = $("cfg-models-directory").value.trim() || null;
-      c.whisper.language = $("cfg-language").value;
-      c.whisper["custom-vocabulary"] = [...state.customVocabulary];
-      await invoke("set_config", { config: c });
-      state.config = c;
+      const storageConfig = structuredClone(state.config);
+      storageConfig.whisper["models-directory"] = $("cfg-models-directory").value.trim() || null;
+      storageConfig.whisper.language = $("cfg-language").value;
+      storageConfig.whisper["custom-vocabulary"] = [...state.customVocabulary];
+      await invoke("set_config", { config: storageConfig });
+      state.config = storageConfig;
       state.modelsDirectory = await invoke("resolved_models_directory");
       await invoke("download_model", { model });
+      const selectedConfig = structuredClone(storageConfig);
+      selectedConfig.whisper.model = model;
+      await invoke("set_config", { config: selectedConfig });
+      state.config = selectedConfig;
       state.models = await invoke("whisper_models");
       renderRequiredModelNotice(model);
       renderWhisperModelOptions(model);
@@ -3994,9 +4090,10 @@ function wireUp() {
       renderInstalledModels();
       toast(t("Modelo descargado"), "Whisper");
     } catch (e) {
-      toast(String(e), "whisper", true);
+      if (!modelDownloadWasCancelled(e)) toast(String(e), "whisper", true);
     } finally {
-      $("btn-download").disabled = false;
+      updateModelHint();
+      renderModelProgress();
     }
   });
 
@@ -4139,7 +4236,9 @@ async function resumeConfiguredModelAfterSetup() {
       renderStatus();
       renderRequiredModelNotice(state.config.whisper.model);
     })
-    .catch((error) => toast(String(error), "Whisper", true));
+    .catch((error) => {
+      if (!modelDownloadWasCancelled(error)) toast(String(error), "Whisper", true);
+    });
 }
 
 async function boot() {

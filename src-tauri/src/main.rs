@@ -268,6 +268,7 @@ fn main() {
             commands::resolved_models_directory,
             commands::choose_models_directory,
             commands::download_model,
+            commands::cancel_model_download,
             commands::delete_model,
             commands::reveal_data_dir,
             commands::browser_extension_path,

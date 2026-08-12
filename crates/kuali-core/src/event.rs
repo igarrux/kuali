@@ -3,6 +3,7 @@
 
 use serde::{Deserialize, Serialize};
 
+use crate::config::WhisperModel;
 use crate::meeting::{DiscordUserId, MeetingMeta, MeetingSummary, Speaker, Utterance};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -32,6 +33,8 @@ pub enum ModelState {
     /// Weights are not yet present on disk.
     Absent,
     Downloading {
+        /// Exact weight being transferred, so every interface can identify it.
+        model: WhisperModel,
         downloaded_bytes: u64,
         total_bytes: Option<u64>,
     },
@@ -144,5 +147,20 @@ mod tests {
         let json = serde_json::to_value(event).unwrap();
         assert_eq!(json["type"], "discordFollowChanged");
         assert_eq!(json["userId"], "543321203243483137");
+    }
+
+    #[test]
+    fn model_download_progress_identifies_the_exact_weight() {
+        let state = ModelState::Downloading {
+            model: WhisperModel::LargeV3,
+            downloaded_bytes: 49_000_000,
+            total_bytes: Some(3_095_033_483),
+        };
+        let json = serde_json::to_value(state).unwrap();
+
+        assert_eq!(json["state"], "downloading");
+        assert_eq!(json["model"], "large-v3");
+        assert_eq!(json["downloadedBytes"], 49_000_000u64);
+        assert_eq!(json["totalBytes"], 3_095_033_483u64);
     }
 }
