@@ -2532,6 +2532,10 @@ mod tests {
     #[tokio::test]
     async fn ending_one_session_keeps_the_other_recording_and_the_model_active() {
         let (engine, _events) = Engine::new(KualiConfig::default());
+        engine
+            .inner
+            .discord_connected
+            .store(true, Ordering::Release);
         let discord = session(VoiceSource::Discord, 11);
         let web = session(VoiceSource::Web, 22);
         let discord_id = format!("parallel-discord-{}", uuid::Uuid::new_v4());
@@ -2553,7 +2557,10 @@ mod tests {
 
         finish_meeting(&engine.inner, discord).await;
         assert!(engine.current_meetings().is_empty());
-        assert_eq!(engine.status(), EngineStatus::Watching);
+        assert!(
+            wait_for_status(&engine, EngineStatus::Watching, Duration::from_secs(1)).await,
+            "the engine should return to watching after completion work"
+        );
 
         kuali_store::delete(&web_id).unwrap();
         kuali_store::delete(&discord_id).unwrap();
@@ -2623,6 +2630,10 @@ mod tests {
     #[tokio::test]
     async fn leaving_a_call_finishes_it_without_disconnect_from_discord() {
         let (engine, _rx) = Engine::new(KualiConfig::default());
+        engine
+            .inner
+            .discord_connected
+            .store(true, Ordering::Release);
         let id = format!("leave-call-{}", uuid::Uuid::new_v4());
         engine
             .inner
@@ -2633,7 +2644,10 @@ mod tests {
         engine.leave_call().await.unwrap();
 
         assert!(engine.current_meeting().is_none());
-        assert_eq!(engine.status(), EngineStatus::Watching);
+        assert!(
+            wait_for_status(&engine, EngineStatus::Watching, Duration::from_secs(1)).await,
+            "leaving voice should wait for completion work before watching"
+        );
         assert!(kuali_store::load(&id).unwrap().meta.ended_at.is_some());
         kuali_store::delete(&id).unwrap();
     }
