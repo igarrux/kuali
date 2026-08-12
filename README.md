@@ -38,12 +38,29 @@ an audio recording and never sent to a Kuali-operated service.
 
 ## Why Kuali
 
-Kuali does not begin with one mixed system-audio recording. Its Discord and
-Google Meet integrations preserve platform participant identity and separate
-audio whenever the platform exposes it, keeping names, avatars, transcript
-segments, and tasks attached to the right person. The desktop app then adds a
-live transcript, local search, optional structured insights, polished Discord
-delivery, and signed Standard Webhooks without requiring a Kuali cloud account.
+Kuali is built around participants, not around one mixed system-audio file:
+
+- **Speaker identity exists before transcription.** Discord supplies a stream
+  and stable identity per user, while the Meet integration transports
+  participant context with live audio. Kuali does not need to guess afterward
+  with post-recording diarization.
+- **Discord and Google Meet each have a three-step interactive setup.** The
+  bilingual guide shows the real controls, saves progress, and does not assume
+  prior experience with bots, OAuth, or configuration files.
+- **Your existing AI setup can generate the insights.** Kuali can reuse an
+  authenticated Claude Code, Codex, or Gemini CLI session. It also supports
+  Anthropic, OpenAI, and Gemini API keys plus OpenAI-compatible endpoints such
+  as Ollama and LM Studio.
+- **Results return to Discord as an interface, not a text wall.** One card is
+  updated in place with tasks and private, paginated views for the summary, key
+  points, decisions, open questions, and full transcript. Complete text files
+  remain downloadable.
+- **Automatic Discord following makes capture hard to forget.** Kuali can join
+  after the configured user, can be paused without losing the configuration,
+  and still accepts manual `/record` or `/grabar` invitations.
+- **The onboarding is meant for anyone who can install an app.** Model
+  selection, integrations, consent, live status, and later edits all have
+  guided UI instead of requiring hand-written configuration.
 
 The native desktop core is written in Rust. The Discord bot and gateway run
 from your Mac, while browser meetings use a loopback connection to the same
@@ -59,7 +76,14 @@ workflows on the official website.
 
 ## Features
 
-- Live, speaker-attributed transcription for Discord and Google Meet.
+- Live transcription with participant identity established before decoding,
+  without post-recording diarization for Discord and supported Meet capture.
+- Three-step interactive setup for both Discord and Google Meet.
+- Optional insights through Claude Code, Codex, Gemini CLI, direct API keys, or
+  OpenAI-compatible providers.
+- Interactive Discord delivery with summaries, key points, decisions,
+  questions, tasks, paginated transcripts, and complete downloads.
+- Automatic Discord following with an immediate pause control.
 - Experimental browser capture for Microsoft Teams and Zoom, with partial
   support while their integrations are validated and improved.
 - Separate concurrent meetings without shared participants, clocks, or state.

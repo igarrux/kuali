@@ -39,12 +39,31 @@ de audio ni la envía a un servicio operado por el proyecto.
 
 ## Por qué Kuali
 
-Kuali no comienza con una sola grabación mezclada del sistema. Sus integraciones
-con Discord y Google Meet conservan la identidad de la plataforma y el audio
-separado cuando está disponible, manteniendo nombres, avatares, fragmentos y
-tareas unidos a la persona correcta. La app añade transcripción en vivo,
-búsqueda local, resultados estructurados opcionales, entrega cuidada en Discord
-y Standard Webhooks firmados sin exigir una cuenta en la nube de Kuali.
+Kuali está construido alrededor de los participantes, no de un único archivo
+con todo el audio mezclado:
+
+- **La identidad existe antes de transcribir.** Discord entrega una pista y una
+  identidad estable por usuario, mientras que la integración de Meet transporta
+  el contexto del participante junto al audio. Kuali no tiene que adivinar
+  después mediante diarización sobre una grabación.
+- **Discord y Google Meet tienen una configuración interactiva de tres pasos.**
+  La guía bilingüe muestra los controles reales, guarda el progreso y no supone
+  experiencia previa con bots, OAuth ni archivos de configuración.
+- **La IA que ya usas puede generar los resultados.** Kuali reutiliza sesiones
+  autenticadas de Claude Code, Codex o Gemini CLI. También admite claves de
+  Anthropic, OpenAI y Gemini, además de endpoints compatibles con OpenAI como
+  Ollama y LM Studio.
+- **Los resultados vuelven a Discord como una interfaz, no como una pared de
+  texto.** Una sola tarjeta se actualiza con tareas y vistas privadas paginadas
+  para resumen, puntos clave, decisiones, preguntas y transcripción completa.
+  Los archivos íntegros siguen disponibles para descargar.
+- **El seguimiento automático hace difícil olvidar una llamada.** Kuali puede
+  entrar después del usuario configurado, pausarse sin perder la configuración
+  y también aceptar invitaciones manuales con `/grabar` o `/record`.
+- **La configuración está pensada para cualquiera que pueda instalar una app.**
+  La elección del modelo, las integraciones, el consentimiento, el estado en
+  vivo y los cambios posteriores tienen UI guiada, sin configuración escrita a
+  mano.
 
 El núcleo nativo de escritorio está escrito en Rust. El bot y el gateway de
 Discord corren desde tu Mac, mientras que las reuniones del navegador usan una
@@ -61,7 +80,14 @@ en el sitio oficial.
 
 ## Funciones
 
-- Transcripción en vivo por hablante para Discord y Google Meet.
+- Transcripción en vivo con identidad establecida antes de decodificar, sin
+  diarización posterior para Discord y la captura compatible de Meet.
+- Configuración interactiva en tres pasos para Discord y Google Meet.
+- Resultados opcionales mediante Claude Code, Codex, Gemini CLI, claves API o
+  proveedores compatibles con OpenAI.
+- Entrega interactiva en Discord con resumen, puntos clave, decisiones,
+  preguntas, tareas, transcripción paginada y descargas completas.
+- Seguimiento automático en Discord con un control inmediato para pausarlo.
 - Captura experimental para Microsoft Teams y Zoom, con soporte parcial mientras
   se validan y mejoran sus integraciones.
 - Varias reuniones simultáneas con participantes, relojes y estado independientes.
