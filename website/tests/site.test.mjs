@@ -189,6 +189,25 @@ test("landing pages substantiate the native runtime and measured resource use", 
   assert.match(spanish, /Gratis y open source/);
 });
 
+test("landing pages lead with Kuali's distinctive meeting workflow", () => {
+  const english = read("index.html");
+  const spanish = read("es/index.html");
+
+  assert.match(english, /Voices are separated at the source/);
+  assert.match(english, /NO DIARIZATION/);
+  assert.match(english, /Interactive, bilingual guides connect Discord or Google Meet in three steps/);
+  assert.match(english, /Claude Code, Codex, or Gemini CLI/);
+  assert.match(english, /It can follow you on Discord/);
+  assert.match(english, /summary, key points, decisions, open questions, and paginated full transcript/);
+
+  assert.match(spanish, /Las voces se separan desde el origen/);
+  assert.match(spanish, /SIN DIARIZACIÓN/);
+  assert.match(spanish, /guías interactivas y bilingües conectan Discord o Google Meet en tres pasos/i);
+  assert.match(spanish, /Claude Code, Codex o Gemini CLI/);
+  assert.match(spanish, /Puede seguirte en Discord/);
+  assert.match(spanish, /resumen, puntos clave, decisiones, preguntas y la transcripción completa paginada/);
+});
+
 test("download actions lead to installation while the secondary action opens GitHub", () => {
   const english = read("index.html");
   const spanish = read("es/index.html");
@@ -241,6 +260,17 @@ test("Discord setup is a three-step token-driven authorization flow", () => {
     assert.match(section, automaticCopy);
     assert.match(section, /applications\.commands/);
     assert.doesNotMatch(section, oldCopy);
+  }
+});
+
+test("browser setup is a three-step store installation flow", () => {
+  for (const page of ["guides/index.html", "es/guides/index.html"]) {
+    const section = read(page).match(/<section class="guide-section" id="(?:browser|navegador)"[\s\S]*?<\/section>/)?.[0];
+    assert.ok(section, `${page} is missing the browser guide`);
+    assert.equal((section.match(/<article class="guide-step">/g) ?? []).length, 3);
+    assert.match(section, /Chrome Web Store/);
+    assert.match(section, /(?:pin|fija)/i);
+    assert.match(section, /9099/);
   }
 });
 

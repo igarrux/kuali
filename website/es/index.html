@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Kuali — Transcripción local para Discord y Google Meet</title>
-    <meta name="description" content="Kuali es una app gratis y open source escrita en Rust que transcribe Discord y Google Meet localmente y conserva la identidad de cada participante.">
+    <meta name="description" content="Kuali separa a quienes hablan en Discord y Google Meet antes de transcribir localmente y crea notas usando tus herramientas de IA. Gratis y open source.">
     <meta name="author" content="Jhon Guerrero">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
@@ -40,19 +40,21 @@
         "@type": "SoftwareApplication",
         "name": "Kuali",
         "url": "https://kuali.garrux.dev/es/",
-        "description": "Transcripción de reuniones gratis y open source, escrita en Rust para Discord y Google Meet, con procesamiento local y atribución en vivo.",
+        "description": "Transcripción gratis y open source que separa participantes de Discord y Google Meet antes del procesamiento local y reutiliza tus herramientas de IA.",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "macOS",
         "softwareVersion": "0.1.12",
         "screenshot": "https://kuali.garrux.dev/assets/kuali-app.es.png",
         "featureList": [
-          "Transcripción en vivo por hablante",
+          "Separación de voces antes de transcribir, sin diarización posterior",
           "Núcleo de escritorio nativo escrito en Rust",
           "Modelo Whisper cargado solo durante reuniones activas",
           "Procesamiento local mediante Whisper y Silero",
           "Integraciones con Discord y Google Meet",
           "Biblioteca de reuniones con búsqueda",
-          "Resúmenes y tareas opcionales por participante",
+          "Configuración interactiva en tres pasos para Discord y Google Meet",
+          "Resúmenes opcionales mediante Claude Code, Codex, Gemini CLI, proveedores API o endpoints compatibles con OpenAI",
+          "Resúmenes, puntos clave, decisiones, preguntas, tareas y transcripciones interactivas dentro de Discord",
           "Standard Webhooks firmados"
         ],
         "license": "https://github.com/igarrux/kuali/blob/main/LICENSE",
@@ -133,7 +135,7 @@
             <h1>Tus reuniones se convierten en <span class="text-gradient">memoria útil.</span></h1>
             <p class="hero-lead">Kuali se conecta a Discord y Google Meet, transcribe en vivo a cada participante dentro de tu computadora y convierte el resultado en decisiones y tareas fáciles de buscar.</p>
             <div class="hero-actions"><a class="button button-primary" href="https://kuali.garrux.dev/es/guides/#instalar">Descargar para macOS <span aria-hidden="true">↓</span></a><a class="button" href="https://github.com/igarrux/kuali">Ver en GitHub <span aria-hidden="true">↗</span></a></div>
-            <div class="hero-note" role="list" aria-label="Ventajas principales"><span role="listitem">Escrito en Rust</span><span role="listitem">Cerca de 40 MB en espera</span><span role="listitem">Gratis y open source</span></div>
+            <div class="hero-note" role="list" aria-label="Ventajas principales"><span role="listitem">Voces separadas antes de transcribir</span><span role="listitem">Configuración guiada en tres pasos</span><span role="listitem">Funciona con tu IA actual</span></div>
           </div>
 
           <div class="hero-visual" data-reveal>
@@ -168,22 +170,22 @@
 
       <section class="section" id="funciones">
         <div class="container">
-          <span class="eyebrow" data-reveal>Lo que Kuali cambia</span>
-          <h2 data-reveal>Descubre quién dijo qué.<br>Mientras aún está ocurriendo.</h2>
-          <p class="section-copy" data-reveal>Kuali no es un bloque de texto que aparece al terminar. Mantiene conectados al hablante, el contexto, las decisiones y sus responsables desde la primera palabra.</p>
+          <span class="eyebrow" data-reveal>Por qué Kuali es diferente</span>
+          <h2 data-reveal>Construido alrededor de cada persona.<br>No de una grabación mezclada.</h2>
+          <p class="section-copy" data-reveal>Kuali conserva la identidad antes de que Whisper reciba el audio, guía a cualquier persona durante la configuración y devuelve resultados útiles a las herramientas que ya usa.</p>
           <div class="bento">
-            <article class="feature-card wide" data-reveal><span class="feature-stat">EN VIVO</span><span class="feature-icon" aria-hidden="true">01</span><h3>Transcripción en vivo por hablante</h3><p>Mira cómo crece la transcripción durante la reunión. Cada intervención permanece asociada al participante expuesto por la plataforma.</p></article>
-            <article class="feature-card violet" data-reveal><span class="feature-icon" aria-hidden="true">02</span><h3>Biblioteca fácil de buscar</h3><p>Busca una frase, canal, participante o fecha y vuelve directamente al contexto exacto.</p></article>
-            <article class="feature-card" data-reveal><span class="feature-icon" aria-hidden="true">03</span><h3>Whisper + Silero, localmente</h3><p>Whisper transcribe. Silero evita que el teclado, los golpes y el ruido de fondo lleguen al decodificador.</p></article>
-            <article class="feature-card wide violet" data-reveal><span class="feature-stat">OPCIONAL</span><span class="feature-icon" aria-hidden="true">04</span><h3>Decisiones y tareas con responsables</h3><p>Cuando lo activas, el LLM elegido extrae puntos clave, preguntas, decisiones y tareas por participante. Al apagarlo, ninguna transcripción se envía a un LLM.</p></article>
-            <article class="feature-card" data-reveal><span class="feature-icon" aria-hidden="true">05</span><h3>Reuniones simultáneas</h3><p>Graba varias llamadas separadas sin mezclar participantes, tiempos ni transcripciones.</p></article>
-            <article class="feature-card" data-reveal><span class="feature-icon" aria-hidden="true">06</span><h3>Standard Webhooks al terminar</h3><p>Permite que otras herramientas reciban eventos firmados y verificables con la reunión completa y sus resultados.</p></article>
+            <article class="feature-card wide" data-reveal><span class="feature-stat">SIN DIARIZACIÓN</span><span class="feature-icon" aria-hidden="true">01</span><h3>Las voces se separan desde el origen</h3><p>Discord y Google Meet entregan contexto del participante junto al audio en vivo. Kuali conserva ID, nombres, avatares y palabras unidos antes de transcribir, en lugar de adivinar hablantes después desde una grabación mezclada.</p></article>
+            <article class="feature-card violet" data-reveal><span class="feature-stat">3 PASOS</span><span class="feature-icon" aria-hidden="true">02</span><h3>Una configuración que se explica sola</h3><p>Las guías interactivas y bilingües conectan Discord o Google Meet en tres pasos, con capturas reales y guardando la configuración mientras avanzas.</p></article>
+            <article class="feature-card wide violet" data-reveal><span class="feature-stat">CLI O API</span><span class="feature-icon" aria-hidden="true">03</span><h3>Usa la IA que ya configuraste</h3><p>Reutiliza una sesión autenticada de Claude Code, Codex o Gemini CLI para los resúmenes. Si prefieres una API, Kuali también admite Anthropic, OpenAI, Gemini y proveedores compatibles como Ollama o LM Studio.</p></article>
+            <article class="feature-card" data-reveal><span class="feature-stat">AUTOMÁTICO</span><span class="feature-icon" aria-hidden="true">04</span><h3>Puede seguirte en Discord</h3><p>Entra a un canal configurado y Kuali puede unirse automáticamente después de ti. Pausa el seguimiento cuando quieras o invítalo manualmente.</p></article>
+            <article class="feature-card wide" data-reveal><span class="feature-stat">DENTRO DE DISCORD</span><span class="feature-icon" aria-hidden="true">05</span><h3>El resultado vuelve a la conversación</h3><p>Kuali actualiza una tarjeta cuidada con tareas y botones privados para ver resumen, puntos clave, decisiones, preguntas y la transcripción completa paginada. También puedes descargar los archivos de texto completos.</p></article>
+            <article class="feature-card violet" data-reveal><span class="feature-icon" aria-hidden="true">06</span><h3>Cada reunión se puede buscar</h3><p>Encuentra una frase, canal, participante o fecha y vuelve a su contexto exacto, decisiones y tareas asignadas.</p></article>
           </div>
         </div>
       </section>
 
       <section class="section section-compact">
-        <div class="container"><span class="eyebrow" data-reveal>Un flujo más tranquilo</span><h2 data-reveal>Entra. Habla. Encuéntralo después.</h2><div class="steps"><article class="step-card" data-reveal><h3>Conecta una vez</h3><p>Configura el bot de Discord o carga la extensión incluida usando la guía paso a paso.</p></article><article class="step-card" data-reveal><h3>Mira la conversación en vivo</h3><p>Kuali separa participantes, filtra el audio que no es voz y transcribe continuamente.</p></article><article class="step-card" data-reveal><h3>Sal con algo útil</h3><p>Busca en el texto completo o revisa decisiones, preguntas y tareas opcionales.</p></article></div></div>
+        <div class="container"><span class="eyebrow" data-reveal>Un flujo más tranquilo</span><h2 data-reveal>Entra. Habla. Encuéntralo después.</h2><div class="steps"><article class="step-card" data-reveal><h3>Conecta en tres pasos guiados</h3><p>Elige Discord o Google Meet y sigue la guía interactiva. No necesitas editar archivos ni tener experiencia creando bots.</p></article><article class="step-card" data-reveal><h3>Entra como siempre</h3><p>Kuali puede seguirte en Discord o sugerir grabar al comenzar Meet, y muestra en vivo a cada participante.</p></article><article class="step-card" data-reveal><h3>Recibe lo importante</h3><p>Busca todo localmente o abre resumen, decisiones, preguntas, tareas y transcripción completa desde Discord.</p></article></div></div>
       </section>
 
       <section class="section section-glow" id="privacidad">
@@ -211,7 +213,7 @@
       </section>
 
       <section class="section section-compact">
-        <div class="container"><span class="eyebrow" data-reveal>Empieza sin adivinar</span><h2 data-reveal>Guías que muestran los botones reales.</h2><p class="section-copy" data-reveal>Desde instalar Kuali hasta crear el bot de Discord y cargar la extensión, cada paso está escrito para alguien que lo hace por primera vez.</p><div class="guide-preview-grid"><a class="guide-preview" href="./guides/#discord" data-reveal><span class="guide-preview-tag">3 pasos · 3 imágenes</span><span class="arrow" aria-hidden="true">↗</span><h3>Conectar Discord</h3><p>Crea el bot, pega su token y deja que Kuali prepare automáticamente la autorización del servidor.</p></a><a class="guide-preview" href="./guides/#navegador" data-reveal><span class="guide-preview-tag">5 pasos · navegadores Chromium</span><span class="arrow" aria-hidden="true">↗</span><h3>Conectar reuniones del navegador</h3><p>Usa el soporte estable de Google Meet o prueba las integraciones experimentales y parciales de Teams y Zoom.</p></a></div></div>
+        <div class="container"><span class="eyebrow" data-reveal>Empieza sin adivinar</span><h2 data-reveal>Guías que muestran los botones reales.</h2><p class="section-copy" data-reveal>Desde instalar Kuali hasta crear el bot de Discord y cargar la extensión, cada paso está escrito para alguien que lo hace por primera vez.</p><div class="guide-preview-grid"><a class="guide-preview" href="./guides/#discord" data-reveal><span class="guide-preview-tag">3 pasos · 3 imágenes</span><span class="arrow" aria-hidden="true">↗</span><h3>Conectar Discord</h3><p>Crea el bot, pega su token y deja que Kuali prepare automáticamente la autorización del servidor.</p></a><a class="guide-preview" href="./guides/#navegador" data-reveal><span class="guide-preview-tag">3 pasos · navegadores Chromium</span><span class="arrow" aria-hidden="true">↗</span><h3>Conectar reuniones del navegador</h3><p>Instala Kuali, fija su icono y comprueba la conexión local. Google Meet es estable; Teams y Zoom siguen experimentales.</p></a></div></div>
       </section>
 
       <section class="section" id="instalar">
