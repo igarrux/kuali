@@ -208,6 +208,9 @@ test("landing pages lead with Kuali's distinctive meeting workflow", () => {
   assert.match(spanish, /Claude Code, Codex o Gemini CLI/);
   assert.match(spanish, /Puede seguirte en Discord/);
   assert.match(spanish, /resumen, puntos clave, decisiones, preguntas y la transcripción completa paginada/);
+
+  assert.ok(english.indexOf("Deliberately simple setup") < english.indexOf('id="runtime"'));
+  assert.ok(spanish.indexOf("Configuración extremadamente simple") < spanish.indexOf('id="rendimiento"'));
 });
 
 test("download actions lead to installation while the secondary action opens GitHub", () => {
