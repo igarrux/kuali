@@ -1,0 +1,26 @@
+# Kuali
+
+> Kuali is an open-source, local-first meeting transcription application for Discord and Google Meet. It preserves participant identity, transcribes live with Whisper and Silero on the user's computer, stores searchable meeting records locally, and can optionally generate summaries, tasks, and signed Standard Webhooks.
+
+## Product
+
+- [Official website](https://kuali.garrux.dev/): English product overview, privacy boundary, features, and download.
+- [Sitio oficial en español](https://kuali.garrux.dev/es/): Descripción del producto, privacidad, funciones y descarga.
+- [Discord meeting transcription](https://kuali.garrux.dev/discord-meeting-transcription/): Native participant identity, consent notices, live transcription, and Discord delivery.
+- [Google Meet transcription](https://kuali.garrux.dev/google-meet-transcription/): Browser capture, participant context, local processing, and meeting lifecycle.
+
+## Documentation and source
+
+- [Setup guide](https://kuali.garrux.dev/guides/): macOS installation, Whisper models, Discord, browser meetings, and Standard Webhooks.
+- [GitHub repository](https://github.com/igarrux/kuali): Source code, releases, issues, and contribution documentation.
+- [Privacy policy](https://github.com/igarrux/kuali/blob/main/PRIVACY.md): Data processing, storage, optional destinations, and deletion.
+- [Contributing](https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md): Development environment, architecture, testing, and pull request expectations.
+
+## Key facts
+
+- Discord and Google Meet are stable integrations.
+- Microsoft Teams and Zoom are experimental with partial support.
+- Raw meeting audio is processed in memory and is not retained as an audio recording.
+- Whisper transcription and Silero voice detection run locally.
+- Summaries, tasks, Discord delivery, and webhooks are optional and user-configured.
+- The desktop workspace is MIT licensed; the browser extension is Apache-2.0 licensed.

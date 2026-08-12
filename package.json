@@ -1,0 +1,15 @@
+{
+  "name": "kuali-project-tools",
+  "private": true,
+  "scripts": {
+    "test:website": "node --test website/tests/site.test.mjs",
+    "check:website": "npm run test:website && wrangler deploy --dry-run",
+    "deploy:website": "npm run test:website && wrangler deploy"
+  },
+  "devDependencies": {
+    "wrangler": "^4.121.0"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

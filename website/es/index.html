@@ -3,8 +3,9 @@
   <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Kuali — Transcripción privada y local de reuniones</title>
-    <meta name="description" content="Kuali transcribe reuniones de Discord y navegador localmente, conserva quién dijo cada cosa y convierte conversaciones en notas y tareas fáciles de buscar.">
+    <title>Kuali — Transcripción local para Discord y Google Meet</title>
+    <meta name="description" content="Kuali transcribe llamadas de Discord y Google Meet localmente y en vivo, conserva quién dijo cada cosa y crea resúmenes, tareas y webhooks verificables.">
+    <meta name="author" content="Jhon Guerrero">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="canonical" href="https://kuali.garrux.dev/es/">
@@ -14,40 +15,69 @@
     <link rel="icon" href="../assets/kuali-logo.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="../assets/icon.png">
     <link rel="manifest" href="../site.webmanifest">
+    <link rel="sitemap" type="application/xml" href="../sitemap.xml">
     <link rel="stylesheet" href="../assets/site.css?v=20260811">
     <meta property="og:type" content="website">
     <meta property="og:site_name" content="Kuali">
-    <meta property="og:title" content="Kuali — Tus reuniones se convierten en memoria útil">
-    <meta property="og:description" content="Transcripción en vivo por hablante en tu computadora. Reuniones fáciles de buscar, resúmenes opcionales y ninguna cuenta en la nube de Kuali.">
+    <meta property="og:title" content="Kuali — Transcripción local para Discord y Google Meet">
+    <meta property="og:description" content="Transcripción open source en vivo con identidad real, reuniones fáciles de buscar, resúmenes opcionales, tareas y webhooks firmados.">
     <meta property="og:url" content="https://kuali.garrux.dev/es/">
     <meta property="og:image" content="https://kuali.garrux.dev/assets/kuali-app.es.png">
+    <meta property="og:image:type" content="image/png">
     <meta property="og:image:width" content="1220">
     <meta property="og:image:height" content="820">
     <meta property="og:image:alt" content="Interfaz real de Kuali mostrando su biblioteca local y el estado de conexión">
     <meta property="og:locale" content="es_419">
     <meta property="og:locale:alternate" content="en_US">
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="Kuali — Transcripción privada y local de reuniones">
-    <meta name="twitter:description" content="Descubre quién dijo qué mientras la reunión todavía está ocurriendo.">
+    <meta name="twitter:title" content="Kuali — Transcripción local para Discord y Google Meet">
+    <meta name="twitter:description" content="Descubre quién dijo qué en vivo. Transcripción local, reuniones fáciles de buscar, resúmenes y tareas opcionales.">
     <meta name="twitter:image" content="https://kuali.garrux.dev/assets/kuali-app.es.png">
+    <meta name="twitter:image:alt" content="Aplicación de Kuali mostrando su biblioteca local y el estado de las integraciones">
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "SoftwareApplication",
         "name": "Kuali",
-        "description": "Transcripción privada y local de reuniones con atribución en vivo por hablante.",
+        "url": "https://kuali.garrux.dev/es/",
+        "description": "Transcripción local y open source para Discord y Google Meet con atribución en vivo por hablante.",
         "applicationCategory": "BusinessApplication",
         "operatingSystem": "macOS",
         "softwareVersion": "0.1.10",
+        "screenshot": "https://kuali.garrux.dev/assets/kuali-app.es.png",
+        "featureList": [
+          "Transcripción en vivo por hablante",
+          "Procesamiento local mediante Whisper y Silero",
+          "Integraciones con Discord y Google Meet",
+          "Biblioteca de reuniones con búsqueda",
+          "Resúmenes y tareas opcionales por participante",
+          "Standard Webhooks firmados"
+        ],
         "license": "https://github.com/igarrux/kuali/blob/main/LICENSE",
         "downloadUrl": "https://github.com/igarrux/kuali/releases/latest",
         "codeRepository": "https://github.com/igarrux/kuali",
+        "sameAs": [
+          "https://github.com/igarrux/kuali",
+          "https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp"
+        ],
+        "author": { "@type": "Person", "name": "Jhon Guerrero" },
+        "inLanguage": ["es", "en"],
         "isAccessibleForFree": true,
         "offers": {
           "@type": "Offer",
           "price": "0",
           "priceCurrency": "USD"
         }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "name": "Kuali",
+        "url": "https://kuali.garrux.dev/es/",
+        "description": "Sitio oficial de la aplicación open source de transcripción de reuniones Kuali.",
+        "inLanguage": ["es", "en"]
       }
     </script>
     <script type="application/ld+json">
@@ -94,7 +124,7 @@
           <div class="hero-copy" data-reveal>
             <span class="eyebrow">Código abierto · Local primero</span>
             <h1>Tus reuniones se convierten en <span class="text-gradient">memoria útil.</span></h1>
-            <p class="hero-lead">Kuali escucha mientras hablan, transcribe en vivo a cada participante dentro de tu computadora y convierte el resultado en decisiones y tareas fáciles de buscar.</p>
+            <p class="hero-lead">Kuali se conecta a Discord y Google Meet, transcribe en vivo a cada participante dentro de tu computadora y convierte el resultado en decisiones y tareas fáciles de buscar.</p>
             <div class="hero-actions"><a class="button button-primary" href="https://kuali.garrux.dev/es/guides/#instalar">Descargar para macOS <span aria-hidden="true">↓</span></a><a class="button" href="https://github.com/igarrux/kuali">Ver en GitHub <span aria-hidden="true">↗</span></a></div>
             <div class="hero-note" aria-label="Ventajas principales"><span>Sin cuenta en la nube</span><span>El audio permanece local</span><span>Gratis y de código abierto</span></div>
           </div>
@@ -109,7 +139,7 @@
       </section>
 
       <div class="platform-strip" aria-label="Fuentes de reuniones y estado del soporte">
-        <div class="platform-inner container"><span class="platform-label">Un espacio para tus llamadas</span><div class="platform-list"><span class="platform-badge"><i></i>Discord</span><span class="platform-badge"><i></i>Google Meet</span><span class="platform-badge experimental"><i></i>Microsoft Teams <small>Experimental · parcial</small></span><span class="platform-badge experimental"><i></i>Zoom <small>Experimental · parcial</small></span></div></div>
+        <div class="platform-inner container"><span class="platform-label">Un espacio para tus llamadas</span><div class="platform-list"><a class="platform-badge" href="./transcripcion-reuniones-discord/"><i></i>Discord</a><a class="platform-badge" href="./transcripcion-google-meet/"><i></i>Google Meet</a><span class="platform-badge experimental"><i></i>Microsoft Teams <small>Experimental · parcial</small></span><span class="platform-badge experimental"><i></i>Zoom <small>Experimental · parcial</small></span></div></div>
       </div>
 
       <section class="section" id="funciones">
@@ -180,7 +210,7 @@
     </main>
 
     <footer class="site-footer">
-      <div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="./"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="#funciones">Funciones</a><a href="#privacidad">Privacidad</a><a href="./guides/#instalar">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./guides/">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div>
+      <div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="./"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="./transcripcion-reuniones-discord/">Transcripción de Discord</a><a href="./transcripcion-google-meet/">Transcripción de Google Meet</a><a href="./guides/#instalar">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./guides/">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div>
     </footer>
   </body>
 </html>

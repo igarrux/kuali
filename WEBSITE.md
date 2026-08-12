@@ -1,8 +1,9 @@
 # Kuali website
 
 The public website is a dependency-free static site in [`website/`](website/).
-Every path is relative, so the same directory works at a domain root or under a
-GitHub Pages project path.
+Production is served from <https://kuali.garrux.dev> by the `kuali-site`
+Cloudflare Worker using Workers Static Assets. The Wrangler configuration at
+[`wrangler.jsonc`](wrangler.jsonc) is the deployment source of truth.
 
 ## Preview locally
 
@@ -12,45 +13,28 @@ python3 -m http.server 4173 --directory website
 
 Open <http://localhost:4173>.
 
-## GitHub Pages
+## Deploy to Cloudflare
 
-1. Open **Settings → Pages** in the repository.
-2. Set **Source** to **GitHub Actions**.
-3. Run **Deploy website to GitHub Pages** from the Actions tab.
-
-The workflow uploads `website/` without a build step.
-
-## Cloudflare
-
-The production custom domain is served by the `kuali-site` Worker with static
-assets. Deploy the current website with:
+Authenticate Wrangler, validate the site, and deploy the current revision:
 
 ```sh
-npx wrangler deploy website --name=kuali-site --compatibility-date 2026-08-10
+npm ci
+npm exec wrangler login
+npm run deploy:website
 ```
 
-Cloudflare Pages remains an alternative deployment target. To use it, connect
-the repository from the dashboard:
+Use `npm run check:website` to run the same SEO and link validation plus a
+Wrangler dry run without publishing.
 
-Connect `igarrux/kuali` from **Workers & Pages → Create → Pages → Connect to
-Git** and use:
-
-| Setting | Value |
-|---|---|
-| Production branch | `main` |
-| Framework preset | None |
-| Build command | Leave blank |
-| Build output directory | `website` |
-| Root directory | Repository root |
-
-For a direct Pages upload after creating a Pages project, run:
-
-```sh
-npx wrangler pages deploy website --project-name=kuali-site
-```
+The custom domain remains attached to the Worker in Cloudflare. Do not create a
+second public deployment: duplicate hosts split indexing signals and can expose
+stale installation instructions. The `_headers` file prevents `workers.dev`
+preview URLs from being indexed.
 
 ## Canonical URL
 
 SEO metadata uses `https://kuali.garrux.dev/` as the canonical site. Keep this
-origin in the four HTML files, `website/robots.txt`, and `website/sitemap.xml`
-even when deploying the same static output through GitHub or Cloudflare Pages.
+origin in every public page, `website/robots.txt`, and `website/sitemap.xml`.
+Every English page must link to its Spanish equivalent and vice versa through
+`hreflang`; update the sitemap and website tests whenever a public page is
+added or renamed.

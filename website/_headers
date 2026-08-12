@@ -7,3 +7,6 @@
 
 /assets/*
   Cache-Control: public, max-age=86400
+
+https://:project.:account.workers.dev/*
+  X-Robots-Tag: noindex, nofollow

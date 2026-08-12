@@ -854,6 +854,17 @@ kbd {
   color: var(--muted-strong);
   font-size: 0.8rem;
   font-weight: 680;
+  text-decoration: none;
+}
+
+a.platform-badge {
+  transition: border-color 160ms ease, background 160ms ease, color 160ms ease;
+}
+
+a.platform-badge:hover {
+  border-color: rgba(125, 218, 185, 0.32);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 .platform-badge i {

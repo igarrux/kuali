@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="es-419">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Transcripción local de Google Meet por participante — Kuali</title>
+    <meta name="description" content="Transcribe Google Meet localmente y en vivo con identidad por participante, audio separado cuando está disponible, búsqueda, resúmenes, tareas y webhooks firmados.">
+    <meta name="author" content="Jhon Guerrero">
+    <meta name="theme-color" content="#090d12">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://kuali.garrux.dev/es/transcripcion-google-meet/">
+    <link rel="alternate" hreflang="en" href="https://kuali.garrux.dev/google-meet-transcription/">
+    <link rel="alternate" hreflang="es" href="https://kuali.garrux.dev/es/transcripcion-google-meet/">
+    <link rel="alternate" hreflang="x-default" href="https://kuali.garrux.dev/google-meet-transcription/">
+    <link rel="icon" href="../../assets/kuali-logo.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="../../assets/icon.png">
+    <link rel="manifest" href="../../site.webmanifest">
+    <link rel="sitemap" type="application/xml" href="../../sitemap.xml">
+    <link rel="stylesheet" href="../../assets/site.css?v=20260811">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Kuali">
+    <meta property="og:title" content="Transcripción local de Google Meet con participantes reales">
+    <meta property="og:description" content="La extensión de Kuali lleva el audio y contexto de Meet únicamente a la aplicación de escritorio que corre en tu computadora.">
+    <meta property="og:url" content="https://kuali.garrux.dev/es/transcripcion-google-meet/">
+    <meta property="og:image" content="https://kuali.garrux.dev/assets/kuali-app.es.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1220">
+    <meta property="og:image:height" content="820">
+    <meta property="og:image:alt" content="Kuali mostrando una biblioteca local y el estado de reuniones del navegador">
+    <meta property="og:locale" content="es_419">
+    <meta property="og:locale:alternate" content="en_US">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Transcripción local de Google Meet — Kuali">
+    <meta name="twitter:description" content="Transcripción en vivo por participante, Whisper local, búsqueda, resúmenes, tareas y webhooks firmados.">
+    <meta name="twitter:image" content="https://kuali.garrux.dev/assets/kuali-app.es.png">
+    <meta name="twitter:image:alt" content="Kuali mostrando una biblioteca local y el estado de reuniones del navegador">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Transcripción local de Google Meet por participante",
+        "url": "https://kuali.garrux.dev/es/transcripcion-google-meet/",
+        "description": "Transcripción local y open source de Google Meet con contexto en vivo por participante.",
+        "inLanguage": "es",
+        "isPartOf": { "@type": "WebSite", "name": "Kuali", "url": "https://kuali.garrux.dev/es/" },
+        "about": {
+          "@type": "SoftwareApplication",
+          "name": "Kuali",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "macOS",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+        },
+        "breadcrumb": {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "Kuali", "item": "https://kuali.garrux.dev/es/" },
+            { "@type": "ListItem", "position": 2, "name": "Transcripción de Google Meet", "item": "https://kuali.garrux.dev/es/transcripcion-google-meet/" }
+          ]
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "¿Kuali utiliza los subtítulos de Google Meet?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. Kuali captura audio y contexto de participantes mediante la extensión y transcribe localmente con Whisper, sin depender de los subtítulos ni del idioma elegido en Meet." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿A dónde va el audio de Google Meet?",
+            "acceptedAnswer": { "@type": "Answer", "text": "La extensión envía el audio mediante una conexión de loopback a la aplicación Kuali del mismo equipo. Kuali no opera un servicio de captura o transcripción en la nube." }
+          },
+          {
+            "@type": "Question",
+            "name": "¿La grabación termina cuando finaliza la llamada?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Sí. Kuali observa el ciclo de la reunión y la conexión local. Terminar la llamada, cerrar la pestaña o perder la captura finaliza la grabación correspondiente." }
+          }
+        ]
+      }
+    </script>
+    <script src="../../assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#contenido">Saltar al contenido</a>
+    <header class="site-header" data-site-header>
+      <nav class="nav container" aria-label="Navegación principal">
+        <a class="brand" href="../" aria-label="Inicio de Kuali"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="Abrir navegación" data-nav-toggle><span></span></button>
+        <div class="nav-menu" id="nav-menu" data-nav-menu><div class="nav-links"><a href="../#funciones">Funciones</a><a href="../#privacidad">Privacidad</a><a href="../guides/">Guía</a><a href="#preguntas">Preguntas</a></div><div class="nav-actions"><a class="language-link" href="../../google-meet-transcription/" lang="en" hreflang="en">EN</a><a class="button button-small button-quiet" href="https://github.com/igarrux/kuali">GitHub ↗</a></div></div>
+      </nav>
+    </header>
+
+    <main id="contenido">
+      <section class="hero">
+        <div class="container hero-grid">
+          <div class="hero-copy" data-reveal>
+            <span class="eyebrow">Transcripción open source para Google Meet</span>
+            <h1>Transcripción de Google Meet que permanece <span class="text-gradient">en tu computadora.</span></h1>
+            <p class="hero-lead">La extensión de Kuali lleva el audio y contexto de participantes directamente a la aplicación de escritorio. Whisper transcribe localmente mientras ocurre la reunión, sin depender de los subtítulos de Meet.</p>
+            <div class="hero-actions"><a class="button button-primary" href="https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp">Instalar la extensión <span aria-hidden="true">↗</span></a><a class="button" href="../guides/#navegador">Abrir la guía <span aria-hidden="true">→</span></a></div>
+            <div class="hero-note" aria-label="Ventajas de la integración con Google Meet"><span>Transcripción local en vivo</span><span>Estado de participantes y silencio</span><span>Finalización automática</span></div>
+          </div>
+          <div class="hero-visual" data-reveal><figure class="app-preview"><img src="../../assets/kuali-app.es.png" width="1220" height="820" fetchpriority="high" alt="Interfaz de Kuali con su biblioteca local y la integración del navegador lista"><figcaption><span class="preview-dot" aria-hidden="true"></span> Las reuniones del navegador llegan a Kuali localmente</figcaption></figure></div>
+        </div>
+      </section>
+
+      <section class="section section-compact">
+        <div class="container">
+          <span class="eyebrow" data-reveal>Más que subtítulos del navegador</span>
+          <h2 data-reveal>Entra audio en vivo.<br>Sale memoria estructurada.</h2>
+          <p class="section-copy" data-reveal>Kuali no copia el texto visible de subtítulos. La extensión observa participantes, silencio, actividad y pistas expuestas por Meet, y envía los datos de captura únicamente al receptor de loopback de tu computadora.</p>
+          <div class="steps">
+            <article class="step-card" data-reveal><h3>Instala una vez</h3><p>Añade la extensión oficial desde Chrome Web Store en Chrome, Edge, Brave o Arc. Antes de sugerir grabar, comprueba que la aplicación esté disponible.</p></article>
+            <article class="step-card" data-reveal><h3>Inicia desde Meet</h3><p>Entra a la llamada y elige grabar. Kuali refleja actividad y silencio en vivo, manteniendo audio separado cuando Meet lo expone.</p></article>
+            <article class="step-card" data-reveal><h3>Termina automáticamente</h3><p>Cuando acaba la llamada, pestaña o conexión de captura, Kuali finaliza esa reunión y libera sus recursos de transcripción.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="detalles">
+        <div class="guide-layout container">
+          <nav class="guide-toc" aria-label="Temas sobre transcripción de Google Meet"><strong>En esta página</strong><a href="#captura">Captura</a><a href="#identidad">Participantes</a><a href="#local">Procesamiento local</a><a href="#resultados">Resultados</a><a href="#soporte">Soporte</a></nav>
+          <div class="guide-content">
+            <section class="guide-section" id="captura" data-reveal><span class="eyebrow">Integración del navegador</span><h2>La extensión es un puente, no una grabadora en la nube.</h2><p>La extensión empaqueta todo su JavaScript y procesamiento de audio. Se conecta a la aplicación mediante <code>127.0.0.1</code>, rechaza páginas web ordinarias y no sube la reunión a un servidor de Kuali.</p><p>La captura comienza únicamente tras una acción del usuario y la confirmación de consentimiento. El indicador permanece visible mientras la reunión está activa.</p></section>
+            <section class="guide-section" id="identidad" data-reveal><span class="eyebrow">Contexto del hablante</span><h2>El estado del participante viaja junto a su voz.</h2><p>Kuali mantiene los ID como texto y actualiza nombres y avatares según Meet los expone. Cambiar de pestaña no debería renombrar a una persona conocida, y un participante silenciado no se marca como audible solo porque el dispositivo tenga micrófono.</p><p>Cuando Meet entrega una pista separada, Kuali la conserva. Si un modo de reunión solo ofrece audio mezclado, la fuente se etiqueta honestamente en lugar de inventar la atribución.</p></section>
+            <section class="guide-section" id="local" data-reveal><span class="eyebrow">Reconocimiento local</span><h2>Whisper y Silero trabajan junto a la reunión.</h2><p>Silero retira teclado, zumbidos, golpes y otros fragmentos que no son voz antes de llegar a Whisper. Desde la app eliges modelo, idioma, carpeta de pesos y vocabulario especial.</p><p>El PCM se procesa en memoria y no se conserva como grabación. La transcripción y metadatos permanecen dentro del directorio local de Kuali.</p></section>
+            <section class="guide-section" id="resultados" data-reveal><span class="eyebrow">Resultado de la reunión</span><h2>Busca, resume, asigna o integra.</h2><p>La reunión finalizada se puede buscar por título, participante, fecha, origen y palabras de la transcripción. El procesamiento opcional con LLM puede generar título corto, resumen, puntos clave, decisiones, preguntas y tareas asignadas.</p><p>Los Standard Webhooks firmados pueden enviar el registro a las herramientas que suscribas. Ni los resúmenes ni webhooks se activan sin tu configuración.</p></section>
+            <section class="guide-section" id="soporte" data-reveal><span class="eyebrow">Estado de plataformas</span><h2>Google Meet es la integración web estable.</h2><p>El flujo de Meet tiene pruebas específicas de captura, participantes, silencio, ciclo de vida y extremo a extremo. Microsoft Teams y Zoom siguen experimentales y pueden entregar información incompleta en algunos modos.</p></section>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-compact" id="preguntas"><div class="container narrow"><span class="eyebrow" data-reveal>Preguntas sobre Google Meet</span><h2 data-reveal>Antes de la primera transcripción.</h2><div class="faq-list" data-reveal><details><summary>¿Kuali depende de los subtítulos de Meet?</summary><p>No. Captura audio y contexto, y luego transcribe con el modelo Whisper que corre en la aplicación. Por eso tampoco queda limitado al idioma seleccionado para subtítulos.</p></details><details><summary>¿A dónde va el audio?</summary><p>Desde la extensión hasta Kuali en la misma computadora mediante loopback. Kuali no opera un backend de audio o transcripción en la nube.</p></details><details><summary>¿La captura respeta el silencio?</summary><p>Sí. Kuali observa el estado del participante y deja de tratar al usuario local como audible cuando Meet lo marca como silenciado.</p></details><details><summary>¿Qué pasa si cierro el navegador a la fuerza?</summary><p>La aplicación detecta que murió la conexión, finaliza la reunión correspondiente y deja de mostrarla como si continuara escuchando.</p></details></div></div></section>
+
+      <section class="section"><div class="container install-panel" data-reveal><div><span class="eyebrow">Empieza en minutos</span><h2>Instala la extensión. Conserva el audio local.</h2></div><div><p>La instalación oficial recibe actualizaciones del navegador automáticamente. Abre Kuali, descarga un modelo de Whisper y la extensión encontrará la aplicación local.</p><p><a class="button button-primary" href="https://chromewebstore.google.com/detail/kuali/cgojkmdggflcggedmapamcmkelgaahhp">Instalar desde Chrome Web Store <span aria-hidden="true">↗</span></a></p></div></div></section>
+    </main>
+
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción local y open source de reuniones con atribución real.</p></div><div class="footer-column"><strong>Producto</strong><a href="../transcripcion-reuniones-discord/">Transcripción de Discord</a><a href="./">Transcripción de Google Meet</a><a href="../guides/#instalar">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="../guides/">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div></footer>
+  </body>
+</html>

@@ -5,14 +5,38 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 
 const websiteRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const pages = ["index.html", "es/index.html", "guides/index.html", "es/guides/index.html"];
+const repositoryRoot = resolve(websiteRoot, "..");
+const publicPages = [
+  "index.html",
+  "es/index.html",
+  "discord-meeting-transcription/index.html",
+  "es/transcripcion-reuniones-discord/index.html",
+  "google-meet-transcription/index.html",
+  "es/transcripcion-google-meet/index.html",
+  "guides/index.html",
+  "es/guides/index.html",
+];
+const installationPages = ["index.html", "es/index.html", "guides/index.html", "es/guides/index.html"];
+const allHtmlPages = [...publicPages, "404.html"];
 
 function read(relativePath) {
   return readFileSync(join(websiteRoot, relativePath), "utf8");
 }
 
+function readRepository(relativePath) {
+  return readFileSync(join(repositoryRoot, relativePath), "utf8");
+}
+
 function attributeValues(html, attribute) {
   return [...html.matchAll(new RegExp(`\\b${attribute}="([^"]+)"`, "g"))].map((match) => match[1]);
+}
+
+function metadataContent(html, selector) {
+  return html.match(selector)?.[1] ?? "";
+}
+
+function canonicalFor(page) {
+  return metadataContent(read(page), /<link rel="canonical" href="([^"]+)">/);
 }
 
 function resolveLocalReference(page, reference) {
@@ -30,27 +54,48 @@ function allFiles(directory) {
   });
 }
 
-test("all public pages contain complete SEO metadata", () => {
-  for (const page of pages) {
+test("all public pages contain unique and complete SEO metadata", () => {
+  const titles = new Set();
+  const descriptions = new Set();
+  const canonicals = new Set();
+
+  for (const page of publicPages) {
     const html = read(page);
-    const title = html.match(/<title>([^<]+)<\/title>/)?.[1] ?? "";
-    const description = html.match(/<meta name="description" content="([^"]+)">/)?.[1] ?? "";
+    const title = metadataContent(html, /<title>([^<]+)<\/title>/);
+    const description = metadataContent(html, /<meta name="description" content="([^"]+)">/);
+    const canonical = canonicalFor(page);
+    const openGraphUrl = metadataContent(html, /<meta property="og:url" content="([^"]+)">/);
 
     assert.ok(title.length >= 30 && title.length <= 70, `${page} title length is ${title.length}`);
     assert.ok(description.length >= 110 && description.length <= 180, `${page} description length is ${description.length}`);
+    assert.ok(!titles.has(title), `${page} duplicates title ${title}`);
+    assert.ok(!descriptions.has(description), `${page} duplicates its description`);
+    assert.ok(!canonicals.has(canonical), `${page} duplicates canonical ${canonical}`);
+    titles.add(title);
+    descriptions.add(description);
+    canonicals.add(canonical);
+
+    assert.match(html, /<meta name="author" content="Jhon Guerrero">/);
     assert.match(html, /<meta name="robots" content="index, follow, max-image-preview:large">/);
-    assert.match(html, /<link rel="canonical" href="https:\/\/kuali\.garrux\.dev\//);
+    assert.match(canonical, /^https:\/\/kuali\.garrux\.dev\//);
+    assert.equal(openGraphUrl, canonical, `${page} Open Graph URL must match canonical`);
     assert.equal((html.match(/rel="alternate" hreflang=/g) ?? []).length, 3, `${page} hreflang count`);
+    assert.match(html, /<link rel="sitemap" type="application\/xml"/);
     assert.match(html, /<meta property="og:title"/);
     assert.match(html, /<meta property="og:description"/);
     assert.match(html, /<meta property="og:image"/);
+    assert.match(html, /<meta property="og:image:alt"/);
     assert.match(html, /<meta name="twitter:card" content="summary_large_image">/);
+    assert.match(html, /<meta name="twitter:title"/);
+    assert.match(html, /<meta name="twitter:description"/);
+    assert.match(html, /<meta name="twitter:image:alt"/);
     assert.equal((html.match(/<h1\b/g) ?? []).length, 1, `${page} must contain one h1`);
+    assert.doesNotMatch(html, /<meta name="keywords"/i, `${page} uses obsolete meta keywords`);
   }
 });
 
 test("structured data is valid JSON", () => {
-  for (const page of pages) {
+  for (const page of publicPages) {
     const blocks = [...read(page).matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)];
     assert.ok(blocks.length >= 1, `${page} has no JSON-LD`);
     for (const [, block] of blocks) {
@@ -61,8 +106,8 @@ test("structured data is valid JSON", () => {
   }
 });
 
-test("local links and assets resolve from every deployment depth", () => {
-  for (const page of pages) {
+test("local links and assets resolve from every page depth", () => {
+  for (const page of allHtmlPages) {
     const html = read(page);
     for (const attribute of ["href", "src"]) {
       for (const reference of attributeValues(html, attribute)) {
@@ -75,7 +120,7 @@ test("local links and assets resolve from every deployment depth", () => {
 });
 
 test("markup keeps identifiers and image descriptions coherent", () => {
-  for (const page of pages) {
+  for (const page of allHtmlPages) {
     const html = read(page);
     const ids = attributeValues(html, "id");
     assert.equal(new Set(ids).size, ids.length, `${page} contains duplicate IDs`);
@@ -95,7 +140,7 @@ test("markup keeps identifiers and image descriptions coherent", () => {
 test("installation remains an explicit two-command flow", () => {
   const install = "brew install --cask igarrux/kuali/kuali";
   const quarantine = "xattr -dr com.apple.quarantine /Applications/Kuali.app";
-  for (const page of pages) {
+  for (const page of installationPages) {
     const html = read(page);
     assert.ok(html.includes(install), `${page} is missing Homebrew installation`);
     assert.ok(html.includes(quarantine), `${page} is missing explicit quarantine command`);
@@ -103,13 +148,12 @@ test("installation remains an explicit two-command flow", () => {
   }
 });
 
-test("the landing pages show the real app and state the local data boundary", () => {
+test("landing pages show the real app and state the local data boundary", () => {
   const english = read("index.html");
   const spanish = read("es/index.html");
 
   assert.match(english, /assets\/kuali-app\.png/);
   assert.match(spanish, /assets\/kuali-app\.es\.png/);
-  assert.doesNotMatch(english + spanish, /local-flow/);
   assert.match(english, /Everything Kuali creates lives on your PC/);
   assert.match(spanish, /Todo lo que Kuali genera vive en tu PC/);
   for (const html of [english, spanish]) {
@@ -120,7 +164,7 @@ test("the landing pages show the real app and state the local data boundary", ()
   }
 });
 
-test("download actions lead to installation while the secondary hero action opens GitHub", () => {
+test("download actions lead to installation while the secondary action opens GitHub", () => {
   const english = read("index.html");
   const spanish = read("es/index.html");
 
@@ -150,21 +194,12 @@ test("both guides document model weights and Standard Webhooks", () => {
 
 test("Discord setup is a three-step token-driven authorization flow", () => {
   const variants = [
-    {
-      page: "guides/index.html",
-      oldCopy: /Enable Guild Install|Configure the install link and scopes/,
-      automaticCopy: /obtains the application ID from the token/,
-    },
-    {
-      page: "es/guides/index.html",
-      oldCopy: /Activa Instalación de servidor|Configura el enlace y los ámbitos/,
-      automaticCopy: /obtiene el ID de la aplicación desde el token/,
-    },
+    { page: "guides/index.html", oldCopy: /Enable Guild Install|Configure the install link and scopes/, automaticCopy: /obtains the application ID from the token/ },
+    { page: "es/guides/index.html", oldCopy: /Activa Instalación de servidor|Configura el enlace y los ámbitos/, automaticCopy: /obtiene el ID de la aplicación desde el token/ },
   ];
 
   for (const { page, oldCopy, automaticCopy } of variants) {
-    const html = read(page);
-    const section = html.match(/<section class="guide-section" id="discord"[\s\S]*?<\/section>/)?.[0];
+    const section = read(page).match(/<section class="guide-section" id="discord"[\s\S]*?<\/section>/)?.[0];
     assert.ok(section, `${page} is missing the Discord guide`);
     assert.equal((section.match(/<article class="guide-step">/g) ?? []).length, 3);
     assert.equal((section.match(/data-lightbox-source/g) ?? []).length, 3);
@@ -180,38 +215,70 @@ test("Discord setup is a three-step token-driven authorization flow", () => {
 test("platform support is explicit in both languages", () => {
   const englishHome = read("index.html");
   const spanishHome = read("es/index.html");
-  const englishGuide = read("guides/index.html");
-  const spanishGuide = read("es/guides/index.html");
-
   assert.match(englishHome, /Microsoft Teams <small>Experimental · partial<\/small>/);
   assert.match(englishHome, /Zoom <small>Experimental · partial<\/small>/);
   assert.match(spanishHome, /Microsoft Teams <small>Experimental · parcial<\/small>/);
   assert.match(spanishHome, /Zoom <small>Experimental · parcial<\/small>/);
-  assert.match(englishGuide, /Google Meet is stable[\s\S]*Microsoft Teams and Zoom are experimental/);
-  assert.match(spanishGuide, /Google Meet es estable[\s\S]*Microsoft Teams y Zoom son experimentales/);
+  assert.match(read("guides/index.html"), /Google Meet is stable[\s\S]*Microsoft Teams and Zoom are experimental/);
+  assert.match(read("es/guides/index.html"), /Google Meet es estable[\s\S]*Microsoft Teams y Zoom son experimentales/);
 });
 
 test("only experimental platform dots use the orange status color", () => {
   const styles = read("assets/site.css");
-
   assert.match(styles, /--experimental: #f59e0b/);
   assert.match(styles, /\.platform-badge\.experimental i \{[\s\S]*?background: var\(--experimental\)/);
   assert.doesNotMatch(styles, /\.platform-badge\.experimental small/);
-  for (const page of pages) {
-    assert.match(read(page), /site\.css\?v=20260811/);
+  for (const page of publicPages) assert.match(read(page), /site\.css\?v=20260811/);
+});
+
+test("platform pages target real search intents with substantive product details", () => {
+  const pages = {
+    "discord-meeting-transcription/index.html": [/Discord meeting transcription/i, /participant identity/i, /Standard Webhooks/i, /Whisper/i],
+    "es/transcripcion-reuniones-discord/index.html": [/Transcripción de Discord/i, /identidad/i, /Standard Webhooks/i, /Whisper/i],
+    "google-meet-transcription/index.html": [/Google Meet transcription/i, /loopback/i, /participant/i, /Whisper/i],
+    "es/transcripcion-google-meet/index.html": [/Transcripción de Google Meet/i, /loopback/i, /participante/i, /Whisper/i],
+  };
+
+  for (const [page, patterns] of Object.entries(pages)) {
+    const html = read(page);
+    assert.ok(html.length > 9000, `${page} is too thin to serve its search intent`);
+    for (const pattern of patterns) assert.match(html, pattern);
   }
 });
 
-test("deployment metadata and security policy are present", () => {
-  assert.ok(existsSync(join(websiteRoot, ".nojekyll")));
-  assert.doesNotThrow(() => JSON.parse(read("site.webmanifest")));
-  assert.match(read("robots.txt"), /Sitemap: https:\/\/kuali\.garrux\.dev\/sitemap\.xml/);
-  assert.equal((read("sitemap.xml").match(/<url>/g) ?? []).length, pages.length);
-  assert.match(read("_headers"), /Content-Security-Policy:/);
-  assert.match(read("_headers"), /frame-ancestors 'none'/);
+test("sitemap contains every canonical page once with language alternates", () => {
+  const sitemap = read("sitemap.xml");
+  const locations = [...sitemap.matchAll(/<loc>([^<]+)<\/loc>/g)].map((match) => match[1]);
+  const canonicals = publicPages.map(canonicalFor);
+  assert.deepEqual(new Set(locations), new Set(canonicals));
+  assert.equal(locations.length, publicPages.length);
+  assert.equal((sitemap.match(/hreflang="x-default"/g) ?? []).length, publicPages.length);
 });
 
-test("all deployable files fit Cloudflare Pages asset limits", () => {
+test("Cloudflare Workers is the only website deployment target", () => {
+  const wrangler = JSON.parse(readRepository("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
+  assert.equal(wrangler.name, "kuali-site");
+  assert.equal(wrangler.assets.directory, "./website");
+  assert.equal(wrangler.assets.not_found_handling, "404-page");
+  assert.ok(existsSync(join(websiteRoot, ".assetsignore")));
+  assert.match(read(".assetsignore"), /tests\//);
+  assert.ok(!existsSync(join(websiteRoot, ".nojekyll")));
+  assert.ok(!existsSync(join(repositoryRoot, ".github/workflows/pages.yml")));
+  assert.doesNotMatch(readRepository("WEBSITE.md"), /GitHub Pages|gh-pages/i);
+  assert.match(readRepository("WEBSITE.md"), /Cloudflare Worker/);
+});
+
+test("deployment metadata, security policy, and duplicate-host indexing rules are present", () => {
+  assert.doesNotThrow(() => JSON.parse(read("site.webmanifest")));
+  assert.match(read("robots.txt"), /Sitemap: https:\/\/kuali\.garrux\.dev\/sitemap\.xml/);
+  assert.match(read("_headers"), /Content-Security-Policy:/);
+  assert.match(read("_headers"), /frame-ancestors 'none'/);
+  assert.match(read("_headers"), /workers\.dev\/\*/);
+  assert.match(read("_headers"), /X-Robots-Tag: noindex, nofollow/);
+  assert.match(read("404.html"), /<meta name="robots" content="noindex, follow">/);
+});
+
+test("all deployable files fit Cloudflare static asset limits", () => {
   const maxAssetSize = 25 * 1024 * 1024;
   for (const file of allFiles(websiteRoot)) {
     assert.ok(statSync(file).size <= maxAssetSize, `${file} exceeds 25 MiB`);
@@ -220,10 +287,18 @@ test("all deployable files fit Cloudflare Pages asset limits", () => {
 
 test("the site has no remote runtime dependencies", () => {
   assert.doesNotMatch(read("assets/site.css"), /@import|url\(["']?https?:/i);
-  for (const page of pages) {
+  for (const page of allHtmlPages) {
     for (const source of attributeValues(read(page), "src")) {
       assert.ok(!/^https?:/.test(source), `${page} loads remote script or image ${source}`);
     }
   }
   assert.equal(extname(join(websiteRoot, "assets/site.js")), ".js");
+});
+
+test("machine-readable project summary points to canonical product and contributor docs", () => {
+  const summary = read("llms.txt");
+  assert.match(summary, /^# Kuali/m);
+  assert.match(summary, /https:\/\/kuali\.garrux\.dev\/discord-meeting-transcription\//);
+  assert.match(summary, /https:\/\/kuali\.garrux\.dev\/google-meet-transcription\//);
+  assert.match(summary, /https:\/\/github\.com\/igarrux\/kuali\/blob\/main\/CONTRIBUTING\.md/);
 });

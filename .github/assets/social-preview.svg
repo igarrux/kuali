@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="1280" height="640" viewBox="0 0 1280 640">
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#090d12"/>
+      <stop offset="1" stop-color="#101821"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="80%" cy="15%" r="70%">
+      <stop offset="0" stop-color="#7ddab9" stop-opacity=".18"/>
+      <stop offset="1" stop-color="#7ddab9" stop-opacity="0"/>
+    </radialGradient>
+    <pattern id="grid" width="54" height="54" patternUnits="userSpaceOnUse">
+      <path d="M54 0H0V54" fill="none" stroke="#cfe0ee" stroke-opacity=".04"/>
+    </pattern>
+    <clipPath id="screen">
+      <rect x="700" y="116" width="610" height="410" rx="22"/>
+    </clipPath>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="22" stdDeviation="24" flood-color="#000" flood-opacity=".48"/>
+    </filter>
+  </defs>
+
+  <rect width="1280" height="640" fill="url(#background)"/>
+  <rect width="1280" height="640" fill="url(#glow)"/>
+  <rect width="1280" height="640" fill="url(#grid)"/>
+
+  <g transform="translate(64 58)">
+    <rect width="66" height="66" rx="19" fill="#7ddab9" fill-opacity=".1" stroke="#7ddab9" stroke-opacity=".25"/>
+    <image x="11" y="11" width="44" height="44" xlink:href="../../assets/kuali-logo.svg"/>
+    <text x="84" y="46" fill="#f2f6f7" font-family="Arial" font-size="34" font-weight="750">Kuali</text>
+  </g>
+
+  <g transform="translate(64 186)">
+    <text fill="#7ddab9" font-family="Menlo" font-size="15" font-weight="700" letter-spacing="2.4">OPEN SOURCE · LOCAL FIRST</text>
+    <text y="74" fill="#f2f6f7" font-family="Arial" font-size="56" font-weight="760" letter-spacing="-2.2">Know who said what.</text>
+    <text y="139" fill="#f2f6f7" font-family="Arial" font-size="56" font-weight="760" letter-spacing="-2.2">Keep it on your Mac.</text>
+    <text y="199" fill="#aebbc6" font-family="Arial" font-size="21">Live meeting transcription with real speaker identity.</text>
+  </g>
+
+  <g transform="translate(64 500)" font-family="Arial" font-size="15" font-weight="650">
+    <g><rect width="118" height="40" rx="20" fill="#111923" stroke="#cfe0ee" stroke-opacity=".14"/><circle cx="20" cy="20" r="4" fill="#7ddab9"/><text x="33" y="26" fill="#bac5ce">Discord</text></g>
+    <g transform="translate(130)"><rect width="152" height="40" rx="20" fill="#111923" stroke="#cfe0ee" stroke-opacity=".14"/><circle cx="20" cy="20" r="4" fill="#7ddab9"/><text x="33" y="26" fill="#bac5ce">Google Meet</text></g>
+    <g transform="translate(294)"><rect width="144" height="40" rx="20" fill="#111923" stroke="#cfe0ee" stroke-opacity=".14"/><circle cx="20" cy="20" r="4" fill="#aaa7ff"/><text x="33" y="26" fill="#bac5ce">Whisper local</text></g>
+  </g>
+
+  <g filter="url(#shadow)">
+    <rect x="686" y="102" width="610" height="410" rx="26" fill="#111923" stroke="#cfe0ee" stroke-opacity=".22"/>
+    <g clip-path="url(#screen)">
+      <image x="700" y="116" width="610" height="410" preserveAspectRatio="xMidYMid slice" xlink:href="../../website/assets/kuali-app.png"/>
+    </g>
+  </g>
+  <rect x="1030" y="486" width="204" height="44" rx="14" fill="#111923" stroke="#7ddab9" stroke-opacity=".28"/>
+  <circle cx="1052" cy="508" r="5" fill="#7ddab9"/>
+  <text x="1066" y="514" fill="#d7e2de" font-family="Arial" font-size="14" font-weight="650">Speaker-aware · live</text>
+
+  <text x="1216" y="596" text-anchor="end" fill="#81909f" font-family="Menlo" font-size="14">kuali.garrux.dev</text>
+</svg>

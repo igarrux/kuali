@@ -77,6 +77,10 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 22
+          cache: npm
 
-      - name: Validate pages, SEO, links, and deployment files
-        run: node --test website/tests/site.test.mjs
+      - name: Install website tooling
+        run: npm ci
+
+      - name: Validate pages, SEO, links, and Cloudflare deployment
+        run: npm run check:website

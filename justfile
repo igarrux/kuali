@@ -55,7 +55,7 @@ test-ui:
 # Validate the website, SEO metadata, links, and deployment files.
 [group('tests')]
 test-website:
-    node --test website/tests/site.test.mjs
+    npm run test:website
 
 # Run the browser extension test suite.
 [group('tests')]
@@ -97,6 +97,11 @@ meet-e2e-solo:
 [group('website')]
 website-serve:
     python3 -m http.server 4173 --bind 127.0.0.1 --directory website
+
+# Deploy the validated static website to the kuali-site Cloudflare Worker.
+[group('website')]
+website-deploy:
+    npm run deploy:website
 
 # Build local desktop bundles and updater artifacts with Tauri.
 [group('packaging')]

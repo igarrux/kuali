@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Install and configure Kuali — Complete setup guide</title>
     <meta name="description" content="Install Kuali on macOS, download Whisper weights, connect Discord and browser meetings, and configure signed Standard Webhooks step by step.">
+    <meta name="author" content="Jhon Guerrero">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="canonical" href="https://kuali.garrux.dev/guides/">
@@ -13,6 +14,7 @@
     <link rel="alternate" hreflang="x-default" href="https://kuali.garrux.dev/guides/">
     <link rel="icon" href="../assets/kuali-logo.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="../assets/icon.png">
+    <link rel="sitemap" type="application/xml" href="../sitemap.xml">
     <link rel="stylesheet" href="../assets/site.css?v=20260811">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Kuali">
@@ -20,14 +22,27 @@
     <meta property="og:description" content="A complete, visual guide for macOS, local models, Discord, browser meetings, and Standard Webhooks.">
     <meta property="og:url" content="https://kuali.garrux.dev/guides/">
     <meta property="og:image" content="https://kuali.garrux.dev/assets/discord/en/new-application.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="2560">
+    <meta property="og:image:height" content="1440">
+    <meta property="og:image:alt" content="Kuali setup guide showing the Discord Developer Portal">
     <meta property="og:locale" content="en_US">
+    <meta property="og:locale:alternate" content="es_419">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Install and configure Kuali">
+    <meta name="twitter:description" content="A visual guide for macOS, local Whisper models, Discord, Google Meet, and signed Standard Webhooks.">
+    <meta name="twitter:image" content="https://kuali.garrux.dev/assets/discord/en/new-application.png">
+    <meta name="twitter:image:alt" content="Kuali setup guide showing the Discord Developer Portal">
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "HowTo",
         "name": "Install and configure Kuali",
         "description": "Install Kuali on macOS and connect it to Discord and browser meetings.",
+        "url": "https://kuali.garrux.dev/guides/",
+        "image": "https://kuali.garrux.dev/assets/discord/en/new-application.png",
+        "author": { "@type": "Person", "name": "Jhon Guerrero" },
+        "inLanguage": "en",
         "totalTime": "PT15M",
         "tool": [
           { "@type": "HowToTool", "name": "A Mac with Apple Silicon" },
@@ -39,6 +54,16 @@
           { "@type": "HowToStep", "name": "Choose an integration", "text": "Create a Discord bot or load the browser extension included with Kuali." },
           { "@type": "HowToStep", "name": "Download a transcription model", "text": "Open Kuali and download the Whisper model that fits your computer." },
           { "@type": "HowToStep", "name": "Start a meeting", "text": "Join a call and confirm that Kuali shows speaker activity and live transcription." }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Kuali", "item": "https://kuali.garrux.dev/" },
+          { "@type": "ListItem", "position": 2, "name": "Setup guide", "item": "https://kuali.garrux.dev/guides/" }
         ]
       }
     </script>
@@ -169,6 +194,6 @@ webhook-signature: v1,BASE64_SIGNATURE
       <img data-lightbox-image alt="">
     </dialog>
 
-    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Private, local-first meeting transcription with real speaker attribution.</p></div><div class="footer-column"><strong>Product</strong><a href="../#features">Features</a><a href="../#privacy">Privacy</a><a href="./#install">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="./">Setup guide</a><a href="https://github.com/igarrux/kuali/blob/main/README.md">Documentation</a><a href="../#faq">FAQ</a></div><div class="footer-column"><strong>Project</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.md">Privacy policy</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Built in the open. Your meetings stay yours.</span></div></div></footer>
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Private, local-first meeting transcription with real speaker attribution.</p></div><div class="footer-column"><strong>Product</strong><a href="../discord-meeting-transcription/">Discord transcription</a><a href="../google-meet-transcription/">Google Meet transcription</a><a href="./#install">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="./">Setup guide</a><a href="https://github.com/igarrux/kuali/blob/main/README.md">Documentation</a><a href="../#faq">FAQ</a></div><div class="footer-column"><strong>Project</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.md">Privacy policy</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Built in the open. Your meetings stay yours.</span></div></div></footer>
   </body>
 </html>

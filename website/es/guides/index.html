@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Instalar y configurar Kuali — Guía completa</title>
     <meta name="description" content="Instala Kuali en macOS, descarga pesos de Whisper, conecta Discord y reuniones web, y configura Standard Webhooks firmados paso a paso.">
+    <meta name="author" content="Jhon Guerrero">
     <meta name="theme-color" content="#090d12">
     <meta name="robots" content="index, follow, max-image-preview:large">
     <link rel="canonical" href="https://kuali.garrux.dev/es/guides/">
@@ -13,6 +14,7 @@
     <link rel="alternate" hreflang="x-default" href="https://kuali.garrux.dev/guides/">
     <link rel="icon" href="../../assets/kuali-logo.svg" type="image/svg+xml">
     <link rel="apple-touch-icon" href="../../assets/icon.png">
+    <link rel="sitemap" type="application/xml" href="../../sitemap.xml">
     <link rel="stylesheet" href="../../assets/site.css?v=20260811">
     <meta property="og:type" content="article">
     <meta property="og:site_name" content="Kuali">
@@ -20,14 +22,27 @@
     <meta property="og:description" content="Guía visual para macOS, modelos locales, Discord, reuniones del navegador y Standard Webhooks.">
     <meta property="og:url" content="https://kuali.garrux.dev/es/guides/">
     <meta property="og:image" content="https://kuali.garrux.dev/assets/discord/es/new-application.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="2560">
+    <meta property="og:image:height" content="1440">
+    <meta property="og:image:alt" content="Guía de Kuali mostrando el Portal de desarrolladores de Discord">
     <meta property="og:locale" content="es_419">
+    <meta property="og:locale:alternate" content="en_US">
     <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Instala y configura Kuali">
+    <meta name="twitter:description" content="Guía visual para macOS, modelos locales de Whisper, Discord, Google Meet y Standard Webhooks firmados.">
+    <meta name="twitter:image" content="https://kuali.garrux.dev/assets/discord/es/new-application.png">
+    <meta name="twitter:image:alt" content="Guía de Kuali mostrando el Portal de desarrolladores de Discord">
     <script type="application/ld+json">
       {
         "@context": "https://schema.org",
         "@type": "HowTo",
         "name": "Instalar y configurar Kuali",
         "description": "Instala Kuali en macOS y conéctalo con Discord y reuniones del navegador.",
+        "url": "https://kuali.garrux.dev/es/guides/",
+        "image": "https://kuali.garrux.dev/assets/discord/es/new-application.png",
+        "author": { "@type": "Person", "name": "Jhon Guerrero" },
+        "inLanguage": "es",
         "totalTime": "PT15M",
         "tool": [
           { "@type": "HowToTool", "name": "Una Mac con Apple Silicon" },
@@ -39,6 +54,16 @@
           { "@type": "HowToStep", "name": "Elegir una integración", "text": "Crea un bot de Discord o carga la extensión incluida con Kuali." },
           { "@type": "HowToStep", "name": "Descargar un modelo", "text": "Abre Kuali y descarga el modelo de Whisper adecuado para tu computadora." },
           { "@type": "HowToStep", "name": "Iniciar una reunión", "text": "Entra a una llamada y confirma que Kuali muestre actividad y transcripción en vivo." }
+        ]
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "BreadcrumbList",
+        "itemListElement": [
+          { "@type": "ListItem", "position": 1, "name": "Kuali", "item": "https://kuali.garrux.dev/es/" },
+          { "@type": "ListItem", "position": 2, "name": "Guía de instalación", "item": "https://kuali.garrux.dev/es/guides/" }
         ]
       }
     </script>
@@ -130,6 +155,6 @@ webhook-signature: v1,BASE64_SIGNATURE
 
     <dialog class="lightbox" data-lightbox aria-label="Imagen ampliada de la guía"><div class="lightbox-head"><strong data-lightbox-title>Imagen de la guía</strong><button class="lightbox-close" type="button" data-lightbox-close aria-label="Cerrar imagen">×</button></div><img data-lightbox-image alt=""></dialog>
 
-    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="../#funciones">Funciones</a><a href="../#privacidad">Privacidad</a><a href="./#instalar">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="../#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div></footer>
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Transcripción privada y local de reuniones con atribución real por hablante.</p></div><div class="footer-column"><strong>Producto</strong><a href="../transcripcion-reuniones-discord/">Transcripción de Discord</a><a href="../transcripcion-google-meet/">Transcripción de Google Meet</a><a href="./#instalar">Descargar</a></div><div class="footer-column"><strong>Aprende</strong><a href="./">Guía de instalación</a><a href="https://github.com/igarrux/kuali/blob/main/README.es.md">Documentación</a><a href="../#preguntas">Preguntas</a></div><div class="footer-column"><strong>Proyecto</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribuir</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.es.md">Privacidad</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Construido a la vista de todos. Tus reuniones siguen siendo tuyas.</span></div></div></footer>
   </body>
 </html>

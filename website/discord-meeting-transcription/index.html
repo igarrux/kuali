@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Discord meeting transcription with speaker identity — Kuali</title>
+    <meta name="description" content="Transcribe Discord voice calls locally and in real time with participant identity, consent notices, searchable notes, optional summaries, tasks, and signed webhooks.">
+    <meta name="author" content="Jhon Guerrero">
+    <meta name="theme-color" content="#090d12">
+    <meta name="robots" content="index, follow, max-image-preview:large">
+    <link rel="canonical" href="https://kuali.garrux.dev/discord-meeting-transcription/">
+    <link rel="alternate" hreflang="en" href="https://kuali.garrux.dev/discord-meeting-transcription/">
+    <link rel="alternate" hreflang="es" href="https://kuali.garrux.dev/es/transcripcion-reuniones-discord/">
+    <link rel="alternate" hreflang="x-default" href="https://kuali.garrux.dev/discord-meeting-transcription/">
+    <link rel="icon" href="../assets/kuali-logo.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="../assets/icon.png">
+    <link rel="manifest" href="../site.webmanifest">
+    <link rel="sitemap" type="application/xml" href="../sitemap.xml">
+    <link rel="stylesheet" href="../assets/site.css?v=20260811">
+    <meta property="og:type" content="website">
+    <meta property="og:site_name" content="Kuali">
+    <meta property="og:title" content="Discord meeting transcription that knows who spoke">
+    <meta property="og:description" content="Kuali joins Discord voice channels, preserves participant identity, transcribes locally, and delivers searchable meeting results.">
+    <meta property="og:url" content="https://kuali.garrux.dev/discord-meeting-transcription/">
+    <meta property="og:image" content="https://kuali.garrux.dev/assets/kuali-app.png">
+    <meta property="og:image:type" content="image/png">
+    <meta property="og:image:width" content="1220">
+    <meta property="og:image:height" content="820">
+    <meta property="og:image:alt" content="Kuali showing a local meeting library and Discord connection status">
+    <meta property="og:locale" content="en_US">
+    <meta property="og:locale:alternate" content="es_419">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Local Discord meeting transcription — Kuali">
+    <meta name="twitter:description" content="Live speaker identity, local Whisper transcription, searchable notes, summaries, tasks, and signed webhooks.">
+    <meta name="twitter:image" content="https://kuali.garrux.dev/assets/kuali-app.png">
+    <meta name="twitter:image:alt" content="Kuali showing a local meeting library and Discord connection status">
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "WebPage",
+        "name": "Discord meeting transcription with speaker identity",
+        "url": "https://kuali.garrux.dev/discord-meeting-transcription/",
+        "description": "Local, open-source Discord meeting transcription with real participant identity.",
+        "inLanguage": "en",
+        "isPartOf": { "@type": "WebSite", "name": "Kuali", "url": "https://kuali.garrux.dev/" },
+        "about": {
+          "@type": "SoftwareApplication",
+          "name": "Kuali",
+          "applicationCategory": "BusinessApplication",
+          "operatingSystem": "macOS",
+          "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+        },
+        "breadcrumb": {
+          "@type": "BreadcrumbList",
+          "itemListElement": [
+            { "@type": "ListItem", "position": 1, "name": "Kuali", "item": "https://kuali.garrux.dev/" },
+            { "@type": "ListItem", "position": 2, "name": "Discord meeting transcription", "item": "https://kuali.garrux.dev/discord-meeting-transcription/" }
+          ]
+        }
+      }
+    </script>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {
+            "@type": "Question",
+            "name": "Can Kuali identify individual Discord speakers?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. Discord supplies a separate voice stream and stable participant identity for each user, so Kuali can keep transcript segments attached to the correct participant without guessing from a mixed recording." }
+          },
+          {
+            "@type": "Question",
+            "name": "Does Kuali save the Discord call audio?",
+            "acceptedAnswer": { "@type": "Answer", "text": "No. Kuali processes raw audio in memory with Silero and Whisper and stores the resulting transcript, meeting metadata, and optional insights instead of an audio recording." }
+          },
+          {
+            "@type": "Question",
+            "name": "Can Kuali publish the meeting result in Discord?",
+            "acceptedAnswer": { "@type": "Answer", "text": "Yes. When enabled, Kuali updates one compact Discord card with tasks and private controls for the summary, key points, decisions, questions, and paginated full transcript." }
+          }
+        ]
+      }
+    </script>
+    <script src="../assets/site.js" defer></script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <header class="site-header" data-site-header>
+      <nav class="nav container" aria-label="Primary navigation">
+        <a class="brand" href="../" aria-label="Kuali home"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a>
+        <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="nav-menu" aria-label="Open navigation" data-nav-toggle><span></span></button>
+        <div class="nav-menu" id="nav-menu" data-nav-menu><div class="nav-links"><a href="../#features">Features</a><a href="../#privacy">Privacy</a><a href="../guides/">Guide</a><a href="#faq">FAQ</a></div><div class="nav-actions"><a class="language-link" href="../es/transcripcion-reuniones-discord/" lang="es" hreflang="es">ES</a><a class="button button-small button-quiet" href="https://github.com/igarrux/kuali">GitHub ↗</a></div></div>
+      </nav>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="container hero-grid">
+          <div class="hero-copy" data-reveal>
+            <span class="eyebrow">Open-source Discord transcription</span>
+            <h1>Discord meeting transcription that <span class="text-gradient">knows who spoke.</span></h1>
+            <p class="hero-lead">Kuali joins voice channels as a bot, receives each participant separately, and transcribes the conversation live on your computer. No system-audio recording and no cloud transcription account.</p>
+            <div class="hero-actions"><a class="button button-primary" href="../guides/#discord">Connect Discord <span aria-hidden="true">→</span></a><a class="button" href="https://github.com/igarrux/kuali">Read the source <span aria-hidden="true">↗</span></a></div>
+            <div class="hero-note" aria-label="Discord integration highlights"><span>Real participant identity</span><span>Audible consent notice</span><span>Local Whisper transcription</span></div>
+          </div>
+          <div class="hero-visual" data-reveal><figure class="app-preview"><img src="../assets/kuali-app.png" width="1220" height="820" fetchpriority="high" alt="The Kuali desktop interface with its local meeting library and Discord following ready"><figcaption><span class="preview-dot" aria-hidden="true"></span> Discord connected to the local Kuali app</figcaption></figure></div>
+        </div>
+      </section>
+
+      <section class="section section-compact">
+        <div class="container">
+          <span class="eyebrow" data-reveal>Why native capture matters</span>
+          <h2 data-reveal>Not one mixed recording.<br>One identity per voice.</h2>
+          <p class="section-copy" data-reveal>Generic recorders capture the device output and later try to infer speakers from a single waveform. Kuali uses Discord's participant streams directly, preserving the platform user ID, display name, avatar, timing, and voice channel context from capture to transcript.</p>
+          <div class="steps">
+            <article class="step-card" data-reveal><h3>Follow or invite</h3><p>Kuali can follow the configured Discord user automatically, or anyone in a voice channel can invite it with <code>/record</code> or <code>/grabar</code>.</p></article>
+            <article class="step-card" data-reveal><h3>Transcribe live</h3><p>Silero removes non-speech audio before Whisper decodes each participant. The live view shows who is speaking and the text attached to them.</p></article>
+            <article class="step-card" data-reveal><h3>Deliver useful results</h3><p>The meeting becomes a searchable local record and, when configured, a polished Discord card with tasks and private paginated views.</p></article>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="details">
+        <div class="guide-layout container">
+          <nav class="guide-toc" aria-label="Discord transcription topics"><strong>On this page</strong><a href="#identity">Speaker identity</a><a href="#consent">Consent</a><a href="#results">Results</a><a href="#privacy">Privacy</a><a href="#integrations">Webhooks</a></nav>
+          <div class="guide-content">
+            <section class="guide-section" id="identity" data-reveal><span class="eyebrow">Speaker attribution</span><h2>Names come from Discord, not diarization guesses.</h2><p>Every Discord user is tracked with a string-safe platform ID. Joining late, changing activity, sharing a screen, or temporarily stopping speech does not create a new anonymous speaker. Separate call sessions also keep independent participants and clocks.</p><p>This platform identity lets Kuali assign tasks to a participant, filter work by person, show avatars, and preserve exactly who said each transcript segment.</p></section>
+            <section class="guide-section" id="consent" data-reveal><span class="eyebrow">Recording notice</span><h2>Consent is part of the call lifecycle.</h2><p>When Kuali joins, it plays and posts the configured disclosure. Participants who arrive later hear the same notice, and an append-only audit log records participant arrivals and notice times. Kuali excludes its own announcement from transcription.</p></section>
+            <section class="guide-section" id="results" data-reveal><span class="eyebrow">After the call</span><h2>Readable in Discord. Complete when you need it.</h2><p>Kuali can publish one compact meeting card while the optional summary is prepared and update that same message when processing finishes. Buttons open the summary, key points, decisions, open questions, and paginated transcript privately, while downloadable text files preserve the complete output.</p><p>Inside the desktop app, every meeting remains searchable by channel, date, participant, title, and words from the transcript.</p></section>
+            <section class="guide-section" id="privacy" data-reveal><span class="eyebrow">Local by default</span><h2>Voice is decoded on your computer.</h2><p>Discord audio is processed in memory. Silero voice activity detection and Whisper run locally, and Kuali does not keep an audio recording. Meeting data stays in Kuali's local application directory until you delete it.</p><p>Summaries are optional. A transcript reaches an external LLM only when you enable summaries and configure that provider yourself.</p></section>
+            <section class="guide-section" id="integrations" data-reveal><span class="eyebrow">Interoperability</span><h2>Send completed meetings to your own tools.</h2><p>Signed Standard Webhooks can subscribe globally or to one Discord channel. The <code>meeting.completed</code> event contains participants, timestamped transcript, summary status, insights, and tasks—never the original audio.</p><p><a class="button" href="../guides/#webhooks">Read the webhook guide <span aria-hidden="true">→</span></a></p></section>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-compact" id="faq"><div class="container narrow"><span class="eyebrow" data-reveal>Discord transcription FAQ</span><h2 data-reveal>Before Kuali joins.</h2><div class="faq-list" data-reveal><details><summary>Can Kuali identify individual Discord speakers?</summary><p>Yes. Discord provides a separate stream and stable identity for each user, allowing Kuali to preserve attribution without guessing from mixed system audio.</p></details><details><summary>Does Kuali save call audio?</summary><p>No. Raw audio is processed in memory by Silero and Whisper. Kuali stores the transcript and meeting record, not an audio recording.</p></details><details><summary>What happens when someone joins late?</summary><p>Kuali registers the participant, plays the disclosure for them, records that notice in the consent log, and begins processing their separate voice stream.</p></details><details><summary>Are summaries required?</summary><p>No. Live and stored transcription work locally without an LLM. Summary and task delivery can be disabled entirely.</p></details></div></div></section>
+
+      <section class="section"><div class="container install-panel" data-reveal><div><span class="eyebrow">Try the complete flow</span><h2>Connect Discord in three guided steps.</h2></div><div><p>Kuali walks through creating the bot, pasting its token and your username, and authorizing the selected server with only the permissions it needs.</p><p><a class="button button-primary" href="../guides/#discord">Open the Discord setup guide <span aria-hidden="true">→</span></a></p></div></div></section>
+    </main>
+
+    <footer class="site-footer"><div class="container"><div class="footer-grid"><div class="footer-brand"><a class="brand" href="../"><img src="../assets/kuali-logo.svg" width="35" height="35" alt=""><span>Kuali</span></a><p>Open-source, local meeting transcription with real speaker attribution.</p></div><div class="footer-column"><strong>Product</strong><a href="./">Discord transcription</a><a href="../google-meet-transcription/">Google Meet transcription</a><a href="../guides/#install">Download</a></div><div class="footer-column"><strong>Learn</strong><a href="../guides/">Setup guide</a><a href="https://github.com/igarrux/kuali/blob/main/README.md">Documentation</a><a href="#faq">FAQ</a></div><div class="footer-column"><strong>Project</strong><a href="https://github.com/igarrux/kuali">GitHub</a><a href="https://github.com/igarrux/kuali/blob/main/CONTRIBUTING.md">Contribute</a><a href="https://github.com/igarrux/kuali/blob/main/PRIVACY.md">Privacy policy</a></div></div><div class="footer-bottom"><span><a href="https://github.com/igarrux/kuali/blob/main/LICENSE">MIT</a> · Jhon Guerrero · <span data-current-year>2026</span></span><span>Built in the open. Your meetings stay yours.</span></div></div></footer>
+  </body>
+</html>
