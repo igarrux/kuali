@@ -258,6 +258,7 @@ test("sitemap contains every canonical page once with language alternates", () =
 test("Cloudflare Workers is the only website deployment target", () => {
   const wrangler = JSON.parse(readRepository("wrangler.jsonc").replace(/^\s*\/\/.*$/gm, ""));
   assert.equal(wrangler.name, "kuali-site");
+  assert.equal(wrangler.account_id, "d86563bfb9f7e428720f1b7b01a0b348");
   assert.equal(wrangler.assets.directory, "./website");
   assert.equal(wrangler.assets.not_found_handling, "404-page");
   assert.ok(existsSync(join(websiteRoot, ".assetsignore")));

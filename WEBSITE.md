@@ -4,6 +4,8 @@ The public website is a dependency-free static site in [`website/`](website/).
 Production is served from <https://kuali.garrux.dev> by the `kuali-site`
 Cloudflare Worker using Workers Static Assets. The Wrangler configuration at
 [`wrangler.jsonc`](wrangler.jsonc) is the deployment source of truth.
+It pins the public Worker to the `Garrux` Cloudflare account so non-interactive
+deployments never select another account available to the maintainer.
 
 ## Preview locally
 

@@ -1,6 +1,7 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "kuali-site",
+  "account_id": "d86563bfb9f7e428720f1b7b01a0b348",
   "compatibility_date": "2026-08-11",
   "assets": {
     "directory": "./website",
