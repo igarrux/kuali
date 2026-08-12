@@ -1,0 +1,78 @@
+name: Meeting capture problem
+description: Report missing audio, attribution, roster, mute, join, or shutdown behavior.
+title: "[Capture]: "
+labels: ["type: bug", "area: capture", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Capture reports are most useful when the join order and participant state are exact. Never upload a real private transcript or credential.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Privacy and reproduction
+      options:
+        - label: I searched for an existing report.
+          required: true
+        - label: I can reproduce this with a controlled test call.
+          required: true
+        - label: I removed names, meeting content, IDs, tokens, and secrets.
+          required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Meeting platform
+      options:
+        - Discord
+        - Google Meet
+        - Microsoft Teams (experimental)
+        - Zoom (experimental)
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kuali and extension versions
+      placeholder: Desktop v0.1.10, extension v0.1.4
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and browser
+      placeholder: macOS 15.6, Chrome 140
+    validations:
+      required: true
+  - type: input
+    id: participants
+    attributes:
+      label: Participant count
+      placeholder: 9 total, including the local participant
+    validations:
+      required: true
+  - type: textarea
+    id: order
+    attributes:
+      label: Exact join and leave order
+      placeholder: Kuali joined first; participant A joined; participant B joined; A muted; …
+    validations:
+      required: true
+  - type: textarea
+    id: state
+    attributes:
+      label: What Kuali showed
+      description: Mention roster names, speaking indicators, mute state, transcript output, reconnects, and whether the meeting finalized.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected capture behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs
+      description: Include the relevant time window. Replace names, IDs, channel names, and meeting content.
+      render: shell

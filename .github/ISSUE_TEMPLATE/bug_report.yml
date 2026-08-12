@@ -1,0 +1,78 @@
+name: Bug report
+description: Report a reproducible problem outside live audio capture.
+title: "[Bug]: "
+labels: ["type: bug", "status: needs triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Kuali. Remove participant names, meeting content, tokens, API keys, webhook secrets, and private endpoints before submitting.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues for the same problem.
+          required: true
+        - label: I reproduced this with the latest Kuali release or current main branch.
+          required: true
+        - label: I removed private meeting data and credentials from this report.
+          required: true
+  - type: input
+    id: version
+    attributes:
+      label: Kuali version or revision
+      placeholder: v0.1.10 or commit SHA
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: macOS 15.6 on Apple M2
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Desktop UI
+        - Meeting library or tasks
+        - Whisper models or transcription
+        - Summaries and LLM providers
+        - Standard Webhooks
+        - Updates or packaging
+        - Documentation or website
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Reproduction steps
+      description: Describe the shortest sequence that reliably triggers the problem.
+      placeholder: |
+        1. Open …
+        2. Select …
+        3. Observe …
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Redacted logs or screenshots
+      description: Drag files here only after removing private data and credentials.
+      render: shell
