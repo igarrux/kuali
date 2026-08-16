@@ -94,6 +94,13 @@ pub struct DiscordConfig {
     pub leave_when_empty: bool,
     /// Post the summary and tasks to the text channel on completion.
     pub post_summary_to_channel: bool,
+    /// Restrict meeting content to the people the call registered as present.
+    ///
+    /// The channel card keeps its metadata but loses every excerpt, and both the
+    /// card actions and `/resumen` answer privately only to participants. Anyone
+    /// else in the channel reads nothing, which is what makes the setting a
+    /// confidentiality guarantee rather than a display preference.
+    pub summary_for_participants_only: bool,
 }
 
 impl Default for DiscordConfig {
@@ -105,6 +112,7 @@ impl Default for DiscordConfig {
             follow_automatically: true,
             leave_when_empty: true,
             post_summary_to_channel: false,
+            summary_for_participants_only: false,
         }
     }
 }
