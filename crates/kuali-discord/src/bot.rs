@@ -2879,6 +2879,7 @@ mod tests {
                 source_ms: Some(5_000),
                 done: false,
             }],
+            notes: Vec::new(),
             open_questions: vec!["¿A qué hora se publica?".into()],
             generated_by: "Claude · Sonnet".into(),
         });

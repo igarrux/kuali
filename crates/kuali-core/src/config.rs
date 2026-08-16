@@ -484,7 +484,8 @@ pub struct LlmConfig {
     /// Settings keyed by provider ID. Each provider retains its key and model
     /// when the user switches away and back.
     pub providers: BTreeMap<String, ProviderSettings>,
-    /// Language used for summaries and action items.
+    /// Language used for summaries and action items. Empty or `auto` follows
+    /// the language spoken in each meeting.
     pub output_language: String,
     /// Allow meeting transcripts to be processed by the configured LLM.
     /// When disabled, automatic and manual summaries are both blocked.
@@ -497,7 +498,7 @@ impl Default for LlmConfig {
             preferred_provider: None,
             model_override: None,
             providers: BTreeMap::new(),
-            output_language: "español".to_string(),
+            output_language: "auto".to_string(),
             summarize_on_leave: true,
         }
     }

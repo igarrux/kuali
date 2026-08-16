@@ -58,6 +58,25 @@ pub fn render(meeting: &Meeting) -> String {
                 out.push('\n');
             }
 
+            if !summary.notes.is_empty() {
+                out.push_str("## Notas\n\n");
+                for note in &summary.notes {
+                    out.push_str(&format!("- {}", note.text));
+                    let mut marks = Vec::new();
+                    if let Some(author) = &note.author {
+                        marks.push(format!("**{author}**"));
+                    }
+                    if let Some(ms) = note.source_ms {
+                        marks.push(format!("`{}`", format_timestamp(ms)));
+                    }
+                    if !marks.is_empty() {
+                        out.push_str(&format!(" — {}", marks.join(" · ")));
+                    }
+                    out.push('\n');
+                }
+                out.push('\n');
+            }
+
             bullet_section(&mut out, "Decisiones", &summary.decisions);
             bullet_section(&mut out, "Puntos clave", &summary.key_points);
             bullet_section(&mut out, "Preguntas abiertas", &summary.open_questions);
@@ -164,6 +183,7 @@ mod tests {
                     source_ms: Some(5_000),
                     done: false,
                 }],
+                notes: Vec::new(),
                 open_questions: vec!["¿Quién presenta?".into()],
                 generated_by: "Claude Code · sonnet".into(),
             });

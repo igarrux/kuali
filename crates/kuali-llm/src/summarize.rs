@@ -1,7 +1,7 @@
 //! Converts a transcript into a concise summary and actionable follow-up for
 //! someone who missed the meeting.
 
-use kuali_core::{ActionItem, Meeting, MeetingSummary};
+use kuali_core::{ActionItem, Meeting, MeetingNote, MeetingSummary};
 use serde::Deserialize;
 
 use crate::json::{extract_json_object, non_empty};
@@ -34,47 +34,94 @@ pub fn output_schema() -> serde_json::Value {
                     "additionalProperties": false
                 }
             },
+            "notes": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "properties": {
+                        "text": { "type": "string" },
+                        "author": { "type": "string" },
+                        "timestamp": { "type": "string" }
+                    },
+                    "required": ["text", "author", "timestamp"],
+                    "additionalProperties": false
+                }
+            },
             "openQuestions": { "type": "array", "items": { "type": "string" } }
         },
-        "required": ["title", "overview", "keyPoints", "decisions", "actionItems", "openQuestions"],
+        "required": [
+            "title", "overview", "keyPoints", "decisions", "actionItems", "notes", "openQuestions"
+        ],
         "additionalProperties": false
     })
 }
 
+/// The prompt is written in English because that is where every provider is
+/// strongest; the language of the *answer* is decided separately by
+/// [`language_rule`], so the instructions never fight the output language.
 pub fn system_prompt(language: &str) -> String {
+    let language_rule = language_rule(language);
     format!(
-        r#"Eres el analista de reuniones de Kuali. Recibes la transcripción automática de una reunión de voz y devuelves lo que le sirve a alguien que no estuvo: qué se decidió y qué hay que hacer.
+        r#"You are Kuali's meeting analyst. You receive the automatic transcript of a voice meeting and return what is useful to someone who was not there: what was decided and what has to be done.
 
-Sobre el material con el que trabajas:
+About the material you work with:
 
-- Viene de reconocimiento automático de voz, así que tiene palabras mal reconocidas, nombres propios destrozados y frases cortadas por la mitad. Interpreta con sentido común en lugar de repetir literalmente algo que claramente está mal transcrito.
-- Cada línea lleva su marca de tiempo y el nombre de quien habla, tomado de Discord. Úsalos: una tarea sin dueño vale bastante menos que una con dueño.
-- Revisa los compromisos de todos los participantes. No centres las tareas en quien más habló ni en una sola persona.
-- Cuando una tarea tenga dueño, copia exactamente uno de los nombres de la lista de Participantes. Si el dueño no queda claro, usa una cadena vacía; no inventes ni combines nombres.
-- Que alguien mencione algo no lo convierte en tarea. Una tarea es un compromiso: alguien va a hacer algo concreto. Si en la reunión no salió ninguna, devuelve la lista vacía; inventar tareas es peor que no encontrarlas.
-- Las reuniones se van por las ramas. Distingue lo que se decidió de lo que solo se comentó de paso.
-- El título debe permitir reconocer la conversación mañana: entre 4 y 9 palabras y 60 caracteres como máximo, centrado en el asunto principal, sin fecha, plataforma ni la palabra "reunión".
+- It comes from automatic speech recognition, so it has misheard words, mangled proper nouns and sentences cut in half. Interpret with common sense instead of repeating word for word something that is clearly mistranscribed.
+- Every line carries its timestamp and the name of whoever is speaking, taken from the meeting platform. Use them: a task with no owner is worth far less than one with an owner.
+- Go through the commitments of every participant. Do not centre the tasks on whoever spoke the most, or on a single person.
+- When a task has an owner, copy one of the names in the Participants list exactly. If the owner is unclear, use an empty string; do not invent or merge names.
+- Someone mentioning something does not turn it into a task. A task is a commitment: someone is going to do something concrete. If none came up in the meeting, return an empty list; inventing tasks is worse than finding none.
+- When someone says they are writing something down —"me lo apunto", "tomo nota", "anoto eso", "I'll write that down", in any language—, record that note under that person in "notes". The note is what that person would want to read later (the fact, the figure, the reference, the instruction), not the sentence they used to say they would note it down. A note is not a task: writing down a version number is a note; committing to update it is a task. If nobody asked to note anything, return an empty list.
+- Meetings wander. Tell apart what was decided from what was only mentioned in passing.
+- The title has to make the conversation recognisable tomorrow: between 4 and 9 words and 60 characters at most, centred on the main subject, with no date, no platform and not the word "meeting".
 
-Escribe en {language}.
+{language_rule}
 
-Devuelve únicamente un objeto JSON, sin texto alrededor y sin envolverlo en un bloque de código, con esta forma:
+Return a JSON object only, with no text around it and without wrapping it in a code block, in this shape:
 
 {{
-  "title": "nombre breve y específico del tema principal",
-  "overview": "dos o tres frases sobre de qué fue la reunión y en qué quedó",
-  "keyPoints": ["los puntos que de verdad importan"],
-  "decisions": ["lo que se decidió, no lo que se propuso"],
+  "title": "short, specific name of the main subject",
+  "overview": "two or three sentences on what the meeting was about and where it landed",
+  "keyPoints": ["the points that actually matter"],
+  "decisions": ["what was decided, not what was proposed"],
   "actionItems": [
     {{
-      "text": "qué hay que hacer",
-      "assignee": "nombre exacto de Participantes de quien se comprometió; cadena vacía si no queda claro",
-      "due": "el plazo tal y como se dijo (\"el viernes\", \"antes de la demo\"); cadena vacía si no se mencionó",
-      "timestamp": "la marca de tiempo de la línea de la que sale la tarea, en el mismo formato que la transcripción"
+      "text": "what has to be done",
+      "assignee": "exact name from Participants of whoever committed to it; empty string if unclear",
+      "due": "the deadline as it was said (\"on Friday\", \"before the demo\"); empty string if it was not mentioned",
+      "timestamp": "the timestamp of the line the task comes from, in the same format as the transcript"
     }}
   ],
-  "openQuestions": ["lo que quedó sin resolver"]
+  "notes": [
+    {{
+      "text": "what that person wanted written down, phrased so it stands on its own",
+      "author": "exact name from Participants of whoever said they were noting it; empty string if unclear",
+      "timestamp": "the timestamp of the line where it was asked to be noted, in the same format as the transcript"
+    }}
+  ],
+  "openQuestions": ["what was left unresolved"]
 }}"#
     )
+}
+
+/// Which language the summary comes back in. An empty or automatic setting
+/// follows the meeting itself: the notes and tasks quote what people actually
+/// said, so translating them costs more fidelity than it buys. Any other value
+/// is an explicit request from the user and overrides the meeting.
+fn language_rule(language: &str) -> String {
+    let choice = language.trim();
+    let automatic = choice.is_empty()
+        || ["auto", "automatic", "automático", "automatico"]
+            .iter()
+            .any(|value| choice.eq_ignore_ascii_case(value));
+
+    if automatic {
+        "Write every field in the language the meeting was held in. If the transcript mixes languages, use the one most of the conversation is in.".to_string()
+    } else {
+        format!(
+            "Write every field in {choice}, whatever language the meeting was held in. Keep proper nouns, product names and quoted figures as they were said."
+        )
+    }
 }
 
 pub fn user_prompt(meeting: &Meeting) -> String {
@@ -87,12 +134,12 @@ pub fn user_prompt(meeting: &Meeting) -> String {
         .join(", ");
 
     format!(
-        "Reunión: {}\nFecha: {}\nDuración: {}\nParticipantes: {}\n\n--- TRANSCRIPCIÓN ---\n{}",
+        "Meeting: {}\nDate: {}\nDuration: {}\nParticipants: {}\n\n--- TRANSCRIPT ---\n{}",
         meeting.meta.source_title(),
         meeting.meta.started_at.format("%Y-%m-%d %H:%M UTC"),
         kuali_core::format_timestamp(meeting.duration_ms()),
         if participants.is_empty() {
-            "(desconocidos)"
+            "(unknown)"
         } else {
             &participants
         },
@@ -122,19 +169,25 @@ pub async fn summarize(
 /// Models may return a handle or drop a diacritic despite exact-name prompting.
 /// Normalization preserves one UI identity without discarding useful assignees.
 fn canonicalize_assignees(summary: &mut MeetingSummary, meeting: &Meeting) {
-    for task in &mut summary.action_items {
-        let Some(assignee) = task.assignee.as_deref() else {
+    let people = summary
+        .action_items
+        .iter_mut()
+        .map(|task| &mut task.assignee)
+        .chain(summary.notes.iter_mut().map(|note| &mut note.author));
+
+    for person in people {
+        let Some(name) = person.as_deref() else {
             continue;
         };
-        let normalized = normalize_person(assignee);
+        let normalized = normalize_person(name);
         let canonical = meeting.speakers.iter().find(|speaker| {
             !speaker.is_bot
                 && [speaker.display_name.as_str(), speaker.username.as_str()]
                     .iter()
-                    .any(|name| normalize_person(name) == normalized)
+                    .any(|candidate| normalize_person(candidate) == normalized)
         });
         if let Some(speaker) = canonical {
-            task.assignee = Some(speaker.display_name.clone());
+            *person = Some(speaker.display_name.clone());
         }
     }
 }
@@ -172,8 +225,21 @@ struct RawSummary {
     decisions: Vec<String>,
     #[serde(default, alias = "action_items", alias = "tasks")]
     action_items: Vec<RawActionItem>,
+    #[serde(default, alias = "meeting_notes", alias = "meetingNotes")]
+    notes: Vec<RawNote>,
     #[serde(default, alias = "open_questions")]
     open_questions: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawNote {
+    #[serde(default, alias = "note", alias = "content")]
+    text: String,
+    #[serde(default, alias = "owner", alias = "speaker")]
+    author: String,
+    #[serde(default, alias = "time")]
+    timestamp: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -217,12 +283,25 @@ pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, Ll
         })
         .collect();
 
+    let notes = parsed
+        .notes
+        .into_iter()
+        .filter(|note| !note.text.trim().is_empty())
+        .map(|note| MeetingNote {
+            id: uuid::Uuid::new_v4().to_string(),
+            text: note.text.trim().to_string(),
+            author: non_empty(&note.author),
+            source_ms: parse_timestamp(&note.timestamp),
+        })
+        .collect();
+
     let summary = MeetingSummary {
         title: clean_title(&parsed.title),
         overview: parsed.overview.trim().to_string(),
         key_points: clean(parsed.key_points),
         decisions: clean(parsed.decisions),
         action_items,
+        notes,
         open_questions: clean(parsed.open_questions),
         generated_by: generated_by.to_string(),
     };
@@ -230,6 +309,7 @@ pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, Ll
         && summary.key_points.is_empty()
         && summary.decisions.is_empty()
         && summary.action_items.is_empty()
+        && summary.notes.is_empty()
         && summary.open_questions.is_empty()
     {
         return Err(LlmError::BadJson {
@@ -409,10 +489,65 @@ mod tests {
     }
 
     #[test]
+    fn notes_are_kept_with_their_author_and_position() {
+        let raw = r#"{
+            "overview": "x",
+            "notes": [
+                {"text": "La clave de la API caduca el 30 de septiembre", "author": "Ana", "timestamp": "04:10"},
+                {"note": "Servidor de pruebas: 10.0.0.4", "owner": "", "time": ""},
+                {"text": "   ", "author": "Ana", "timestamp": "01:00"}
+            ]
+        }"#;
+
+        let summary = parse_summary(raw, "test").unwrap();
+
+        assert_eq!(summary.notes.len(), 2);
+        assert_eq!(summary.notes[0].author.as_deref(), Some("Ana"));
+        assert_eq!(summary.notes[0].source_ms, Some(250_000));
+        assert_eq!(summary.notes[1].text, "Servidor de pruebas: 10.0.0.4");
+        assert_eq!(summary.notes[1].author, None);
+    }
+
+    #[test]
+    fn a_summary_with_only_notes_is_still_usable() {
+        let summary = parse_summary(
+            r#"{"notes":[{"text":"Apuntar el número de versión: 1.2.4","author":"","timestamp":""}]}"#,
+            "test",
+        )
+        .unwrap();
+        assert_eq!(summary.notes.len(), 1);
+    }
+
+    #[test]
+    fn the_prompt_separates_a_note_from_a_commitment() {
+        let prompt = system_prompt("español");
+        assert!(prompt.contains("me lo apunto"));
+        assert!(prompt.contains("in any language"));
+        assert!(prompt.contains("A note is not a task"));
+    }
+
+    #[test]
     fn prompt_requires_tasks_for_every_participant_with_exact_names() {
         let prompt = system_prompt("español");
-        assert!(prompt.contains("compromisos de todos los participantes"));
-        assert!(prompt.contains("copia exactamente uno de los nombres"));
+        assert!(prompt.contains("commitments of every participant"));
+        assert!(prompt.contains("copy one of the names in the Participants list exactly"));
+    }
+
+    #[test]
+    fn a_configured_language_overrides_the_language_of_the_meeting() {
+        let prompt = system_prompt("  español  ");
+        assert!(prompt.contains("Write every field in español, whatever language"));
+    }
+
+    #[test]
+    fn no_configured_language_follows_the_meeting() {
+        for setting in ["", "  ", "auto", "Automático"] {
+            let prompt = system_prompt(setting);
+            assert!(
+                prompt.contains("in the language the meeting was held in"),
+                "{setting:?} should follow the meeting"
+            );
+        }
     }
 
     #[test]
@@ -443,7 +578,7 @@ mod tests {
             {"text":"Uno","assignee":"angela.dev","due":"","timestamp":""},
             {"text":"Dos","assignee":"Angela","due":"","timestamp":""},
             {"text":"Tres","assignee":"Equipo de backend","due":"","timestamp":""}
-        ]}"#;
+        ],"notes":[{"text":"Nota","author":"angela.dev","timestamp":""}]}"#;
         let mut summary = parse_summary(raw, "test").unwrap();
 
         canonicalize_assignees(&mut summary, &meeting);
@@ -454,5 +589,6 @@ mod tests {
             summary.action_items[2].assignee.as_deref(),
             Some("Equipo de backend")
         );
+        assert_eq!(summary.notes[0].author.as_deref(), Some("Ángela"));
     }
 }

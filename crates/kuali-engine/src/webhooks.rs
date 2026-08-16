@@ -385,6 +385,7 @@ mod tests {
                 source_ms: Some(1_000),
                 done: false,
             }],
+            notes: Vec::new(),
             open_questions: vec!["¿A qué hora?".into()],
             generated_by: "test".into(),
         });

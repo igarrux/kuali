@@ -93,6 +93,21 @@ pub struct ActionItem {
     pub done: bool,
 }
 
+/// Something a participant asked to write down: "me lo apunto", "I'll note
+/// that". The note is the content they wanted kept, not the sentence itself.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingNote {
+    pub id: String,
+    pub text: String,
+    /// Participant who asked to note it, exactly as named in the meeting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub author: Option<String>,
+    /// Transcript position that produced the note, used for navigation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source_ms: Option<u64>,
+}
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MeetingSummary {
@@ -106,6 +121,10 @@ pub struct MeetingSummary {
     pub decisions: Vec<String>,
     #[serde(default)]
     pub action_items: Vec<ActionItem>,
+    /// Written down because someone said they would. Absent in meetings
+    /// summarized before notes existed, hence the default.
+    #[serde(default)]
+    pub notes: Vec<MeetingNote>,
     #[serde(default)]
     pub open_questions: Vec<String>,
     /// Provider that generated the result, preserving summary provenance.
