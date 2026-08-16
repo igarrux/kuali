@@ -152,6 +152,15 @@ sin llenar el canal con un bloque enorme. La tarjeta aparece mientras se prepara
 el resumen y luego se actualiza en el mismo lugar. Las vistas privadas largas se
 paginan dentro de la misma tarjeta, sin repartir la reunión entre varios mensajes.
 
+Una reunión también puede quedar reservada a quienes estuvieron en la llamada.
+Con *Ajustes → Discord → Solo quienes estuvieron en la llamada pueden leer la
+reunión*, la tarjeta del canal conserva el título, la duración, el número de
+participantes y cuántas tareas quedaron, pero no muestra ningún fragmento, y
+Kuali responde únicamente a los participantes —en privado, con un mensaje
+efímero— desde los botones de la tarjeta o con `/resumen` y `/summary`.
+Cualquier otra persona del canal, por permisivo que sea su rol de Discord, no
+lee nada.
+
 ### Reuniones del navegador
 
 Instala la extensión desde su ficha oficial en

@@ -145,6 +145,14 @@ the full meeting record. The card appears while the summary is being prepared
 and then updates in place. Long private views are paginated inside the same card
 without splitting the meeting across multiple Discord messages.
 
+Meetings can also be restricted to the people who were in the call. With
+*Settings → Discord → Only the people who were in the call can read the meeting*
+enabled, the channel card keeps its title, duration, participant count, and
+pending-task count but carries no excerpt, and Kuali answers only participants —
+privately, with an ephemeral message — through the card buttons or `/resumen`
+and `/summary`. Anyone else in the channel, however permissive their Discord
+role, reads nothing.
+
 ### Browser meetings
 
 Install the extension from its official
