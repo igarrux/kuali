@@ -118,6 +118,8 @@ mod tests {
             channel_name: "Daily".into(),
             started_at: Utc.with_ymd_and_hms(2026, 8, 6, 9, 0, 0).unwrap(),
             ended_at: None,
+            tags: Vec::new(),
+            folder: None,
         });
         m.upsert_speaker(Speaker {
             user_id: 10,

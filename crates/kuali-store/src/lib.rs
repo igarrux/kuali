@@ -326,6 +326,14 @@ fn meeting_matches_query(meeting: &Meeting, terms: &[&str]) -> bool {
         spanish_date(&local_started),
     );
 
+    for tag in &meeting.meta.tags {
+        searchable.push_str(tag);
+        searchable.push(' ');
+    }
+    if let Some(folder) = &meeting.meta.folder {
+        searchable.push_str(folder);
+        searchable.push(' ');
+    }
     for speaker in meeting.speakers.iter().filter(|speaker| !speaker.is_bot) {
         searchable.push_str(&speaker.display_name);
         searchable.push(' ');
@@ -413,6 +421,199 @@ fn spanish_date(date: &impl chrono::Datelike) -> String {
     )
 }
 
+/// Server identities from Discord, kept apart from meetings so the library can
+/// show an icon for calls recorded before Kuali knew about it.
+fn guilds_file() -> PathBuf {
+    kuali_core::paths::data_dir().join("guilds.json")
+}
+
+pub fn guilds() -> Vec<kuali_core::GuildInfo> {
+    std::fs::read(guilds_file())
+        .ok()
+        .and_then(|bytes| serde_json::from_slice(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Merges what the bot reported with what was already known: a server the bot
+/// no longer belongs to keeps its icon for its old meetings.
+pub fn remember_guilds(reported: Vec<kuali_core::GuildInfo>) -> Result<()> {
+    if reported.is_empty() {
+        return Ok(());
+    }
+    let mut known = guilds();
+    for guild in reported {
+        match known.iter_mut().find(|entry| entry.id == guild.id) {
+            Some(entry) => *entry = guild,
+            None => known.push(guild),
+        }
+    }
+    let path = guilds_file();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(io(parent))?;
+    }
+    write_atomic(&path, &serde_json::to_vec_pretty(&known)?)
+}
+
+/// Folder names live in their own file so an empty folder still exists after
+/// its last meeting is moved out or deleted.
+fn folders_file() -> PathBuf {
+    kuali_core::paths::data_dir().join("folders.json")
+}
+
+fn read_folder_catalog() -> Vec<String> {
+    std::fs::read(folders_file())
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<String>>(&bytes).ok())
+        .unwrap_or_default()
+}
+
+fn write_folder_catalog(folders: &[String]) -> Result<()> {
+    let path = folders_file();
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent).map_err(io(parent))?;
+    }
+    write_atomic(&path, &serde_json::to_vec_pretty(folders)?)
+}
+
+/// Every folder, in the order the user created them, including folders whose
+/// meetings were all moved elsewhere.
+pub fn list_folders() -> Result<Vec<String>> {
+    let mut folders = read_folder_catalog();
+    let known: std::collections::HashSet<String> =
+        folders.iter().map(|name| name.to_lowercase()).collect();
+    // Folders assigned to a meeting but missing from the catalog (an older
+    // Kuali, a restored backup) are adopted instead of disappearing.
+    let mut adopted = Vec::new();
+    for meta in list()? {
+        if let Some(folder) = meta.folder {
+            if !known.contains(&folder.to_lowercase())
+                && !adopted
+                    .iter()
+                    .any(|name: &String| name.eq_ignore_ascii_case(&folder))
+            {
+                adopted.push(folder);
+            }
+        }
+    }
+    folders.extend(adopted);
+    Ok(folders)
+}
+
+/// Adds a folder and returns the catalog. Creating one that already exists is
+/// not an error: the user gets the folder they asked for either way.
+pub fn create_folder(name: &str) -> Result<Vec<String>> {
+    let Some(name) = kuali_core::sanitize_folder(name) else {
+        return list_folders();
+    };
+    let mut folders = list_folders()?;
+    if !folders
+        .iter()
+        .any(|folder| folder.eq_ignore_ascii_case(&name))
+    {
+        folders.push(name);
+        write_folder_catalog(&folders)?;
+    }
+    Ok(folders)
+}
+
+pub fn rename_folder(from: &str, to: &str) -> Result<Vec<String>> {
+    let Some(to) = kuali_core::sanitize_folder(to) else {
+        return list_folders();
+    };
+    let folders: Vec<String> = list_folders()?
+        .into_iter()
+        .map(|folder| {
+            if folder.eq_ignore_ascii_case(from) {
+                to.clone()
+            } else {
+                folder
+            }
+        })
+        .collect();
+    write_folder_catalog(&folders)?;
+
+    for meta in list()? {
+        if meta
+            .folder
+            .as_deref()
+            .is_some_and(|folder| folder.eq_ignore_ascii_case(from))
+        {
+            let mut meeting = load(&meta.id)?;
+            meeting.meta.folder = Some(to.clone());
+            save(&meeting)?;
+        }
+    }
+    Ok(folders)
+}
+
+/// Removes the folder. Its meetings are not deleted: they return to the
+/// unfiled group.
+pub fn delete_folder(name: &str) -> Result<Vec<String>> {
+    let folders: Vec<String> = list_folders()?
+        .into_iter()
+        .filter(|folder| !folder.eq_ignore_ascii_case(name))
+        .collect();
+    write_folder_catalog(&folders)?;
+
+    for meta in list()? {
+        if meta
+            .folder
+            .as_deref()
+            .is_some_and(|folder| folder.eq_ignore_ascii_case(name))
+        {
+            let mut meeting = load(&meta.id)?;
+            meeting.meta.folder = None;
+            save(&meeting)?;
+        }
+    }
+    Ok(folders)
+}
+
+/// Files meetings under a folder, or takes them out of any folder with `None`.
+pub fn set_folder(ids: &[String], folder: Option<&str>) -> Result<()> {
+    let folder = folder.and_then(kuali_core::sanitize_folder);
+    if let Some(name) = &folder {
+        create_folder(name)?;
+    }
+    for id in ids {
+        let mut meeting = load(id)?;
+        meeting.meta.folder = folder.clone();
+        save(&meeting)?;
+    }
+    Ok(())
+}
+
+/// Replaces a meeting's tags and returns what was actually stored after
+/// sanitizing. Writing through `save` keeps `meeting.json` and `meta.json` in
+/// agreement, which `list` depends on.
+pub fn set_tags(id: &str, tags: Vec<String>) -> Result<Vec<String>> {
+    let mut meeting = load(id)?;
+    meeting.meta.tags = kuali_core::sanitize_tags(tags);
+    save(&meeting)?;
+    Ok(meeting.meta.tags)
+}
+
+/// Every tag in use, ordered by how often it appears so suggestions start with
+/// the labels the user actually relies on.
+pub fn all_tags() -> Result<Vec<String>> {
+    let mut counts: std::collections::HashMap<String, (String, usize)> =
+        std::collections::HashMap::new();
+    for meta in list()? {
+        for tag in meta.tags {
+            let entry = counts
+                .entry(tag.to_lowercase())
+                .or_insert_with(|| (tag.clone(), 0));
+            entry.1 += 1;
+        }
+    }
+    let mut tags: Vec<(String, usize)> = counts.into_values().collect();
+    tags.sort_by(|a, b| {
+        b.1.cmp(&a.1)
+            .then_with(|| a.0.to_lowercase().cmp(&b.0.to_lowercase()))
+    });
+    Ok(tags.into_iter().map(|(tag, _)| tag).collect())
+}
+
 pub fn delete(id: &str) -> Result<()> {
     let dir = meeting_dir(id);
     match std::fs::remove_dir_all(&dir) {
@@ -487,7 +688,19 @@ mod tests {
             channel_name: "Sala 1".into(),
             started_at: Utc.with_ymd_and_hms(2026, 8, 6, 14, 30, 0).unwrap(),
             ended_at: None,
+            tags: Vec::new(),
+            folder: None,
         })
+    }
+
+    #[test]
+    fn tags_and_folders_take_part_in_search_like_any_other_field() {
+        let mut meeting = sample();
+        meeting.meta.tags = vec!["Cliente Acme".into()];
+        meeting.meta.folder = Some("Clientes clave".into());
+        assert!(meeting_matches_query(&meeting, &["acme"]));
+        assert!(meeting_matches_query(&meeting, &["clientes", "clave"]));
+        assert!(!meeting_matches_query(&sample(), &["acme"]));
     }
 
     #[test]

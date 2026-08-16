@@ -115,6 +115,8 @@ pub enum KualiEvent {
         meeting_id: String,
         utterance_id: String,
     },
+    /// Server names and icons changed, so the library can refresh them.
+    GuildsUpdated,
     SummaryStarted {
         meeting_id: String,
     },

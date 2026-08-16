@@ -2224,6 +2224,23 @@ impl EventHandler for Handler {
     /// Checks for an existing call after cache readiness so starting Kuali mid-
     /// meeting works without requiring the followed user to leave and rejoin.
     async fn cache_ready(&self, ctx: Context, guilds: Vec<GuildId>) {
+        // The library shows these icons for meetings recorded long before this
+        // connection, so they are reported even when no call is happening.
+        let known = guilds
+            .iter()
+            .filter_map(|guild_id| {
+                let guild = ctx.cache.guild(*guild_id)?;
+                Some(kuali_core::GuildInfo {
+                    id: guild_id.get().to_string(),
+                    name: guild.name.clone(),
+                    icon: guild.icon_url(),
+                })
+            })
+            .collect::<Vec<_>>();
+        if !known.is_empty() {
+            let _ = self.tx.send(VoiceEvent::GuildsKnown(known));
+        }
+
         // Guild commands appear immediately unlike global commands. Replacing
         // the list also removes obsolete Kuali definitions.
         for guild_id in &guilds {
@@ -2818,6 +2835,8 @@ mod tests {
             channel_name: "general".into(),
             started_at: Utc.with_ymd_and_hms(2026, 8, 11, 14, 0, 0).unwrap(),
             ended_at: Some(Utc.with_ymd_and_hms(2026, 8, 11, 14, 42, 0).unwrap()),
+            tags: Vec::new(),
+            folder: None,
         });
         meeting.upsert_speaker(Speaker {
             user_id: 1,

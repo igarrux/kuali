@@ -782,6 +782,8 @@ mod tests {
             channel_name: "General".into(),
             started_at: chrono::Utc::now(),
             ended_at: None,
+            tags: Vec::new(),
+            folder: None,
         };
         let mut webhook = WebhookSubscription {
             scope: WebhookScope::All,

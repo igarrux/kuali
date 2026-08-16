@@ -239,6 +239,74 @@ pub async fn list_tasks() -> Result<Vec<TaskListItem>, String> {
     .map_err(fail)?
 }
 
+/// Replaces a meeting's tags and answers with the sanitized result so the
+/// interface shows exactly what was written.
+#[tauri::command]
+pub async fn set_meeting_tags(id: String, tags: Vec<String>) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || kuali_store::set_tags(&id, tags))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+/// Servers Kuali knows about, with their Discord icons.
+#[tauri::command]
+pub fn list_guilds() -> Vec<kuali_core::GuildInfo> {
+    kuali_store::guilds()
+}
+
+/// Folders the user has created, including empty ones.
+#[tauri::command]
+pub async fn list_folders() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(kuali_store::list_folders)
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub async fn create_folder(name: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || kuali_store::create_folder(&name))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+#[tauri::command]
+pub async fn rename_folder(from: String, to: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || kuali_store::rename_folder(&from, &to))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+/// Removes the folder without touching the meetings it held.
+#[tauri::command]
+pub async fn delete_folder(name: String) -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(move || kuali_store::delete_folder(&name))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+/// Moves meetings into a folder, or out of every folder when `folder` is null.
+#[tauri::command]
+pub async fn set_meeting_folder(ids: Vec<String>, folder: Option<String>) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || kuali_store::set_folder(&ids, folder.as_deref()))
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
+/// Tags already in use, for suggesting instead of retyping.
+#[tauri::command]
+pub async fn list_tags() -> Result<Vec<String>, String> {
+    tauri::async_runtime::spawn_blocking(kuali_store::all_tags)
+        .await
+        .map_err(fail)?
+        .map_err(fail)
+}
+
 #[tauri::command]
 pub fn delete_meeting(engine: State<'_, Engine>, id: String) -> Result<(), String> {
     engine.delete_meeting(&id).map_err(fail)

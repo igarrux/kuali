@@ -895,6 +895,13 @@ async fn handle_voice_event(inner: &Arc<Inner>, source: VoiceSource, event: Voic
             let result = configure_discord_follow(inner, user_id).await;
             let _ = reply.send(result);
         }
+        VoiceEvent::GuildsKnown(guilds) => {
+            if let Err(error) = kuali_store::remember_guilds(guilds) {
+                tracing::warn!(%error, "no se pudieron guardar los servidores conocidos");
+            } else {
+                inner.emit(KualiEvent::GuildsUpdated);
+            }
+        }
         VoiceEvent::Warning(message) => emit_voice_warning(inner, source, message),
         // Legacy integrations emitted unwrapped events. Assign a stable session
         // per source to preserve compatibility.
@@ -937,6 +944,12 @@ async fn handle_session_event(inner: &Arc<Inner>, session: VoiceSessionKey, even
     match event {
         VoiceEvent::ConnectionRequested { info: _, reply } => {
             let _ = reply.send(Ok(()));
+        }
+        // Server identity belongs to the source, not to one call.
+        VoiceEvent::GuildsKnown(guilds) => {
+            if kuali_store::remember_guilds(guilds).is_ok() {
+                inner.emit(KualiEvent::GuildsUpdated);
+            }
         }
         VoiceEvent::Connected(info) => {
             if let Err(message) = start_meeting(inner, session, info).await {
@@ -1120,6 +1133,8 @@ async fn start_meeting(
         channel_name: info.channel_name,
         started_at: Utc::now(),
         ended_at: None,
+        tags: Vec::new(),
+        folder: None,
     };
 
     // Load the model into RAM only after a meeting exists.
@@ -2089,6 +2104,8 @@ mod tests {
                 channel_name: "General".into(),
                 started_at: Utc::now(),
                 ended_at: None,
+                tags: Vec::new(),
+                folder: None,
             }),
             segmenter: Segmenter::new(Default::default()),
             ticks,
@@ -2238,6 +2255,8 @@ mod tests {
                 channel_name: String::new(),
                 started_at: Utc::now(),
                 ended_at: None,
+                tags: Vec::new(),
+                folder: None,
             }),
             segmenter: Segmenter::new(Default::default()),
             ticks: 0,
@@ -2580,6 +2599,8 @@ mod tests {
             channel_name: "General".into(),
             started_at: Utc::now(),
             ended_at: Some(Utc::now()),
+            tags: Vec::new(),
+            folder: None,
         });
         kuali_store::save(&meeting).unwrap();
 
@@ -2615,6 +2636,8 @@ mod tests {
                 channel_name: "Canal".into(),
                 started_at: Utc::now(),
                 ended_at: Some(Utc::now()),
+                tags: Vec::new(),
+                folder: None,
             }))
             .unwrap();
         }
@@ -2664,6 +2687,8 @@ mod tests {
             channel_name: "General".into(),
             started_at: Utc::now(),
             ended_at: None,
+            tags: Vec::new(),
+            folder: None,
         });
         meeting.upsert_speaker(Speaker {
             user_id: 7,

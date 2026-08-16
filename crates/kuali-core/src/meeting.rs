@@ -157,12 +157,58 @@ pub struct MeetingMeta {
     /// summarization. `default` keeps legacy meetings readable.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub display_title: Option<String>,
+    /// Snowflakes cross to JavaScript as text: a 19-digit identifier does not
+    /// survive a JSON number there, and the interface compares them.
+    #[serde(with = "snowflake_string")]
     pub guild_id: u64,
     pub guild_name: String,
+    #[serde(with = "snowflake_string")]
     pub channel_id: u64,
     pub channel_name: String,
     pub started_at: DateTime<Utc>,
     pub ended_at: Option<DateTime<Utc>>,
+    /// Free-form labels chosen by the user. Meetings saved before tags existed
+    /// simply have none.
+    #[serde(default)]
+    pub tags: Vec<String>,
+    /// Folder the user filed this meeting under. A meeting belongs to at most
+    /// one, which is what separates folders from tags.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+}
+
+/// Bounds that keep tags usable as labels instead of turning into notes.
+pub const MAX_TAG_CHARS: usize = 24;
+pub const MAX_FOLDER_CHARS: usize = 40;
+pub const MAX_TAGS_PER_MEETING: usize = 12;
+
+/// Trims, collapses inner whitespace, drops empties, and removes
+/// case-insensitive duplicates while preserving the spelling written first.
+/// A folder name with the same shape rules as a tag, only longer. Empty input
+/// means "no folder".
+pub fn sanitize_folder(name: &str) -> Option<String> {
+    let normalized = name.split_whitespace().collect::<Vec<_>>().join(" ");
+    let normalized: String = normalized.chars().take(MAX_FOLDER_CHARS).collect();
+    let normalized = normalized.trim().to_string();
+    (!normalized.is_empty()).then_some(normalized)
+}
+
+pub fn sanitize_tags(tags: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut seen = std::collections::HashSet::new();
+    let mut clean = Vec::new();
+    for tag in tags {
+        let normalized = tag.split_whitespace().collect::<Vec<_>>().join(" ");
+        let normalized: String = normalized.chars().take(MAX_TAG_CHARS).collect();
+        let normalized = normalized.trim().to_string();
+        if normalized.is_empty() || !seen.insert(normalized.to_lowercase()) {
+            continue;
+        }
+        clean.push(normalized);
+        if clean.len() == MAX_TAGS_PER_MEETING {
+            break;
+        }
+    }
+    clean
 }
 
 impl MeetingMeta {
@@ -391,6 +437,36 @@ pub fn format_timestamp(ms: u64) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn a_folder_name_is_normalized_and_an_empty_one_means_no_folder() {
+        assert_eq!(
+            sanitize_folder("  Clientes   clave "),
+            Some("Clientes clave".into())
+        );
+        assert_eq!(sanitize_folder("   "), None);
+        assert_eq!(
+            sanitize_folder(&"x".repeat(200)).unwrap().chars().count(),
+            MAX_FOLDER_CHARS
+        );
+    }
+
+    #[test]
+    fn tags_are_trimmed_deduplicated_and_bounded() {
+        let tags = sanitize_tags(vec![
+            "  cliente  acme ".into(),
+            "Cliente Acme".into(),
+            "   ".into(),
+            "producto".into(),
+        ]);
+        assert_eq!(tags, vec!["cliente acme", "producto"]);
+
+        let many = sanitize_tags((0..40).map(|index| format!("etiqueta {index}")));
+        assert_eq!(many.len(), MAX_TAGS_PER_MEETING);
+
+        let long = sanitize_tags(vec!["x".repeat(120)]);
+        assert_eq!(long[0].chars().count(), MAX_TAG_CHARS);
+    }
     use super::*;
 
     fn meeting_with(utterances: Vec<(DiscordUserId, u64, u64, &str)>) -> Meeting {
@@ -403,6 +479,8 @@ mod tests {
             channel_name: "General".into(),
             started_at: Utc::now(),
             ended_at: None,
+            tags: Vec::new(),
+            folder: None,
         });
         m.upsert_speaker(Speaker {
             user_id: 10,

@@ -351,6 +351,8 @@ mod tests {
             channel_name: "Producto".into(),
             started_at: Utc.timestamp_opt(1_700_000_000, 0).unwrap(),
             ended_at: Some(Utc.timestamp_opt(1_700_000_060, 0).unwrap()),
+            tags: Vec::new(),
+            folder: None,
         });
         meeting.speakers.push(Speaker {
             user_id: 789,
