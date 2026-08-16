@@ -7,8 +7,8 @@ mod factory_reset;
 use kuali_engine::Engine;
 use tauri::{
     menu::{Menu, MenuItem, PredefinedMenuItem},
-    tray::TrayIconBuilder,
-    Emitter, Listener, Manager,
+    tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
+    Emitter, Listener, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -16,6 +16,11 @@ use tauri_plugin_autostart::MacosLauncher;
 const EVENT_CHANNEL: &str = "kuali://event";
 const NAVIGATION_CHANNEL: &str = "kuali://navigate";
 const CONFIG_CHANGED_CHANNEL: &str = "kuali://config-changed";
+/// Panel shown under the menu bar icon.
+const PANEL_WINDOW: &str = "panel";
+const PANEL_SHOWN_CHANNEL: &str = "kuali://panel-shown";
+const PANEL_WIDTH: f64 = 360.0;
+const PANEL_HEIGHT: f64 = 428.0;
 
 fn reveal_main_window(app: &tauri::AppHandle) {
     if let Some(window) = app.get_webview_window("main") {
@@ -26,8 +31,81 @@ fn reveal_main_window(app: &tauri::AppHandle) {
 }
 
 fn show_main_window(app: &tauri::AppHandle, destination: &str) {
+    hide_tray_panel(app);
     reveal_main_window(app);
     let _ = app.emit(NAVIGATION_CHANNEL, destination);
+}
+
+/// Horizontal placement of the panel under the tray icon, clamped so it stays
+/// on the screen the icon lives on. Returned separately from the window call to
+/// keep the arithmetic testable.
+fn panel_origin(
+    icon_center_x: f64,
+    icon_bottom_y: f64,
+    panel_width: f64,
+    monitor_left: f64,
+    monitor_right: f64,
+) -> (f64, f64) {
+    const MARGIN: f64 = 8.0;
+    let unclamped = icon_center_x - panel_width / 2.0;
+    let max_x = (monitor_right - panel_width - MARGIN).max(monitor_left + MARGIN);
+    (
+        unclamped.clamp(monitor_left + MARGIN, max_x),
+        icon_bottom_y + MARGIN,
+    )
+}
+
+fn hide_tray_panel(app: &tauri::AppHandle) {
+    if let Some(panel) = app.get_webview_window(PANEL_WINDOW) {
+        let _ = panel.hide();
+    }
+}
+
+/// Opens the panel under the icon that was clicked, or closes it when it is
+/// already open, the way a menu-bar app behaves.
+fn toggle_tray_panel(app: &tauri::AppHandle, rect: tauri::Rect) {
+    let Some(panel) = app.get_webview_window(PANEL_WINDOW) else {
+        return;
+    };
+    if panel.is_visible().unwrap_or(false) {
+        let _ = panel.hide();
+        return;
+    }
+
+    let scale = panel.scale_factor().unwrap_or(1.0);
+    let icon_position = rect.position.to_physical::<f64>(scale);
+    let icon_size = rect.size.to_physical::<f64>(scale);
+    let panel_size = panel.outer_size().ok();
+    let panel_width = panel_size
+        .map(|size| size.width as f64)
+        .unwrap_or(PANEL_WIDTH * scale);
+
+    let icon_center_x = icon_position.x + icon_size.width / 2.0;
+    let icon_bottom_y = icon_position.y + icon_size.height;
+
+    let (monitor_left, monitor_right) = app
+        .monitor_from_point(icon_center_x, icon_bottom_y)
+        .ok()
+        .flatten()
+        .map(|monitor| {
+            let left = monitor.position().x as f64;
+            (left, left + monitor.size().width as f64)
+        })
+        .unwrap_or((icon_center_x - panel_width, icon_center_x + panel_width));
+
+    let (x, y) = panel_origin(
+        icon_center_x,
+        icon_bottom_y,
+        panel_width,
+        monitor_left,
+        monitor_right,
+    );
+
+    let _ = panel.set_position(PhysicalPosition::new(x, y));
+    let _ = panel.show();
+    let _ = panel.set_focus();
+    // The panel may have been hidden for hours; ask it to refresh what it shows.
+    let _ = app.emit(PANEL_SHOWN_CHANNEL, ());
 }
 
 fn tray_follow_copy(enabled: bool, language: &str) -> (&'static str, &'static str) {
@@ -56,9 +134,11 @@ fn sync_tray_follow_items<R: tauri::Runtime>(
     let _ = action_item.set_text(action);
 }
 
+/// The tray panel counts as a visible window for the operating system, so the
+/// dock icon must look at the main window rather than at any window.
 #[cfg(any(target_os = "macos", test))]
-fn should_restore_main_window(has_visible_windows: bool) -> bool {
-    !has_visible_windows
+fn should_restore_main_window(main_window_visible: bool) -> bool {
+    !main_window_visible
 }
 
 fn main() {
@@ -146,6 +226,27 @@ fn main() {
                 );
             });
 
+            // Built hidden and positioned on demand: a menu-bar panel has no
+            // meaningful default position.
+            let panel =
+                WebviewWindowBuilder::new(app, PANEL_WINDOW, WebviewUrl::App("tray.html".into()))
+                    .title("Kuali")
+                    .inner_size(PANEL_WIDTH, PANEL_HEIGHT)
+                    .resizable(false)
+                    .decorations(false)
+                    .always_on_top(true)
+                    .skip_taskbar(true)
+                    .visible(false)
+                    .build()?;
+
+            let panel_for_blur = panel.clone();
+            panel.on_window_event(move |event| {
+                // Clicking anywhere else dismisses it, like every other menu.
+                if matches!(event, WindowEvent::Focused(false)) {
+                    let _ = panel_for_blur.hide();
+                }
+            });
+
             TrayIconBuilder::new()
                 .tooltip("Kuali")
                 .icon(
@@ -155,7 +256,20 @@ fn main() {
                 )
                 .icon_as_template(true)
                 .menu(&menu)
-                .show_menu_on_left_click(true)
+                // Left click opens Kuali's own panel; the native menu stays on
+                // the right button for the operating system's conventions.
+                .show_menu_on_left_click(false)
+                .on_tray_icon_event(|tray, event| {
+                    if let TrayIconEvent::Click {
+                        button: MouseButton::Left,
+                        button_state: MouseButtonState::Up,
+                        rect,
+                        ..
+                    } = event
+                    {
+                        toggle_tray_panel(tray.app_handle(), rect);
+                    }
+                })
                 .on_menu_event(move |app, event| match event.id.as_ref() {
                     "open" => show_main_window(app, "home"),
                     "tasks" => show_main_window(app, "tasks"),
@@ -254,6 +368,17 @@ fn main() {
             commands::search_meetings,
             commands::load_meeting,
             commands::list_tasks,
+            commands::open_main_window,
+            commands::close_tray_panel,
+            commands::quit_app,
+            commands::list_guilds,
+            commands::list_folders,
+            commands::create_folder,
+            commands::rename_folder,
+            commands::delete_folder,
+            commands::set_meeting_folder,
+            commands::set_meeting_tags,
+            commands::list_tags,
             commands::delete_meeting,
             commands::delete_meetings,
             commands::delete_channel_meetings,
@@ -293,7 +418,12 @@ fn main() {
                 ..
             } = _event
             {
-                if should_restore_main_window(has_visible_windows) {
+                let _ = has_visible_windows;
+                let main_visible = _app
+                    .get_webview_window("main")
+                    .and_then(|window| window.is_visible().ok())
+                    .unwrap_or(false);
+                if should_restore_main_window(main_visible) {
                     reveal_main_window(_app);
                 }
             }
@@ -302,12 +432,28 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{should_restore_main_window, tray_follow_copy};
+    use super::{panel_origin, should_restore_main_window, tray_follow_copy};
 
     #[test]
     fn dock_reopen_restores_only_when_every_window_is_hidden() {
         assert!(should_restore_main_window(false));
         assert!(!should_restore_main_window(true));
+    }
+
+    #[test]
+    fn the_panel_stays_on_the_screen_that_holds_the_tray_icon() {
+        // Icon comfortably inside the screen: the panel is centered under it.
+        let (x, y) = panel_origin(600.0, 24.0, 360.0, 0.0, 1440.0);
+        assert_eq!(x, 420.0);
+        assert_eq!(y, 32.0);
+
+        // Icon near the right edge: the panel slides in instead of hanging off.
+        let (x, _) = panel_origin(1430.0, 24.0, 360.0, 0.0, 1440.0);
+        assert_eq!(x, 1072.0);
+
+        // Second monitor to the right keeps its own bounds.
+        let (x, _) = panel_origin(1450.0, 24.0, 360.0, 1440.0, 2880.0);
+        assert_eq!(x, 1448.0);
     }
 
     #[test]

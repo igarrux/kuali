@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "main-window",
-  "description": "Permite que la ventana principal reciba los eventos emitidos por el motor de Kuali.",
-  "windows": ["main"],
+  "description": "Permite que la ventana principal y el panel de la barra de menús reciban los eventos emitidos por el motor de Kuali.",
+  "windows": ["main", "panel"],
   "permissions": ["core:event:allow-listen"]
 }

@@ -239,6 +239,23 @@ pub async fn list_tasks() -> Result<Vec<TaskListItem>, String> {
     .map_err(fail)?
 }
 
+/// Brings the main window forward from the tray panel and navigates it.
+#[tauri::command]
+pub fn open_main_window(app: tauri::AppHandle, destination: String) {
+    crate::show_main_window(&app, &destination);
+}
+
+/// Closes the tray panel without touching the rest of the application.
+#[tauri::command]
+pub fn close_tray_panel(app: tauri::AppHandle) {
+    crate::hide_tray_panel(&app);
+}
+
+#[tauri::command]
+pub fn quit_app(app: tauri::AppHandle) {
+    app.exit(0);
+}
+
 /// Replaces a meeting's tags and answers with the sanitized result so the
 /// interface shows exactly what was written.
 #[tauri::command]

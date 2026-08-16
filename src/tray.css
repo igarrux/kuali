@@ -1,0 +1,323 @@
+/* Kuali — menu bar panel. Uses the same tokens as the main window so both read
+ * as one product; the layout is its own because the panel is glanced at, not
+ * worked in. */
+
+/* The window itself is see-through, so this card is what the user sees: its
+ * corners are the panel's corners. */
+.tray-body {
+  --panel-radius: 18px;
+  --row-radius: 11px;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--panel-radius);
+}
+
+.tray-head {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-3) var(--space-3) var(--space-4);
+}
+
+.tray-head .icon-button {
+  border-radius: var(--row-radius);
+}
+
+/* --- following ---------------------------------------------------------- */
+
+/* The one setting worth changing from the menu bar, stated and switchable in
+ * the same line. */
+.tray-follow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin: 0 var(--space-3) var(--space-1);
+  padding: var(--space-3);
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+  border-radius: var(--row-radius);
+  cursor: pointer;
+}
+
+.tray-follow.paused {
+  background: var(--surface-2);
+  border-color: var(--line);
+}
+
+.tray-follow input {
+  width: 0;
+  height: 0;
+  position: absolute;
+  opacity: 0;
+}
+
+.tray-follow .switch-track {
+  order: 2;
+  margin-left: auto;
+}
+
+.tray-follow input:checked + .switch-track {
+  background: color-mix(in srgb, var(--accent) 32%, var(--surface-3));
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+}
+
+.tray-follow input:checked + .switch-track .switch-thumb {
+  background: var(--accent);
+  transform: translateX(13px);
+}
+
+.tray-follow input:focus-visible + .switch-track {
+  box-shadow: var(--focus-ring);
+}
+
+.tray-follow-copy {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tray-follow-copy strong {
+  font-size: var(--text-sm);
+  font-weight: 620;
+}
+
+.tray-follow-copy small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-brand {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.tray-brand > div {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tray-brand strong {
+  font-size: var(--text-md);
+  font-weight: 680;
+}
+
+.tray-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.tray-status .status-dot {
+  width: 7px;
+  height: 7px;
+}
+
+/* --- live call ---------------------------------------------------------- */
+
+.tray-live {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: var(--space-2) var(--space-3) 0;
+  padding: var(--space-3);
+  background: color-mix(in srgb, var(--accent-soft) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 22%, var(--line));
+  border-radius: var(--row-radius);
+}
+
+.tray-live-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 2px;
+}
+
+.tray-live strong {
+  min-width: 0;
+  overflow: hidden;
+  font-size: var(--text-sm);
+  font-weight: 640;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-live small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.tray-live .primary {
+  margin-top: var(--space-2);
+  justify-content: center;
+  border-radius: var(--row-radius);
+}
+
+.tray-elapsed {
+  color: var(--muted-strong);
+  font-family: var(--mono);
+  font-size: var(--text-xs);
+}
+
+/* --- sections ----------------------------------------------------------- */
+
+.tray-section {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-3) var(--space-3) 0;
+}
+
+.tray-section > header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding: 0 var(--space-2) var(--space-2);
+}
+
+.tray-section h2 {
+  color: var(--muted);
+  font-family: var(--sans);
+  font-size: var(--text-2xs);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.tray-count {
+  min-width: 20px;
+  padding: 1px 7px;
+  background: var(--accent-soft);
+  border-radius: var(--radius-full);
+  color: var(--accent);
+  font: 700 var(--text-2xs)/1.7 var(--mono);
+  text-align: center;
+}
+
+.tray-list {
+  min-height: 44px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  overflow-y: auto;
+}
+
+.tray-row {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 7px var(--space-2);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--row-radius);
+  color: inherit;
+  text-align: left;
+}
+
+.tray-row:hover {
+  background: var(--surface-2);
+}
+
+.tray-row > .icon {
+  width: 17px;
+  height: 17px;
+  flex: none;
+  color: var(--muted);
+}
+
+.tray-row-copy {
+  min-width: 0;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.tray-row-copy strong {
+  overflow: hidden;
+  color: var(--text);
+  font-size: var(--text-sm);
+  font-weight: 600;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tray-row-copy small {
+  color: var(--muted);
+  font-size: var(--text-xs);
+}
+
+.tray-row-go {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  color: var(--muted);
+  opacity: 0;
+  transition: opacity var(--dur-fast) var(--ease);
+}
+
+.tray-row:hover .tray-row-go,
+.tray-row:focus-visible .tray-row-go {
+  opacity: 1;
+}
+
+.tray-empty {
+  margin: 0;
+  padding: var(--space-2) var(--space-2) var(--space-3);
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.tray-tasks-section {
+  flex: none;
+}
+
+/* --- footer ------------------------------------------------------------- */
+
+.tray-foot {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  margin-top: auto;
+  padding: var(--space-3);
+  border-top: 1px solid var(--line);
+}
+
+.tray-foot .ghost,
+.tray-foot .icon-button {
+  border-radius: var(--row-radius);
+}
+
+.tray-foot-end {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.tray-foot .icon {
+  width: 15px;
+  height: 15px;
+}

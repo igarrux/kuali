@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Kuali</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="tray.css" />
+  </head>
+  <body class="tray-body">
+    <svg class="icon-sprite" aria-hidden="true" focusable="false" data-i18n-skip>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.6 12 4l8 6.6"/><path d="M6.2 9.7V20h11.6V9.7"/></symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.4 12.3 2.4 2.4 4.8-5.2"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7.5h8.5"/><path d="M17.5 7.5H20"/><path d="M4 16.5h3"/><path d="M12 16.5h8"/><circle cx="15" cy="7.5" r="2.4"/><circle cx="9.5" cy="16.5" r="2.4"/></symbol>
+      <symbol id="i-waveform" viewBox="0 0 24 24"><path d="M4 10.5v3"/><path d="M8 7.5v9"/><path d="M12 4.5v15"/><path d="M16 7.5v9"/><path d="M20 10.5v3"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7.2" y="5.4" width="3.6" height="13.2" rx="1.5"/><rect x="13.2" y="5.4" width="3.6" height="13.2" rx="1.5"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.4 5.6 18 12l-9.6 6.4z"/></symbol>
+      <symbol id="i-power" viewBox="0 0 24 24"><path d="M12 4v8"/><path d="M17.7 7a8 8 0 1 1-11.4 0"/></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4.5 12h14"/><path d="m13 6.5 5.5 5.5-5.5 5.5"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+    </svg>
+
+    <header class="tray-head">
+      <div class="tray-brand">
+        <img src="kuali-logo.svg" width="26" height="26" alt="" />
+        <div>
+          <strong>Kuali</strong>
+          <span class="tray-status" id="tray-status">
+            <i class="status-dot" id="tray-status-dot"></i>
+            <span id="tray-status-text">Iniciando…</span>
+          </span>
+        </div>
+      </div>
+      <button type="button" class="icon-button" id="tray-settings" title="Ajustes" aria-label="Ajustes">
+        <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg>
+      </button>
+    </header>
+
+    <label class="tray-follow" id="tray-follow-control">
+      <input type="checkbox" id="tray-follow" checked />
+      <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+      <span class="tray-follow-copy">
+        <strong id="tray-follow-title">Seguimiento de Discord</strong>
+        <small id="tray-follow-state">Kuali entra solo a tus llamadas</small>
+      </span>
+    </label>
+
+    <section class="tray-live" id="tray-live" hidden>
+      <div class="tray-live-head">
+        <span class="live-pill"><i></i> En vivo</span>
+        <span class="tray-elapsed" id="tray-elapsed"></span>
+      </div>
+      <strong id="tray-live-title"></strong>
+      <small id="tray-live-detail"></small>
+      <button type="button" class="primary compact" id="tray-open-live">
+        <svg class="icon" aria-hidden="true"><use href="#i-waveform"/></svg>
+        <span>Ver la transcripción</span>
+      </button>
+    </section>
+
+    <section class="tray-section" id="tray-meetings-section">
+      <header>
+        <h2>Últimas reuniones</h2>
+      </header>
+      <div class="tray-list" id="tray-meetings" data-i18n-skip></div>
+    </section>
+
+    <section class="tray-section tray-tasks-section">
+      <header>
+        <h2>Tareas pendientes</h2>
+        <span class="tray-count" id="tray-task-count">0</span>
+      </header>
+      <button type="button" class="tray-row tray-row-action" id="tray-open-tasks">
+        <svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg>
+        <span class="tray-row-copy"><strong id="tray-task-summary">Sin tareas pendientes</strong></span>
+        <svg class="icon tray-row-go" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+      </button>
+    </section>
+
+    <footer class="tray-foot">
+      <button type="button" class="ghost compact" id="tray-open">
+        <svg class="icon" aria-hidden="true"><use href="#i-home"/></svg>
+        <span>Abrir Kuali</span>
+      </button>
+      <button type="button" class="icon-button" id="tray-quit" title="Salir de Kuali" aria-label="Salir de Kuali">
+        <svg class="icon" aria-hidden="true"><use href="#i-power"/></svg>
+      </button>
+    </footer>
+
+    <script type="module" src="tray.js"></script>
+  </body>
+</html>
