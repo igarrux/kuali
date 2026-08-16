@@ -15,6 +15,48 @@ const { listen } = window.__TAURI__.event;
 
 const $ = (id) => document.getElementById(id);
 
+const LIBRARY_ORDER_KEY = "kuali.library.order";
+
+function readLibraryOrder() {
+  try {
+    const stored = JSON.parse(localStorage.getItem(LIBRARY_ORDER_KEY) ?? "{}");
+    return {
+      servers: Array.isArray(stored.servers) ? stored.servers : [],
+      channels: typeof stored.channels === "object" && stored.channels ? stored.channels : {},
+    };
+  } catch {
+    return { servers: [], channels: {} };
+  }
+}
+
+function saveLibraryOrder() {
+  localStorage.setItem(LIBRARY_ORDER_KEY, JSON.stringify(state.libraryOrder));
+}
+
+/** Arranged entries first, in the user's order; anything new keeps its place
+ *  at the end instead of jumping into the middle of a curated list. */
+function applyStoredOrder(entries, order, idOf) {
+  if (!order || order.length === 0) return entries;
+  const position = new Map(order.map((id, index) => [id, index]));
+  return [...entries].sort((a, b) => {
+    const left = position.get(idOf(a)) ?? Number.MAX_SAFE_INTEGER;
+    const right = position.get(idOf(b)) ?? Number.MAX_SAFE_INTEGER;
+    return left - right;
+  });
+}
+
+
+/** Line icon from the sprite in index.html, ready to append to any node. */
+function icon(name, className = "icon") {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("class", className);
+  svg.setAttribute("aria-hidden", "true");
+  const use = document.createElementNS("http://www.w3.org/2000/svg", "use");
+  use.setAttribute("href", `#i-${name}`);
+  svg.append(use);
+  return svg;
+}
+
 const state = {
   status: "offline",
   modelState: { state: "absent" },
@@ -46,6 +88,24 @@ const state = {
   /** Selected provider ID; empty means automatic selection. */
   selectedProvider: "",
   libraryQuery: "",
+  /** Tags already in use, newest counts first, for suggestions. */
+  tagCatalog: [],
+  /** Folders the user created, empty ones included. */
+  folders: [],
+  /** Discord server icons, keyed by server ID as text. */
+  guildIcons: new Map(),
+  /** How the user arranged the library: server order and per-server channel
+   *  order. A view preference, so it lives with the other local ones. */
+  libraryOrder: readLibraryOrder(),
+  /** Meetings waiting for the folder dialog to answer. */
+  folderTargetIds: [],
+  /** "move" files the targets; "manage" only creates, renames, and deletes. */
+  folderDialogMode: "move",
+  folderReturnFocus: null,
+  /** "channel" keeps meetings under their source; "date" under when they happened. */
+  libraryGrouping: ["date", "tag", "folder"].includes(localStorage.getItem("kuali.library.grouping"))
+    ? localStorage.getItem("kuali.library.grouping")
+    : "channel",
   libraryRequest: 0,
   collapsedChannels: new Set(),
   librarySelectionMode: false,
@@ -68,11 +128,17 @@ const state = {
   taskFilters: {
     query: "",
     people: new Set(),
-    meeting: "all",
     dateFrom: "",
     dateTo: "",
     status: "pending",
   },
+  /** "meeting" groups by origin call, "person" by who owes the task. */
+  taskGrouping: "meeting",
+  /** Groups the user opened or closed by hand; the rest follow the default. */
+  expandedTaskGroups: new Set(),
+  collapsedTaskGroups: new Set(),
+  /** First day of the month drawn by the range calendar. */
+  calendarMonth: null,
   taskRenderLimit: 250,
   extensionPath: "",
   discordGuideStep: 0,
@@ -88,6 +154,9 @@ const state = {
   modelDownloadCancelPending: false,
   /** IDs with an open speech turn, used by the speaking indicator. */
   talking: new Map(),
+  /** Meetings already in the library whose audio or summary is still running,
+   *  keyed by ID with the stage being processed. */
+  processingMeetings: new Map(),
   /** Ephemeral drafts keyed by turn ID; never included in summaries. */
   liveDrafts: new Map(),
   elapsedTimer: null,
@@ -670,6 +739,7 @@ async function renderRoot() {
     }[state.status] ?? ["Preparando Kuali…", "Esto solo tomará un momento."];
   $("idle-title").textContent = t(copy[0]);
   $("idle-sub").textContent = t(copy[1]);
+  renderHome();
 }
 
 // --- history --------------------------------------------------------------
@@ -699,8 +769,16 @@ async function refreshMeetings() {
   renderMeetingList();
 }
 
+function renderLibraryGrouping() {
+  for (const button of $("library-grouping").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.grouping === state.libraryGrouping));
+  }
+  $("btn-new-folder").hidden = state.libraryGrouping !== "folder";
+}
+
 function renderMeetingList() {
   if ($("sidebar-library-content").hidden) return;
+  renderLibraryGrouping();
   const list = $("meeting-list");
   const preservedScrollTop = list.scrollTop || state.libraryScrollTop;
   const query = state.libraryQuery.trim();
@@ -716,35 +794,44 @@ function renderMeetingList() {
       })
     : "";
 
-  const channels = new Map();
-  for (const meta of storedMeetings) {
-    const platform = meetingPlatform(meta);
-    const web = platform !== "discord";
-    const key = web ? `platform:${platform}` : `${meta.guildId}:${meta.channelId}`;
-    if (!channels.has(key)) {
-      channels.set(key, {
-        key,
-        guildId: meta.guildId,
-        channelId: meta.channelId,
-        guildName: meta.guildName,
-        channelName: web ? meta.guildName : meta.channelName,
-        platform,
-        web,
-        meetings: [],
-      });
-    }
-    channels.get(key).meetings.push(meta);
+  if (state.libraryGrouping === "date") {
+    list.replaceChildren(
+      ...dateGroups(storedMeetings).map((group) => dateGroupNode(group, Boolean(query))),
+    );
+  } else if (state.libraryGrouping === "tag") {
+    list.replaceChildren(
+      ...tagGroups(storedMeetings).map((group) => dateGroupNode(group, Boolean(query))),
+    );
+  } else if (state.libraryGrouping === "folder") {
+    list.replaceChildren(
+      ...folderGroups(storedMeetings).map((group) => dateGroupNode(group, Boolean(query))),
+    );
+  } else {
+    list.replaceChildren(
+      ...sourceGroups(storedMeetings).map((source) => source.web
+        ? channelGroupNode(source, Boolean(query))
+        : serverGroupNode(source, Boolean(query))),
+    );
   }
-
-  list.replaceChildren(
-    ...[...channels.values()].map((channel) => channelGroupNode(channel, Boolean(query))),
-  );
   // Rebuilding groups to mark the active selection must preserve scroll
   // position in long libraries.
   list.scrollTop = preservedScrollTop;
   state.libraryScrollTop = preservedScrollTop;
   renderLiveMeetingList();
   updateLibrarySelectionControls();
+  renderHome();
+}
+
+/** Rounded length of a finished meeting, shown instead of repeating the word
+ *  "saved" on every row of the library. `min` and `h` read the same in both
+ *  interface languages. */
+function meetingLength(meta) {
+  if (!meta.endedAt) return "";
+  const minutes = Math.round((new Date(meta.endedAt) - new Date(meta.startedAt)) / 60000);
+  if (minutes < 1) return "";
+  if (minutes < 60) return `${minutes} min`;
+  const rest = minutes % 60;
+  return rest === 0 ? `${minutes / 60} h` : `${Math.floor(minutes / 60)} h ${rest} min`;
 }
 
 function meetingPlatform(meta) {
@@ -754,11 +841,23 @@ function meetingPlatform(meta) {
   return "discord";
 }
 
+/** Each platform wears its own mark instead of an initial. Brand glyphs are
+ *  drawn in one colour over the brand background: a half-remembered multicolour
+ *  logo reads worse than a clean silhouette. */
+const PLATFORM_ICONS = {
+  discord: "discord",
+  "google-meet": "brand-meet",
+  teams: "brand-teams",
+  zoom: "brand-zoom",
+};
+
 function platformMark(platform) {
   const mark = document.createElement("span");
   mark.className = `platform-mark ${platform}`;
   mark.setAttribute("aria-hidden", "true");
-  mark.textContent = { "google-meet": "M", teams: "T", zoom: "Z", discord: "D" }[platform] ?? "K";
+  const symbol = PLATFORM_ICONS[platform];
+  if (symbol) mark.append(icon(symbol));
+  else mark.textContent = "K";
   return mark;
 }
 
@@ -835,16 +934,603 @@ function updateLibrarySelectionControls() {
     { count: selected },
   );
   $("btn-delete-selected").disabled = selected === 0;
+  $("btn-move-selected").disabled = selected === 0;
   $("btn-select-visible").disabled = visible.length === 0;
   $("btn-select-visible").textContent = allVisible ? t("Ninguna") : t("Todas");
+}
+
+/** Buckets the library by when meetings happened, newest first. Months carry
+ *  their own name so old material stays findable without scrolling blind. */
+function dateGroups(meetings) {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dayMs = 86_400_000;
+  const groups = new Map();
+
+  for (const meta of [...meetings].sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))) {
+    const started = new Date(meta.startedAt);
+    const daysAgo = Math.floor((startOfToday - new Date(started).setHours(0, 0, 0, 0)) / dayMs);
+    let key = "older";
+    let label = new Intl.DateTimeFormat(currentLocale(), { month: "long", year: "numeric" })
+      .format(started);
+    if (daysAgo <= 0) [key, label] = ["today", t("Hoy")];
+    else if (daysAgo === 1) [key, label] = ["yesterday", t("Ayer")];
+    else if (daysAgo < 7) [key, label] = ["week", t("Últimos 7 días")];
+    else if (daysAgo < 30) [key, label] = ["month", t("Últimos 30 días")];
+    else key = `month:${started.getFullYear()}-${started.getMonth()}`;
+
+    if (!groups.has(key)) {
+      groups.set(key, { key, label: label.charAt(0).toLocaleUpperCase(currentLocale()) + label.slice(1), meetings: [] });
+    }
+    groups.get(key).meetings.push(meta);
+  }
+  return [...groups.values()];
+}
+
+/** One group per tag, plus everything still unlabelled. A meeting with several
+ *  tags appears under each of them. */
+function tagGroups(meetings) {
+  const groups = new Map();
+  const untagged = [];
+  for (const meta of meetings) {
+    const tags = meta.tags ?? [];
+    if (tags.length === 0) {
+      untagged.push(meta);
+      continue;
+    }
+    for (const tag of tags) {
+      const key = tag.toLowerCase();
+      if (!groups.has(key)) groups.set(key, { key: `tag:${key}`, label: tag, meetings: [] });
+      groups.get(key).meetings.push(meta);
+    }
+  }
+  const ordered = [...groups.values()].sort((a, b) =>
+    a.label.localeCompare(b.label, currentLocale(), { sensitivity: "base" }));
+  if (untagged.length > 0) {
+    ordered.push({ key: "untagged", label: t("Sin etiqueta"), meetings: untagged });
+  }
+  return ordered;
+}
+
+/** One group per folder, including folders the user emptied, plus everything
+ *  still unfiled. */
+function folderGroups(meetings) {
+  const byFolder = new Map(state.folders.map((folder) => [folder.toLowerCase(), {
+    key: `folder:${folder.toLowerCase()}`,
+    label: folder,
+    folder,
+    droppable: true,
+    meetings: [],
+  }]));
+  const unfiled = [];
+
+  for (const meta of meetings) {
+    const folder = meta.folder;
+    if (!folder) {
+      unfiled.push(meta);
+      continue;
+    }
+    const key = folder.toLowerCase();
+    if (!byFolder.has(key)) {
+      byFolder.set(key, {
+        key: `folder:${key}`,
+        label: folder,
+        folder,
+        droppable: true,
+        meetings: [],
+      });
+    }
+    byFolder.get(key).meetings.push(meta);
+  }
+
+  const groups = [...byFolder.values()];
+  // Always present while filing: it is where a meeting is dropped to leave a
+  // folder without opening any dialog.
+  groups.push({
+    key: "unfiled",
+    label: t("Sin carpeta"),
+    folder: null,
+    droppable: true,
+    meetings: unfiled,
+  });
+  return groups;
+}
+
+function dateGroupNode(group, searching) {
+  const expanded = searching || !state.collapsedChannels.has(group.key);
+  const section = document.createElement("li");
+  section.className = "channel-group";
+  const meetingsId = `date-${group.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "channel-toggle date-toggle";
+  toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.setAttribute("aria-controls", meetingsId);
+
+  const label = document.createElement("span");
+  label.className = "channel-label";
+  const name = document.createElement("strong");
+  name.className = "channel-name";
+  name.textContent = group.label;
+  label.append(name);
+
+  const count = document.createElement("span");
+  count.className = "channel-count";
+  count.textContent = group.meetings.length;
+  const mark = group.folder ? icon("folder", "icon group-mark") : null;
+  toggle.append(icon("chevron-right", "icon channel-chevron"), ...(mark ? [mark] : []), label, count);
+  if (mark) toggle.classList.add("with-mark");
+  toggle.addEventListener("click", () => {
+    if (searching) return;
+    if (expanded) state.collapsedChannels.add(group.key);
+    else state.collapsedChannels.delete(group.key);
+    renderMeetingList();
+  });
+
+  const meetings = document.createElement("ul");
+  meetings.id = meetingsId;
+  meetings.className = "channel-meetings";
+  meetings.hidden = !expanded;
+  meetings.append(...group.meetings.map(meetingListNode));
+  section.append(toggle, meetings);
+  if (group.droppable) bindFolderDropTarget(section, group, expanded);
+  return section;
+}
+
+/** Marks a group as a place meetings can be dropped into. The pointer drag
+ *  below finds targets by attribute instead of by listener, which keeps the
+ *  hit testing in one place. */
+function bindFolderDropTarget(section, group, expanded) {
+  section.classList.add("droppable");
+  section.dataset.dropFolder = group.folder ?? "";
+  section.dataset.dropKey = group.key;
+  section.dataset.dropExpanded = String(expanded);
+}
+
+/** Rearranging the library. Servers move among servers and channels among the
+ *  channels of their own server, which is the only move that means anything. */
+const orderDrag = {
+  candidate: null,
+  active: null,
+  target: null,
+  after: false,
+};
+
+function orderDragActive() {
+  return Boolean(orderDrag.active);
+}
+
+function armOrderDrag(event, group, scopeSelector) {
+  // Only the by-server view has an order the user owns.
+  if (event.button !== 0 || state.libraryGrouping !== "channel" || state.librarySelectionMode) {
+    return;
+  }
+  orderDrag.candidate = { group, scopeSelector, x: event.clientX, y: event.clientY };
+}
+
+function startOrderDrag(event) {
+  const { group, scopeSelector } = orderDrag.candidate;
+  orderDrag.candidate = null;
+  orderDrag.active = { group, scopeSelector };
+  group.classList.add("reordering");
+  document.body.classList.add("reordering-library");
+  group.querySelector(".channel-toggle")
+    ?.dispatchEvent(new CustomEvent("kuali:dragstart", { bubbles: true }));
+  closeLibraryContextMenu();
+  moveOrderDrag(event);
+}
+
+function clearOrderMarks() {
+  for (const node of document.querySelectorAll(".order-before, .order-after")) {
+    node.classList.remove("order-before", "order-after");
+  }
+}
+
+function moveOrderDrag(event) {
+  const { group, scopeSelector } = orderDrag.active;
+  const scope = group.parentElement;
+  const under = document.elementFromPoint(event.clientX, event.clientY);
+  const sibling = under?.closest(scopeSelector);
+
+  clearOrderMarks();
+  orderDrag.target = null;
+  if (!sibling || sibling === group || sibling.parentElement !== scope) return;
+
+  const bounds = sibling.getBoundingClientRect();
+  const after = event.clientY > bounds.top + bounds.height / 2;
+  sibling.classList.add(after ? "order-after" : "order-before");
+  orderDrag.target = sibling;
+  orderDrag.after = after;
+}
+
+function endOrderDrag() {
+  const active = orderDrag.active;
+  const target = orderDrag.target;
+  const after = orderDrag.after;
+  cancelOrderDrag();
+  if (!active || !target) return;
+
+  const scope = active.group.parentElement;
+  const keys = [...scope.children].map((node) => node.dataset.orderKey);
+  const from = keys.indexOf(active.group.dataset.orderKey);
+  let to = keys.indexOf(target.dataset.orderKey) + (after ? 1 : 0);
+  if (from < to) to -= 1;
+  if (from === -1 || from === to) return;
+
+  const [moved] = keys.splice(from, 1);
+  keys.splice(to, 0, moved);
+
+  if (scope.id === "meeting-list") state.libraryOrder.servers = keys;
+  else state.libraryOrder.channels[active.group.dataset.orderScope] = keys;
+  saveLibraryOrder();
+  renderMeetingList();
+}
+
+function cancelOrderDrag() {
+  clearOrderMarks();
+  orderDrag.candidate = null;
+  orderDrag.active = null;
+  orderDrag.target = null;
+  document.body.classList.remove("reordering-library");
+  for (const node of document.querySelectorAll(".reordering")) {
+    node.classList.remove("reordering");
+  }
+}
+
+/** Pointer-driven drag. The HTML5 drag API refuses to start on a button in
+ *  WebKit, which is the engine Kuali actually ships on. */
+const meetingDrag = {
+  candidate: null,
+  ids: [],
+  ghost: null,
+  target: null,
+  hoverTimer: null,
+  scrollTimer: null,
+  pointer: null,
+  /** Clicks land right after a drop; ignore them for a moment. */
+  blockClickUntil: 0,
+};
+
+function meetingDragActive() {
+  return meetingDrag.ids.length > 0;
+}
+
+function armMeetingDrag(event, meta, button) {
+  if (event.button !== 0 || state.librarySelectionMode) return;
+  meetingDrag.candidate = { meta, button, x: event.clientX, y: event.clientY };
+}
+
+function startMeetingDrag(event) {
+  const { meta, button } = meetingDrag.candidate;
+  meetingDrag.ids = draggedMeetingIds(meta);
+  meetingDrag.candidate = null;
+  button.classList.add("dragging");
+  document.body.classList.add("dragging-meetings");
+  // The row keeps its long-press timer; starting a drag has to cancel it.
+  button.dispatchEvent(new CustomEvent("kuali:dragstart", { bubbles: true }));
+  closeLibraryContextMenu();
+
+  const ghost = document.createElement("div");
+  ghost.className = "drag-ghost";
+  const title = document.createElement("strong");
+  title.textContent = meetingTitle(meta);
+  ghost.append(icon("folder"), title);
+  if (meetingDrag.ids.length > 1) {
+    const count = document.createElement("span");
+    count.className = "drag-ghost-count";
+    count.textContent = String(meetingDrag.ids.length);
+    ghost.append(count);
+  }
+  document.body.append(ghost);
+  meetingDrag.ghost = ghost;
+  moveMeetingDrag(event);
+}
+
+function highlightDropTarget(section) {
+  if (meetingDrag.target === section) return;
+  meetingDrag.target?.classList.remove("drop-target");
+  meetingDrag.target = section;
+  section?.classList.add("drop-target");
+
+  clearTimeout(meetingDrag.hoverTimer);
+  meetingDrag.hoverTimer = null;
+  // Resting over a closed folder opens it, the way a file manager does.
+  if (section && section.dataset.dropExpanded === "false") {
+    const key = section.dataset.dropKey;
+    meetingDrag.hoverTimer = setTimeout(() => {
+      state.collapsedChannels.delete(key);
+      meetingDrag.target = null;
+      renderMeetingList();
+    }, 700);
+  }
+}
+
+/** Holding the meeting near an edge of the library scrolls it, so a folder that
+ *  is out of view is still reachable. */
+function autoScrollLibrary(y) {
+  const list = $("meeting-list");
+  const bounds = list.getBoundingClientRect();
+  const margin = 44;
+  const step = y > bounds.bottom - margin ? 14 : y < bounds.top + margin ? -14 : 0;
+
+  if (step === 0) {
+    clearInterval(meetingDrag.scrollTimer);
+    meetingDrag.scrollTimer = null;
+    return;
+  }
+  if (meetingDrag.scrollTimer) return;
+  meetingDrag.scrollTimer = setInterval(() => {
+    list.scrollTop += step;
+    // The list moved under the pointer, so the target may be a different one.
+    if (meetingDrag.pointer) moveMeetingDrag(meetingDrag.pointer, { scrolling: true });
+  }, 40);
+}
+
+function moveMeetingDrag(event, { scrolling = false } = {}) {
+  meetingDrag.pointer = { clientX: event.clientX, clientY: event.clientY };
+  const ghost = meetingDrag.ghost;
+  if (ghost) {
+    ghost.style.transform = `translate(${event.clientX + 14}px, ${event.clientY + 12}px)`;
+  }
+  if (!scrolling) autoScrollLibrary(event.clientY);
+  const under = document.elementFromPoint(event.clientX, event.clientY);
+  highlightDropTarget(under?.closest(".channel-group.droppable") ?? null);
+}
+
+function cancelMeetingDrag() {
+  clearTimeout(meetingDrag.hoverTimer);
+  clearInterval(meetingDrag.scrollTimer);
+  meetingDrag.hoverTimer = null;
+  meetingDrag.scrollTimer = null;
+  meetingDrag.pointer = null;
+  meetingDrag.candidate = null;
+  meetingDrag.ids = [];
+  meetingDrag.ghost?.remove();
+  meetingDrag.ghost = null;
+  meetingDrag.target?.classList.remove("drop-target");
+  meetingDrag.target = null;
+  document.body.classList.remove("dragging-meetings");
+  for (const node of document.querySelectorAll(".meeting-item.dragging")) {
+    node.classList.remove("dragging");
+  }
+}
+
+async function endMeetingDrag() {
+  const section = meetingDrag.target;
+  const ids = meetingDrag.ids;
+  meetingDrag.blockClickUntil = Date.now() + 300;
+  cancelMeetingDrag();
+  if (!section || ids.length === 0) return;
+
+  const folder = section.dataset.dropFolder || null;
+  // Dropping a meeting where it already lives should not rewrite anything.
+  const unchanged = ids.every((id) =>
+    (state.meetings.find((meta) => meta.id === id)?.folder ?? null) === folder);
+  if (unchanged) return;
+
+  state.folderTargetIds = ids;
+  await moveTargetsTo(folder);
+}
+
+/** Placeholder names Discord hands over when a channel or server cannot be
+ *  resolved. Showing a 19-digit identifier helps nobody. */
+function readableSourceName(name, kind) {
+  return /^(canal|channel|servidor|server)\s+\d{6,}$/i.test(name?.trim() ?? "")
+    ? t(kind === "guild" ? "Servidor sin nombre" : "Canal sin nombre")
+    : name;
+}
+
+/** Stable color per server, so two channels named the same are told apart at a
+ *  glance. Mirrors the speaker palette. */
+const SOURCE_PALETTE = [
+  "#4C8DFF", "#E8833A", "#3FBF8F", "#C563D6",
+  "#E5555F", "#3FB6C9", "#B58A2E", "#8B7CF0",
+];
+
+function sourceColor(id) {
+  const text = String(id ?? "");
+  let hash = 0;
+  for (const character of text) hash = (hash * 31 + character.codePointAt(0)) % 100_000_007;
+  return SOURCE_PALETTE[hash % SOURCE_PALETTE.length];
+}
+
+/** The library reads server → channel → meetings. Browser meetings have no
+ *  server, so they keep a single level under their platform. */
+function sourceGroups(meetings) {
+  const sources = new Map();
+
+  for (const meta of meetings) {
+    const platform = meetingPlatform(meta);
+    if (platform !== "discord") {
+      const key = `platform:${platform}`;
+      if (!sources.has(key)) {
+        sources.set(key, {
+          key,
+          guildName: meta.guildName,
+          channelName: meta.guildName,
+          platform,
+          web: true,
+          meetings: [],
+        });
+      }
+      sources.get(key).meetings.push(meta);
+      continue;
+    }
+
+    const guildKey = `guild:${meta.guildId}`;
+    if (!sources.has(guildKey)) {
+      sources.set(guildKey, {
+        key: guildKey,
+        guildId: meta.guildId,
+        guildName: readableSourceName(meta.guildName, "guild"),
+        platform,
+        web: false,
+        channels: new Map(),
+        meetings: [],
+      });
+    }
+    const server = sources.get(guildKey);
+    server.meetings.push(meta);
+
+    const channelKey = `${meta.guildId}:${meta.channelId}`;
+    if (!server.channels.has(channelKey)) {
+      server.channels.set(channelKey, {
+        key: channelKey,
+        guildId: meta.guildId,
+        channelId: meta.channelId,
+        guildName: server.guildName,
+        channelName: readableSourceName(meta.channelName, "channel"),
+        platform,
+        web: false,
+        meetings: [],
+      });
+    }
+    server.channels.get(channelKey).meetings.push(meta);
+  }
+
+  const ordered = applyStoredOrder(
+    [...sources.values()],
+    state.libraryOrder.servers,
+    (source) => source.key,
+  );
+  for (const source of ordered) {
+    if (source.web) continue;
+    source.orderedChannels = applyStoredOrder(
+      [...source.channels.values()],
+      state.libraryOrder.channels[source.key],
+      (channel) => channel.key,
+    );
+  }
+  return ordered;
+}
+
+/** The server as the user knows it: its Discord icon when it has one, and a
+ *  coloured initial when it does not. */
+function serverMark(server) {
+  const icon = state.guildIcons.get(String(server.guildId))
+    ?? state.guildIcons.get(`name:${server.guildName?.trim().toLowerCase()}`);
+  if (icon) {
+    const image = document.createElement("img");
+    image.className = "server-mark server-icon";
+    image.src = icon;
+    image.alt = "";
+    image.loading = "lazy";
+    // A removed icon or an offline CDN falls back to the initial.
+    image.addEventListener("error", () => image.replaceWith(serverInitial(server)), { once: true });
+    return image;
+  }
+  return serverInitial(server);
+}
+
+function serverInitial(server) {
+  const mark = document.createElement("span");
+  mark.className = "server-mark";
+  mark.style.background = sourceColor(server.guildId);
+  mark.setAttribute("aria-hidden", "true");
+  mark.textContent = (server.guildName?.trim()?.[0] ?? "?").toUpperCase();
+  return mark;
+}
+
+async function refreshGuildIcons() {
+  try {
+    const guilds = await invoke("list_guilds");
+    const icons = new Map();
+    for (const guild of guilds) {
+      if (!guild.icon) continue;
+      icons.set(String(guild.id), guild.icon);
+      // Second key by name: a meeting saved by an older Kuali could carry a
+      // rounded identifier, and the name still identifies the server.
+      if (guild.name) icons.set(`name:${guild.name.trim().toLowerCase()}`, guild.icon);
+    }
+    state.guildIcons = icons;
+  } catch {
+    state.guildIcons = new Map();
+  }
+}
+
+function serverGroupNode(server, searching) {
+  const expanded = searching || !state.collapsedChannels.has(server.key);
+  const group = document.createElement("li");
+  group.className = "channel-group server-group";
+  group.dataset.orderKey = server.key;
+
+  const head = document.createElement("div");
+  head.className = "channel-head";
+  head.addEventListener("pointerdown", (event) =>
+    armOrderDrag(event, group, "#meeting-list > .channel-group"));
+  const channelsId = `server-${server.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
+
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "channel-toggle server-toggle";
+  toggle.title = "Clic derecho o mantén presionado para más acciones";
+  toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.setAttribute("aria-controls", channelsId);
+  if (searching) {
+    toggle.classList.add("searching");
+    toggle.setAttribute("aria-disabled", "true");
+  }
+
+  const label = document.createElement("span");
+  label.className = "channel-label";
+  const name = document.createElement("strong");
+  name.className = "channel-name";
+  name.textContent = server.guildName;
+  const detail = document.createElement("small");
+  detail.textContent = t(
+    server.channels.size === 1 ? "{count} canal" : "{count} canales",
+    { count: server.channels.size },
+  );
+  label.append(name, detail);
+
+  const count = document.createElement("span");
+  count.className = "channel-count";
+  count.textContent = server.meetings.length;
+
+  toggle.append(icon("chevron-right", "icon channel-chevron"), serverMark(server), label, count);
+  toggle.addEventListener("click", () => {
+    if (searching) return;
+    if (expanded) state.collapsedChannels.add(server.key);
+    else state.collapsedChannels.delete(server.key);
+    renderMeetingList();
+  });
+
+  head.append(toggle);
+  bindLibraryContextMenu(head, {
+    kind: "channel",
+    channel: { ...server, channelName: server.guildName },
+    searching,
+  });
+
+  const channels = document.createElement("ul");
+  channels.id = channelsId;
+  channels.className = "server-channels";
+  channels.hidden = !expanded;
+  channels.append(
+    ...(server.orderedChannels ?? [...server.channels.values()])
+      .map((channel) => channelGroupNode(channel, searching)),
+  );
+
+  group.append(head, channels);
+  return group;
 }
 
 function channelGroupNode(channel, searching) {
   const group = document.createElement("li");
   group.className = "channel-group";
+  // Web platforms sit at the top level next to the servers, so they reorder in
+  // that same scope; Discord channels reorder inside their server.
+  group.dataset.orderKey = channel.key;
+  if (!channel.web) group.dataset.orderScope = `guild:${channel.guildId}`;
 
   const head = document.createElement("div");
   head.className = "channel-head";
+  head.addEventListener("pointerdown", (event) => armOrderDrag(
+    event,
+    group,
+    channel.web ? "#meeting-list > .channel-group" : ".server-channels > .channel-group",
+  ));
 
   const expanded = searching || !state.collapsedChannels.has(channel.key);
   const meetingsId = `channel-${channel.key.replace(/[^a-zA-Z0-9_-]/g, "-")}`;
@@ -859,24 +1545,33 @@ function channelGroupNode(channel, searching) {
     toggle.setAttribute("aria-disabled", "true");
   }
 
-  const chevron = document.createElement("span");
-  chevron.className = "channel-chevron";
-  chevron.setAttribute("aria-hidden", "true");
-  chevron.textContent = "›";
+  const chevron = icon("chevron-right", "icon channel-chevron");
 
   const names = document.createElement("span");
   names.className = "channel-label";
   const name = document.createElement("strong");
   name.className = "channel-name";
-  name.textContent = channel.web ? channel.channelName : `# ${channel.channelName}`;
-  const guild = document.createElement("small");
-  guild.textContent = channel.web ? t("Reuniones del navegador") : channel.guildName;
-  names.append(name, guild);
+  name.textContent = channel.channelName;
+  names.append(name);
+  if (channel.web) {
+    const guild = document.createElement("small");
+    guild.textContent = t("Reuniones del navegador");
+    names.append(guild);
+  }
 
   const count = document.createElement("span");
   count.className = "channel-count";
   count.textContent = channel.meetings.length;
-  toggle.append(chevron, platformMark(channel.platform), names, count);
+
+  const mark = channel.web
+    ? platformMark(channel.platform)
+    : Object.assign(document.createElement("span"), {
+        className: "channel-hash",
+        textContent: "#",
+      });
+  mark.setAttribute("aria-hidden", "true");
+  toggle.append(chevron, mark, names, count);
+  if (!channel.web) toggle.classList.add("channel-nested");
   toggle.addEventListener("click", () => {
     if (searching) return;
     if (expanded) state.collapsedChannels.add(channel.key);
@@ -917,6 +1612,14 @@ function channelGroupNode(channel, searching) {
   return group;
 }
 
+/** Meetings currently being dragged: the whole selection when the dragged row
+ *  belongs to it, otherwise just that row. */
+function draggedMeetingIds(meta) {
+  return state.selectedMeetingIds.has(meta.id)
+    ? [...state.selectedMeetingIds]
+    : [meta.id];
+}
+
 function meetingListNode(meta) {
   const entry = document.createElement("li");
   entry.className = "meeting-entry";
@@ -937,12 +1640,23 @@ function meetingListNode(meta) {
   title.className = "m-title";
   title.textContent = meetingTitle(meta);
 
+  const byDate = state.libraryGrouping === "date";
+
   const kind = document.createElement("span");
   kind.className = "m-date";
-  kind.textContent =
-    meta.searchMatch?.source
+  // A meeting lands in the library as soon as the call ends, so the row states
+  // what is still running instead of pretending the recording is complete.
+  const processing = processingLabel(meta.id);
+  if (processing) button.classList.add("processing");
+  const platform = meetingPlatform(meta);
+  const source = platform === "discord" ? `# ${meta.channelName}` : meta.guildName;
+  kind.textContent = processing
+    ? processing
+    : meta.searchMatch?.source
       ? `${shortDate(meta.startedAt)} · ${meta.searchMatch.source}`
-      : `${shortDate(meta.startedAt)} · Reunión guardada`;
+      : [byDate ? source : null, shortDate(meta.startedAt), meetingLength(meta)]
+          .filter(Boolean)
+          .join(" · ");
 
   button.append(title, kind);
   if (meta.searchMatch) {
@@ -982,6 +1696,14 @@ function meetingListNode(meta) {
     entry.appendChild(button);
   }
   bindLibraryContextMenu(button, { kind: "meeting", meeting: meta });
+
+  // Filing by hand: drag a meeting onto a folder. Pointer events instead of the
+  // HTML5 drag API, which WebKit refuses to start on a button. The dialog stays
+  // for keyboard users and for creating a folder along the way.
+  if (!isLiveMeeting(meta.id)) {
+    button.classList.add("draggable");
+    button.addEventListener("pointerdown", (event) => armMeetingDrag(event, meta, button));
+  }
   return entry;
 }
 
@@ -1002,6 +1724,7 @@ function closeLibraryContextMenu(restoreFocus = false) {
 }
 
 function openLibraryContextMenu(x, y, target, returnFocus = document.activeElement) {
+  if (meetingDragActive()) return;
   state.libraryContextTarget = target;
   state.libraryContextReturnFocus = returnFocus;
   const selectable = contextTargetMeetings(target).filter((meeting) => !isLiveMeeting(meeting.id));
@@ -1013,7 +1736,10 @@ function openLibraryContextMenu(x, y, target, returnFocus = document.activeEleme
     : [...state.liveMeetings.values()].some((meeting) =>
       meetingBelongsToChannel(meeting.meta, target.channel));
   const select = $("context-select");
+  const move = $("context-move");
   const remove = $("context-delete");
+  move.disabled = selectable.length === 0;
+  move.textContent = target.kind === "channel" ? t("Mover el grupo a…") : t("Mover a…");
   select.disabled = selectable.length === 0;
   select.textContent = allSelected
     ? "Quitar de la selección"
@@ -1031,7 +1757,7 @@ function openLibraryContextMenu(x, y, target, returnFocus = document.activeEleme
   const bounds = menu.getBoundingClientRect();
   menu.style.left = `${Math.max(8, Math.min(x, window.innerWidth - bounds.width - 8))}px`;
   menu.style.top = `${Math.max(8, Math.min(y, window.innerHeight - bounds.height - 8))}px`;
-  requestAnimationFrame(() => [select, remove].find((item) => !item.disabled)?.focus());
+  requestAnimationFrame(() => [select, move, remove].find((item) => !item.disabled)?.focus());
 }
 
 function bindLibraryContextMenu(element, target) {
@@ -1061,6 +1787,12 @@ function bindLibraryContextMenu(element, target) {
   element.addEventListener("pointermove", (event) => {
     if (!origin || Math.hypot(event.clientX - origin.x, event.clientY - origin.y) <= 8) return;
     cancelLongPress();
+  });
+  // Dragging must win over the long press: the row announces the drag and the
+  // pending menu for this element is dropped.
+  element.addEventListener("kuali:dragstart", () => {
+    cancelLongPress();
+    suppressClick = true;
   });
   for (const eventName of ["pointerup", "pointercancel", "pointerleave"]) {
     element.addEventListener(eventName, cancelLongPress);
@@ -1230,6 +1962,32 @@ async function openMeeting(id) {
 
 // --- meeting --------------------------------------------------------------
 
+/** Trigger and menu pairs in the meeting header. */
+const MEETING_MENUS = [
+  ["btn-export-menu", "export-menu"],
+  ["btn-meeting-more", "meeting-more-menu"],
+];
+
+function closeMeetingMenus({ keep = null, returnFocus = false } = {}) {
+  for (const [triggerId, menuId] of MEETING_MENUS) {
+    if (menuId === keep) continue;
+    const menu = $(menuId);
+    if (!menu || menu.hidden) continue;
+    menu.hidden = true;
+    $(triggerId).setAttribute("aria-expanded", "false");
+    if (returnFocus) $(triggerId).focus();
+  }
+}
+
+function toggleMeetingMenu(triggerId, menuId) {
+  const menu = $(menuId);
+  const opening = menu.hidden;
+  closeMeetingMenus({ keep: opening ? menuId : null });
+  menu.hidden = !opening;
+  $(triggerId).setAttribute("aria-expanded", String(opening));
+  if (opening) menu.querySelector("[role='menuitem']:not([hidden])")?.focus();
+}
+
 function renderMeeting() {
   const meeting = state.viewing;
   if (!meeting) return;
@@ -1245,23 +2003,359 @@ function renderMeeting() {
   $("btn-delete").hidden = live;
   $("btn-resummarize").hidden = live || !summariesEnabled();
 
+  // The overflow menu holds the two destructive-or-slow actions; with both
+  // unavailable it would open empty, so the trigger goes away with them.
+  $("btn-meeting-more").hidden = $("btn-delete").hidden && $("btn-resummarize").hidden;
+  closeMeetingMenus();
+
   const last = meeting.utterances.at(-1);
-  const parts = [shortDate(meeting.meta.startedAt)];
-  if (last) parts.push(timestamp(last.endMs));
   const participantCount = meeting.speakers.filter((speaker) => !speaker.isBot).length;
-  parts.push(t(participantCount === 1 ? "{count} participante" : "{count} participantes", {
-    count: participantCount,
+  const facts = [
+    ["calendar", shortDate(meeting.meta.startedAt)],
+    last ? ["clock", timestamp(last.endMs)] : null,
+    ["users", t(participantCount === 1 ? "{count} participante" : "{count} participantes", {
+      count: participantCount,
+    })],
+    ["transcript", t(
+      meeting.utterances.length === 1 ? "{count} intervención" : "{count} intervenciones",
+      { count: meeting.utterances.length },
+    )],
+  ].filter(Boolean);
+  $("meeting-meta").replaceChildren(...facts.map(([name, text]) => {
+    const fact = document.createElement("span");
+    fact.className = "meta-fact";
+    fact.append(icon(name), document.createTextNode(text));
+    return fact;
   }));
-  parts.push(t(meeting.utterances.length === 1 ? "{count} intervención" : "{count} intervenciones", {
-    count: meeting.utterances.length,
-  }));
-  $("meeting-meta").textContent = parts.join(" · ");
 
   renderSpeakers();
   renderTranscript();
   renderSummary();
+  renderMeetingNotes();
   renderMeetingTasks();
+  renderMeetingTags();
+  renderMeetingProgress();
   selectMeetingInsightTab(state.meetingInsightTab);
+}
+
+async function refreshFolders() {
+  try {
+    state.folders = await invoke("list_folders");
+  } catch {
+    state.folders = [];
+  }
+}
+
+/** Asks where to file one meeting or a whole selection. Folder management —
+ *  creating, renaming, removing — lives in the same place as moving, because
+ *  that is when the user thinks about it. */
+function openFolderDialog(ids, returnFocus = document.activeElement) {
+  if (ids.length === 0) return;
+  state.folderDialogMode = "move";
+  state.folderTargetIds = ids;
+  state.folderReturnFocus = returnFocus;
+  $("folder-title").textContent = t("Mover a una carpeta");
+  $("folder-description").textContent = ids.length === 1
+    ? t("Elige la carpeta de esta reunión.")
+    : t("Elige la carpeta de {count} reuniones.", { count: ids.length });
+  $("btn-clear-folder").hidden = false;
+  $("btn-cancel-folder").textContent = t("Cancelar");
+  $("folder-new").value = "";
+  renderFolderOptions();
+  $("folder-modal").hidden = false;
+  $("folder-new").focus();
+}
+
+/** Same dialog without a meeting to file: creating a folder should not require
+ *  moving something into it first. */
+function openFolderManager(returnFocus = document.activeElement) {
+  state.folderDialogMode = "manage";
+  state.folderTargetIds = [];
+  state.folderReturnFocus = returnFocus;
+  $("folder-title").textContent = t("Carpetas");
+  $("folder-description").textContent = t("Crea, renombra o elimina carpetas de la biblioteca.");
+  $("btn-clear-folder").hidden = true;
+  $("btn-cancel-folder").textContent = t("Listo");
+  $("folder-new").value = "";
+  renderFolderOptions();
+  $("folder-modal").hidden = false;
+  $("folder-new").focus();
+}
+
+function closeFolderDialog() {
+  $("folder-modal").hidden = true;
+  state.folderTargetIds = [];
+  state.folderReturnFocus?.focus?.();
+  state.folderReturnFocus = null;
+}
+
+function currentFolderOfTargets() {
+  const folders = new Set(
+    state.folderTargetIds
+      .map((id) => state.meetings.find((meta) => meta.id === id)?.folder ?? "")
+      .map((folder) => folder.toLowerCase()),
+  );
+  return folders.size === 1 ? [...folders][0] : null;
+}
+
+function renderFolderOptions() {
+  const current = currentFolderOfTargets();
+  const options = state.folders.map((folder) => {
+    const row = document.createElement("div");
+    row.className = "folder-option";
+    if (folder.toLowerCase() === current) row.classList.add("current");
+
+    const choose = document.createElement("button");
+    choose.type = "button";
+    choose.className = "folder-choose";
+    choose.append(icon("folder"));
+    const name = document.createElement("span");
+    name.textContent = folder;
+    choose.append(name);
+    if (state.folderDialogMode === "move") {
+      choose.addEventListener("click", () => moveTargetsTo(folder));
+    } else {
+      choose.disabled = true;
+      choose.classList.add("folder-choose-static");
+      const count = document.createElement("small");
+      const total = state.meetings.filter((meta) =>
+        meta.folder?.toLowerCase() === folder.toLowerCase()).length;
+      count.textContent = t(total === 1 ? "{count} reunión" : "{count} reuniones", { count: total });
+      choose.append(count);
+    }
+
+    const rename = document.createElement("button");
+    rename.type = "button";
+    rename.className = "icon-button";
+    rename.title = t("Renombrar la carpeta");
+    rename.setAttribute("aria-label", t("Renombrar la carpeta"));
+    rename.append(icon("edit"));
+    rename.addEventListener("click", () => startFolderRename(row, folder));
+
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "icon-button danger";
+    remove.title = t("Eliminar la carpeta");
+    remove.setAttribute("aria-label", t("Eliminar la carpeta"));
+    remove.append(icon("trash"));
+    remove.addEventListener("click", () => removeFolder(folder));
+
+    row.append(choose, rename, remove);
+    return row;
+  });
+
+  if (options.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "filter-empty";
+    empty.textContent = t("Todavía no hay carpetas. Crea la primera abajo.");
+    options.push(empty);
+  }
+  $("folder-options").replaceChildren(...options);
+  $("folder-options").classList.toggle("managing", state.folderDialogMode === "manage");
+}
+
+/** Renaming happens in place: the row becomes its own name field. */
+function startFolderRename(row, folder) {
+  const input = document.createElement("input");
+  input.type = "text";
+  input.className = "folder-rename";
+  input.value = folder;
+  input.maxLength = 40;
+  input.setAttribute("aria-label", t("Renombrar la carpeta"));
+
+  const commit = async () => {
+    const next = input.value.trim();
+    input.disabled = true;
+    if (next && next !== folder) {
+      try {
+        state.folders = await invoke("rename_folder", { from: folder, to: next });
+        await refreshMeetings();
+      } catch (error) {
+        toast(String(error), t("carpetas"), true);
+      }
+    }
+    renderFolderOptions();
+  };
+
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") commit();
+    if (event.key === "Escape") renderFolderOptions();
+  });
+  input.addEventListener("blur", commit);
+  row.replaceChildren(input);
+  input.focus();
+  input.select();
+}
+
+async function removeFolder(folder) {
+  const accepted = await askForConfirmation({
+    kind: t("Carpeta"),
+    title: t("¿Eliminar la carpeta «{folder}»?", { folder }),
+    target: folder,
+    description: t("Las reuniones no se borran: vuelven a quedar sin carpeta."),
+    action: t("Eliminar carpeta"),
+  });
+  if (!accepted) return;
+  try {
+    state.folders = await invoke("delete_folder", { name: folder });
+    await refreshMeetings();
+    renderFolderOptions();
+  } catch (error) {
+    toast(String(error), t("carpetas"), true);
+  }
+}
+
+async function moveTargetsTo(folder) {
+  const ids = state.folderTargetIds;
+  if (ids.length === 0) return;
+  try {
+    await invoke("set_meeting_folder", { ids, folder });
+    await refreshFolders();
+    await refreshMeetings();
+    if (state.viewing && ids.includes(state.viewing.meta.id)) {
+      state.viewing.meta.folder = folder ?? null;
+      renderMeetingTags();
+    }
+    toast(
+      folder
+        ? t("Movido a «{folder}»", { folder })
+        : t("Ya no está en ninguna carpeta"),
+      t("Biblioteca"),
+    );
+  } catch (error) {
+    toast(String(error), t("carpetas"), true);
+  }
+  if (!$("folder-modal").hidden) closeFolderDialog();
+  else state.folderTargetIds = [];
+}
+
+async function refreshTagCatalog() {
+  try {
+    state.tagCatalog = await invoke("list_tags");
+  } catch {
+    state.tagCatalog = [];
+  }
+}
+
+/** Labels live on the saved meeting; a call still in progress is rewritten by
+ *  the engine on every utterance, so tagging waits until it ends. */
+function renderMeetingTags() {
+  const meeting = state.viewing;
+  if (!meeting) return;
+  const live = isLiveMeeting(meeting.meta.id);
+  $("meeting-tags").hidden = live;
+  if (live) {
+    closeTagPopover();
+    return;
+  }
+
+  const folder = meeting.meta.folder;
+  $("meeting-folder-label").textContent = folder || t("Sin carpeta");
+  $("btn-meeting-folder").classList.toggle("filed", Boolean(folder));
+
+  const tags = meeting.meta.tags ?? [];
+  $("meeting-tag-list").replaceChildren(...tags.map((tag) => {
+    const chip = document.createElement("span");
+    chip.className = "tag-chip";
+    const label = document.createElement("span");
+    label.textContent = tag;
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "tag-remove";
+    remove.title = t("Quitar la etiqueta {tag}", { tag });
+    remove.setAttribute("aria-label", t("Quitar la etiqueta {tag}", { tag }));
+    remove.append(icon("close"));
+    remove.addEventListener("click", () => saveMeetingTags(tags.filter((item) => item !== tag)));
+    chip.append(label, remove);
+    return chip;
+  }));
+
+  $("btn-add-tag").hidden = tags.length >= 12;
+}
+
+async function saveMeetingTags(tags) {
+  const meeting = state.viewing;
+  if (!meeting) return;
+  try {
+    const saved = await invoke("set_meeting_tags", { id: meeting.meta.id, tags });
+    meeting.meta.tags = saved;
+    // The library holds its own copy of the metadata.
+    const listed = state.meetings.find((meta) => meta.id === meeting.meta.id);
+    if (listed) listed.tags = saved;
+    await refreshTagCatalog();
+    renderMeetingTags();
+    renderMeetingList();
+  } catch (error) {
+    toast(String(error), t("etiquetas"), true);
+  }
+}
+
+function closeTagPopover() {
+  $("tag-popover").hidden = true;
+  $("btn-add-tag").setAttribute("aria-expanded", "false");
+}
+
+function openTagPopover() {
+  $("tag-popover").hidden = false;
+  $("btn-add-tag").setAttribute("aria-expanded", "true");
+  $("tag-input").value = "";
+  renderTagSuggestions();
+  $("tag-input").focus();
+}
+
+function renderTagSuggestions() {
+  const current = new Set((state.viewing?.meta.tags ?? []).map((tag) => tag.toLowerCase()));
+  const query = $("tag-input").value.trim().toLowerCase();
+  const matches = state.tagCatalog
+    .filter((tag) => !current.has(tag.toLowerCase()) && tag.toLowerCase().includes(query))
+    .slice(0, 8);
+
+  $("tag-suggestions").replaceChildren(...matches.map((tag) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "tag-suggestion";
+    button.textContent = tag;
+    button.addEventListener("click", () => addMeetingTag(tag));
+    return button;
+  }));
+  $("tag-hint").textContent = matches.length === 0 && query
+    ? t("Pulsa Intro para crear «{tag}».", { tag: $("tag-input").value.trim() })
+    : t("Pulsa Intro para añadirla.");
+}
+
+function addMeetingTag(tag) {
+  const clean = tag.trim();
+  if (!clean) return;
+  const current = state.viewing?.meta.tags ?? [];
+  if (current.some((item) => item.toLowerCase() === clean.toLowerCase())) {
+    closeTagPopover();
+    return;
+  }
+  closeTagPopover();
+  saveMeetingTags([...current, clean]);
+}
+
+/** Copy for a meeting that already left the call but is still being processed. */
+function processingLabel(meetingId) {
+  return {
+    finalizing: t("Terminando la transcripción…"),
+    summarizing: t("Obteniendo el resumen…"),
+  }[state.processingMeetings.get(meetingId)] ?? "";
+}
+
+/** Live following only applies while the call is open; afterwards the header
+ *  reports what Kuali is still doing with the recording. */
+function renderMeetingProgress() {
+  const meeting = state.viewing;
+  if (!meeting) return;
+  const live = isLiveMeeting(meeting.meta.id);
+  const working = live ? "" : processingLabel(meeting.meta.id);
+
+  $("follow-live-control").hidden = !live;
+
+  const progress = $("meeting-progress");
+  progress.hidden = !working;
+  if (working) progress.replaceChildren(document.createElement("i"), document.createTextNode(working));
 }
 
 function renderSpeakers() {
@@ -1351,16 +2445,23 @@ function renderTranscript() {
       const speaker = byId.get(turn.speakerId);
       const row = document.createElement("div");
       row.className = "turn";
+      if (speaker?.color) row.style.setProperty("--speaker", speaker.color);
 
-      const time = document.createElement("div");
-      time.className = "time";
-      time.textContent = timestamp(turn.startMs);
+      const gutter = document.createElement("div");
+      gutter.className = "turn-gutter";
+      gutter.append(participantAvatar(speaker ?? { displayName: "?", color: "" }, 30));
 
       const body = document.createElement("div");
+      body.className = "turn-body";
+
       const who = document.createElement("div");
       who.className = "who";
-      who.style.color = speaker?.color ?? "";
-      who.textContent = speaker?.displayName ?? t("Desconocido ({id})", { id: turn.speakerId });
+      const name = document.createElement("strong");
+      name.textContent = speaker?.displayName ?? t("Desconocido ({id})", { id: turn.speakerId });
+      const time = document.createElement("span");
+      time.className = "time";
+      time.textContent = timestamp(turn.startMs);
+      who.append(name, time);
 
       const said = document.createElement("p");
       said.className = "said";
@@ -1377,7 +2478,7 @@ function renderTranscript() {
       said.textContent = turn.text;
 
       body.append(who, said);
-      row.append(time, body);
+      row.append(gutter, body);
       return row;
     });
 
@@ -1422,20 +2523,23 @@ function renderSummary() {
   const nodes = [];
 
   if (summary.overview) {
-    nodes.push(heading(t("Resumen general")));
+    const card = insightCard({ kind: "overview", iconName: "sparkles", title: t("Resumen general") });
     const p = document.createElement("p");
     p.className = "overview";
     p.textContent = summary.overview;
-    nodes.push(p);
+    card.append(p);
+    nodes.push(card);
   }
 
-  for (const [title, items] of [
-    [t("Decisiones"), summary.decisions],
-    [t("Puntos clave"), summary.keyPoints],
-    [t("Preguntas abiertas"), summary.openQuestions],
+  // Each block gets its own mark and accent so decisions, discussion, and
+  // unresolved questions are distinguishable without reading them first.
+  for (const [kind, iconName, title, items] of [
+    ["decisions", "check-circle", t("Decisiones"), summary.decisions],
+    ["points", "transcript", t("Puntos clave"), summary.keyPoints],
+    ["questions", "help", t("Preguntas abiertas"), summary.openQuestions],
   ]) {
     if (!items || items.length === 0) continue;
-    nodes.push(heading(title));
+    const card = insightCard({ kind, iconName, title, count: items.length });
     const ul = document.createElement("ul");
     ul.append(
       ...items.map((item) => {
@@ -1444,7 +2548,8 @@ function renderSummary() {
         return li;
       }),
     );
-    nodes.push(ul);
+    card.append(ul);
+    nodes.push(card);
   }
 
   if (summary.generatedBy) {
@@ -1457,9 +2562,11 @@ function renderSummary() {
   container.replaceChildren(...nodes);
 }
 
+const MEETING_INSIGHT_TABS = ["summary", "notes", "tasks"];
+
 function selectMeetingInsightTab(name, focus = false) {
-  state.meetingInsightTab = name === "tasks" ? "tasks" : "summary";
-  for (const tabName of ["summary", "tasks"]) {
+  state.meetingInsightTab = MEETING_INSIGHT_TABS.includes(name) ? name : "summary";
+  for (const tabName of MEETING_INSIGHT_TABS) {
     const tab = $(`meeting-tab-${tabName}`);
     const panel = $(`meeting-panel-${tabName}`);
     const active = tabName === state.meetingInsightTab;
@@ -1468,6 +2575,56 @@ function selectMeetingInsightTab(name, focus = false) {
     panel.hidden = !active;
   }
   if (focus) $(`meeting-tab-${state.meetingInsightTab}`).focus();
+}
+
+/** Notes Kuali wrote down because a participant said they would. */
+function renderMeetingNotes() {
+  const meeting = state.viewing;
+  const notes = meeting?.summary?.notes ?? [];
+  $("meeting-note-count").textContent = notes.length ? String(notes.length) : "";
+
+  const container = $("meeting-notes-list");
+  if (notes.length === 0) {
+    container.replaceChildren(emptySummaryMessage(
+      !summariesEnabled()
+        ? t("Los resúmenes y tareas están desactivados.")
+        : isLiveMeeting(meeting.meta.id)
+          ? t("Las notas aparecerán al terminar la llamada.")
+          : meeting.summary
+            ? t("Nadie pidió apuntar nada en esta reunión.")
+            : t("Genera el resumen para extraer las notas de esta reunión."),
+    ));
+    return;
+  }
+
+  container.replaceChildren(...notes.map((note) => {
+    const card = document.createElement("article");
+    card.className = "note-card";
+
+    const text = document.createElement("p");
+    text.textContent = note.text;
+
+    const meta = document.createElement("div");
+    meta.className = "note-meta";
+    if (note.author) {
+      const speaker = meeting.speakers.find((candidate) =>
+        !candidate.isBot && personKey(candidate.displayName) === personKey(note.author));
+      meta.append(participantAvatar(speaker ?? { displayName: note.author, color: "" }, 20));
+      const author = document.createElement("span");
+      author.textContent = note.author;
+      meta.append(author);
+    }
+    if (note.sourceMs != null) {
+      const time = document.createElement("span");
+      time.className = "note-time";
+      time.textContent = timestamp(note.sourceMs);
+      meta.append(time);
+    }
+
+    card.append(text);
+    if (meta.childElementCount > 0) card.append(meta);
+    return card;
+  }));
 }
 
 function renderMeetingTasks() {
@@ -1555,6 +2712,8 @@ function participantAvatar(speaker, size = 24) {
     image.alt = "";
     image.width = size;
     image.height = size;
+    image.style.width = `${size}px`;
+    image.style.height = `${size}px`;
     image.loading = "lazy";
     return image;
   }
@@ -1640,10 +2799,28 @@ function emptySummaryMessage(text) {
   return none;
 }
 
-function heading(text) {
-  const h = document.createElement("h4");
-  h.textContent = text;
-  return h;
+/** Titled block of the summary panel, ready for its content to be appended. */
+function insightCard({ kind, iconName, title, count = 0 }) {
+  const card = document.createElement("section");
+  card.className = `insight-card insight-${kind}`;
+
+  const head = document.createElement("header");
+  const mark = document.createElement("span");
+  mark.className = "insight-mark";
+  mark.append(icon(iconName));
+  const heading = document.createElement("h4");
+  heading.textContent = title;
+  head.append(mark, heading);
+
+  if (count > 1) {
+    const badge = document.createElement("span");
+    badge.className = "insight-count";
+    badge.textContent = String(count);
+    head.append(badge);
+  }
+
+  card.append(head);
+  return card;
 }
 
 function taskNode(task, meetingId) {
@@ -1687,7 +2864,147 @@ function taskNode(task, meetingId) {
   return row;
 }
 
+// --- home -----------------------------------------------------------------
+
+/** Home stops being a waiting screen: it answers "what happened" and "what do
+ *  I owe" without opening another view. */
+function renderHome() {
+  if ($("pane-idle").hidden) return;
+  // A call in progress is the one thing Home must never bury.
+  const live = [...state.liveMeetings.values()].at(-1) ?? null;
+  const openLive = $("btn-open-live");
+  openLive.hidden = !live;
+  openLive.onclick = live ? () => openMeeting(live.meta.id) : null;
+  renderHomeMeetings();
+  renderHomeTasks();
+}
+
+/** "Hoy, 16:54" reads faster than a date when the meeting just happened. */
+function relativeDay(iso) {
+  const date = new Date(iso);
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const days = Math.floor((startOfToday - new Date(date).setHours(0, 0, 0, 0)) / 86_400_000);
+  if (days > 1) return shortDate(iso);
+  const time = new Intl.DateTimeFormat(currentLocale(), { hour: "2-digit", minute: "2-digit" })
+    .format(date);
+  return `${days === 0 ? t("Hoy") : t("Ayer")}, ${time}`;
+}
+
+function homeEmpty(text) {
+  const empty = document.createElement("p");
+  empty.className = "home-empty";
+  empty.textContent = text;
+  return empty;
+}
+
+function renderHomeMeetings() {
+  const recent = state.meetings
+    .filter((meta) => !isLiveMeeting(meta.id))
+    .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+    .slice(0, 5);
+
+  if (recent.length === 0) {
+    $("home-recent").replaceChildren(
+      homeEmpty(t("Tus reuniones aparecerán aquí cuando Kuali termine de escucharlas.")),
+    );
+    return;
+  }
+
+  $("home-recent").replaceChildren(...recent.map((meta) => {
+    const platform = meetingPlatform(meta);
+    const row = document.createElement("button");
+    row.type = "button";
+    row.className = "home-row";
+
+    const copy = document.createElement("span");
+    copy.className = "home-row-copy";
+    const title = document.createElement("strong");
+    title.textContent = meetingTitle(meta);
+    const detail = document.createElement("small");
+    detail.textContent = `${platform === "discord" ? `# ${meta.channelName}` : meta.guildName} · ${relativeDay(meta.startedAt)}`;
+    copy.append(title, detail);
+
+    row.append(platformMark(platform), copy, icon("chevron-right", "icon home-row-go"));
+    row.addEventListener("click", () => openMeeting(meta.id));
+    return row;
+  }));
+}
+
+function renderHomeTasks() {
+  const container = $("home-tasks");
+  if (!state.tasksLoaded) {
+    container.replaceChildren(homeEmpty(t("Buscando…")));
+    return;
+  }
+
+  const pending = state.tasks
+    .filter((item) => !item.task.done)
+    .sort((a, b) => new Date(b.startedAt) - new Date(a.startedAt))
+    .slice(0, 5);
+
+  if (pending.length === 0) {
+    container.replaceChildren(homeEmpty(t("No hay tareas pendientes.")));
+    return;
+  }
+
+  container.replaceChildren(...pending.map((item) => {
+    const row = document.createElement("div");
+    row.className = "home-task";
+
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.setAttribute("aria-label", t("Marcar «{task}» como {status}", {
+      task: item.task.text,
+      status: t("completada"),
+    }));
+    checkbox.addEventListener("change", async () => {
+      try {
+        await setTaskCompletion(item, checkbox.checked);
+        renderHomeTasks();
+        renderGlobalTasks();
+      } catch (error) {
+        checkbox.checked = !checkbox.checked;
+        toast(String(error), "tareas", true);
+      }
+    });
+
+    const copy = document.createElement("span");
+    copy.className = "home-row-copy";
+    const text = document.createElement("strong");
+    text.textContent = item.task.text;
+    const detail = document.createElement("small");
+    detail.textContent = [item.task.assignee || t("Sin asignar"), item.meetingTitle]
+      .filter(Boolean)
+      .join(" · ");
+    copy.append(text, detail);
+
+    const open = document.createElement("button");
+    open.type = "button";
+    open.className = "icon-button";
+    open.title = t("Abrir la reunión");
+    open.setAttribute("aria-label", t("Abrir la reunión"));
+    open.append(icon("arrow-right"));
+    open.addEventListener("click", () => openMeeting(item.meetingId));
+
+    row.append(checkbox, copy, open);
+    return row;
+  }));
+}
+
 // --- global tasks ---------------------------------------------------------
+
+/** Writes the new state through the engine and keeps every open view in sync. */
+async function setTaskCompletion(item, done) {
+  await invoke("set_task_done", {
+    meetingId: item.meetingId,
+    taskId: item.task.id,
+    done,
+  });
+  item.task.done = done;
+  const openTask = state.viewing?.summary?.actionItems?.find((task) => task.id === item.task.id);
+  if (openTask) openTask.done = done;
+}
 
 async function refreshTasks(force = false) {
   if (!state.tasksLoaded || force) {
@@ -1704,6 +3021,7 @@ async function refreshTasks(force = false) {
   }
   renderGlobalTaskFilters();
   renderGlobalTasks();
+  renderHome();
 }
 
 function taskOwnerKey(item) {
@@ -1736,22 +3054,35 @@ function indexTaskPeople() {
 }
 
 function renderGlobalTaskFilters() {
-  const meetings = new Map(state.tasks.map((item) => [item.meetingId, item.meetingTitle]));
-  const meeting = $("tasks-meeting-filter");
-  meeting.replaceChildren(
-    Object.assign(document.createElement("option"), { value: "all", textContent: t("Todas") }),
-    ...[...meetings].sort((a, b) => a[1].localeCompare(b[1], undefined, { sensitivity: "base" })).map(([id, title]) =>
-      Object.assign(document.createElement("option"), { value: id, textContent: title })),
-  );
-  if (![...meeting.options].some((option) => option.value === state.taskFilters.meeting)) {
-    state.taskFilters.meeting = "all";
+  for (const button of $("tasks-status-filter").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.status === state.taskFilters.status));
   }
-  meeting.value = state.taskFilters.meeting;
-  $("tasks-date-from").value = state.taskFilters.dateFrom;
-  $("tasks-date-to").value = state.taskFilters.dateTo;
-  $("tasks-status-filter").value = state.taskFilters.status;
+  for (const button of $("tasks-grouping").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.grouping === state.taskGrouping));
+  }
   renderTaskPersonOptions();
   renderTaskDateLabel();
+  renderTaskFilterState();
+}
+
+/** Any filter beyond the defaults gets a way out of it. */
+function taskFiltersAreDefault() {
+  const { query, people, status, dateFrom, dateTo } = state.taskFilters;
+  return !query
+    && people.size === 0
+    && status === "pending"
+    && dateFrom === presetRangeStart(DEFAULT_TASK_DAYS)
+    && !dateTo;
+}
+
+function renderTaskFilterState() {
+  $("btn-clear-task-filters").hidden = taskFiltersAreDefault();
+  for (const [id, active] of [
+    ["tasks-date-trigger", Boolean(state.taskFilters.dateFrom || state.taskFilters.dateTo)],
+    ["tasks-person-trigger", state.taskFilters.people.size > 0],
+  ]) {
+    $(id).classList.toggle("active", active);
+  }
 }
 
 function renderTaskPersonOptions() {
@@ -1777,6 +3108,7 @@ function renderTaskPersonOptions() {
       else selected.delete(person.key);
       state.taskRenderLimit = 250;
       renderTaskPersonOptions();
+      renderTaskFilterState();
       renderGlobalTasks();
     });
     const copy = document.createElement("span");
@@ -1806,15 +3138,165 @@ function formatFilterDate(value) {
     .format(new Date(`${value}T12:00:00`));
 }
 
+/** Tasks open with the last week so the page answers "what do I owe now"
+ *  instead of every commitment ever made. */
+const DEFAULT_TASK_DAYS = 7;
+
+const TASK_DATE_PRESETS = [
+  [7, "Última semana"],
+  [30, "Últimos 30 días"],
+  [90, "Últimos 3 meses"],
+];
+
+function isoDay(date) {
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+}
+
+function presetRangeStart(days) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  start.setDate(start.getDate() - days + 1);
+  return isoDay(start);
+}
+
+/** The preset a range corresponds to, or null when it is a custom range. */
+function activeDatePreset() {
+  const { dateFrom, dateTo } = state.taskFilters;
+  if (!dateFrom && !dateTo) return "all";
+  if (dateTo) return null;
+  const match = TASK_DATE_PRESETS.find(([days]) => presetRangeStart(days) === dateFrom);
+  return match ? String(match[0]) : null;
+}
+
 function renderTaskDateLabel() {
   const { dateFrom, dateTo } = state.taskFilters;
-  $("tasks-date-label").textContent = dateFrom && dateTo
-    ? `${formatFilterDate(dateFrom)} – ${formatFilterDate(dateTo)}`
-    : dateFrom
-      ? t("Desde {date}", { date: formatFilterDate(dateFrom) })
-      : dateTo
-        ? t("Hasta {date}", { date: formatFilterDate(dateTo) })
-        : t("Cualquier fecha");
+  const preset = activeDatePreset();
+  const presetLabel = preset === "all"
+    ? "Cualquier fecha"
+    : TASK_DATE_PRESETS.find(([days]) => String(days) === preset)?.[1];
+
+  $("tasks-date-label").textContent = presetLabel
+    ? t(presetLabel)
+    : dateFrom && dateTo
+      ? `${formatFilterDate(dateFrom)} – ${formatFilterDate(dateTo)}`
+      : dateFrom
+        ? t("Desde {date}", { date: formatFilterDate(dateFrom) })
+        : t("Hasta {date}", { date: formatFilterDate(dateTo) });
+
+  for (const button of $("tasks-date-presets").querySelectorAll("button")) {
+    button.setAttribute("aria-pressed", String(button.dataset.days === preset));
+  }
+  renderCalendar();
+}
+
+function calendarMonth() {
+  if (!state.calendarMonth) {
+    const anchor = state.taskFilters.dateFrom
+      ? new Date(`${state.taskFilters.dateFrom}T12:00:00`)
+      : new Date();
+    state.calendarMonth = new Date(anchor.getFullYear(), anchor.getMonth(), 1);
+  }
+  return state.calendarMonth;
+}
+
+function shiftCalendarMonth(months) {
+  const current = calendarMonth();
+  state.calendarMonth = new Date(current.getFullYear(), current.getMonth() + months, 1);
+  renderCalendar();
+}
+
+/** Month grid with range selection. Replaces the operating system date popup,
+ *  which cannot be styled and looks nothing like the rest of Kuali. */
+function renderCalendar() {
+  const month = calendarMonth();
+  const locale = currentLocale();
+  const monthName = new Intl.DateTimeFormat(locale, {
+    month: "long",
+    year: "numeric",
+  }).format(month);
+  $("calendar-month").textContent = monthName.charAt(0).toLocaleUpperCase(locale) + monthName.slice(1);
+
+  // Weekday initials in the user's locale, starting on Monday. Local noon keeps
+  // the label from sliding to the previous day in negative UTC offsets.
+  const weekdayFormat = new Intl.DateTimeFormat(locale, { weekday: "narrow" });
+  $("calendar-weekdays").replaceChildren(...Array.from({ length: 7 }, (_, index) => {
+    const day = document.createElement("span");
+    day.textContent = weekdayFormat.format(new Date(2024, 0, 1 + index, 12));
+    return day;
+  }));
+
+  const first = new Date(month.getFullYear(), month.getMonth(), 1);
+  const leading = (first.getDay() + 6) % 7;
+  const start = new Date(first);
+  start.setDate(first.getDate() - leading);
+
+  const { dateFrom, dateTo } = state.taskFilters;
+  const today = isoDay(new Date());
+  const cells = Array.from({ length: 42 }, (_, index) => {
+    const date = new Date(start.getFullYear(), start.getMonth(), start.getDate() + index);
+    const iso = isoDay(date);
+    const cell = document.createElement("button");
+    cell.type = "button";
+    cell.className = "calendar-day";
+    cell.dataset.date = iso;
+    cell.textContent = String(date.getDate());
+    if (date.getMonth() !== month.getMonth()) cell.classList.add("outside");
+    if (iso === today) cell.classList.add("today");
+    if (iso === dateFrom || iso === dateTo) cell.classList.add("edge");
+    // With only a start date the filter really runs up to today, so the grid
+    // shows that instead of a single lonely day.
+    const rangeEnd = dateTo || today;
+    if (dateFrom && iso > dateFrom && iso < rangeEnd) cell.classList.add("inside");
+    if (!dateTo && dateFrom && iso === today && iso !== dateFrom) cell.classList.add("inside");
+    if (iso > today) cell.disabled = true;
+    return cell;
+  });
+  $("calendar-grid").replaceChildren(...cells);
+
+  $("tasks-date-error").textContent = dateFrom && !dateTo
+    ? t("Elige el día final del rango.")
+    : "";
+}
+
+/** First click opens a range, second closes it; a third starts over. */
+function pickCalendarDay(iso) {
+  const { dateFrom, dateTo } = state.taskFilters;
+  if (!dateFrom || dateTo) {
+    state.taskFilters.dateFrom = iso;
+    state.taskFilters.dateTo = "";
+  } else if (iso < dateFrom) {
+    state.taskFilters.dateTo = dateFrom;
+    state.taskFilters.dateFrom = iso;
+  } else {
+    state.taskFilters.dateTo = iso;
+  }
+  state.taskRenderLimit = 250;
+  renderTaskDateLabel();
+  renderTaskFilterState();
+  renderGlobalTasks();
+}
+
+function applyDatePreset(days) {
+  state.taskFilters.dateFrom = days === "all" ? "" : presetRangeStart(Number(days));
+  state.taskFilters.dateTo = "";
+  state.calendarMonth = null;
+  state.taskRenderLimit = 250;
+  renderTaskDateLabel();
+  renderTaskFilterState();
+  renderGlobalTasks();
+}
+
+function resetTaskFilters() {
+  state.taskFilters.query = "";
+  state.taskFilters.people.clear();
+  state.taskFilters.status = "pending";
+  state.taskFilters.dateFrom = presetRangeStart(DEFAULT_TASK_DAYS);
+  state.taskFilters.dateTo = "";
+  state.calendarMonth = null;
+  state.taskRenderLimit = 250;
+  $("tasks-search").value = "";
+  renderGlobalTaskFilters();
+  renderGlobalTasks();
 }
 
 function setTaskFilterPopover(name, open) {
@@ -1827,28 +3309,21 @@ function setTaskFilterPopover(name, open) {
     $("tasks-person-search").focus();
     renderTaskPersonOptions();
   }
+  if (open && name === "date") renderCalendar();
 }
 
 function closeTaskFilterPopovers() {
   setTaskFilterPopover("", false);
 }
 
-function applyTaskDateRange() {
-  const from = $("tasks-date-from").value;
-  const to = $("tasks-date-to").value;
-  if (from && to && from > to) {
-    $("tasks-date-error").textContent = t("La fecha inicial debe ser anterior a la fecha final.");
-    $("tasks-date-from").focus();
-    return false;
-  }
-  $("tasks-date-error").textContent = "";
-  state.taskFilters.dateFrom = from;
-  state.taskFilters.dateTo = to;
+function clearTaskDateRange() {
+  state.taskFilters.dateFrom = "";
+  state.taskFilters.dateTo = "";
+  state.calendarMonth = null;
   state.taskRenderLimit = 250;
   renderTaskDateLabel();
+  renderTaskFilterState();
   renderGlobalTasks();
-  closeTaskFilterPopovers();
-  return true;
 }
 
 function filteredGlobalTasks() {
@@ -1860,7 +3335,6 @@ function filteredGlobalTasks() {
     if (filters.status === "pending" && item.task.done) return false;
     if (filters.status === "done" && !item.task.done) return false;
     if (filters.people.size > 0 && !filters.people.has(taskOwnerKey(item))) return false;
-    if (filters.meeting !== "all" && item.meetingId !== filters.meeting) return false;
     const startedAt = new Date(item.startedAt).getTime();
     if (from && startedAt < from) return false;
     if (to && startedAt > to) return false;
@@ -1896,12 +3370,42 @@ function renderGlobalTasks() {
     const copy = document.createElement("p");
     copy.textContent = state.tasks.length === 0
       ? t("Cuando Kuali resuma una reunión, los compromisos aparecerán aquí.")
-      : t("Prueba otra persona, fecha, reunión o estado.");
+      : t("Cambia la fecha, la persona o el estado para ver más.");
     empty.append(title, copy);
+    // The default range hides older work, so the way back to everything is
+    // offered right where the absence is noticed.
+    if (state.tasks.length > 0 && !taskFiltersAreDefault()) {
+      const reset = document.createElement("button");
+      reset.type = "button";
+      reset.className = "ghost";
+      reset.textContent = t("Quitar filtros");
+      reset.addEventListener("click", resetTaskFilters);
+      empty.append(reset);
+    }
     $("global-task-list").replaceChildren(empty);
     return;
   }
-  const rendered = visible.slice(0, state.taskRenderLimit).map(globalTaskCard);
+
+  // Origin or owner is stated once per group instead of on every row.
+  const groups = new Map();
+  const shown = visible.slice(0, state.taskRenderLimit);
+  for (const item of shown) {
+    const key = state.taskGrouping === "person" ? taskOwnerKey(item) : item.meetingId;
+    if (!groups.has(key)) groups.set(key, []);
+    groups.get(key).push(item);
+  }
+  const entries = [...groups.entries()];
+  const rendered = entries.map(([key, items], index) => {
+    const expanded = taskGroupExpanded(key, index, entries.length, shown.length);
+    return state.taskGrouping === "person"
+      ? taskPersonGroup(key, items, expanded)
+      : taskMeetingGroup(key, items, expanded);
+  });
+  $("btn-toggle-task-groups").hidden = entries.length < 2;
+  $("btn-toggle-task-groups").querySelector("span").textContent =
+    entries.some(([key], index) => !taskGroupExpanded(key, index, entries.length, shown.length))
+      ? t("Abrir todo")
+      : t("Cerrar todo");
   if (visible.length > state.taskRenderLimit) {
     const more = document.createElement("button");
     more.type = "button";
@@ -1919,9 +3423,108 @@ function renderGlobalTasks() {
   $("global-task-list").replaceChildren(...rendered);
 }
 
-function globalTaskCard(item) {
-  const card = document.createElement("article");
-  card.className = `global-task-card${item.task.done ? " done" : ""}`;
+/** Long lists become unreadable, so a group opens and closes like a folder.
+ *  Untouched groups follow the default: everything open while the page is
+ *  small, only the first one when it is not. */
+function taskGroupExpanded(key, index, groupCount, taskCount) {
+  if (state.expandedTaskGroups.has(key)) return true;
+  if (state.collapsedTaskGroups.has(key)) return false;
+  return groupCount <= 1 || taskCount <= 12 || index === 0;
+}
+
+function toggleTaskGroup(key, expanded) {
+  if (expanded) {
+    state.collapsedTaskGroups.add(key);
+    state.expandedTaskGroups.delete(key);
+  } else {
+    state.expandedTaskGroups.add(key);
+    state.collapsedTaskGroups.delete(key);
+  }
+  renderGlobalTasks();
+}
+
+function taskGroupShell(key, items, expanded) {
+  const group = document.createElement("section");
+  group.className = `task-meeting-group${expanded ? "" : " collapsed"}`;
+
+  const head = document.createElement("header");
+  const toggle = document.createElement("button");
+  toggle.type = "button";
+  toggle.className = "task-group-toggle";
+  toggle.setAttribute("aria-expanded", String(expanded));
+  toggle.append(icon("chevron-right", "icon channel-chevron"));
+  toggle.addEventListener("click", () => toggleTaskGroup(key, expanded));
+
+  const pending = items.filter((item) => !item.task.done).length;
+  const count = document.createElement("span");
+  count.className = "task-group-count";
+  count.textContent = pending === 0
+    ? t("Todo hecho")
+    : t(pending === 1 ? "{count} pendiente" : "{count} pendientes", { count: pending });
+  if (pending === 0) count.classList.add("complete");
+
+  const rows = document.createElement("div");
+  rows.className = "task-rows";
+  rows.hidden = !expanded;
+
+  head.append(toggle, count);
+  group.append(head, rows);
+  return { group, head, toggle, rows };
+}
+
+/** One meeting, its tasks, and a single link back to the transcript. */
+function taskMeetingGroup(key, items, expanded) {
+  const first = items[0];
+  const platform = meetingPlatform({ guildName: first.guildName });
+  const { group, head, toggle, rows } = taskGroupShell(key, items, expanded);
+
+  const copy = document.createElement("span");
+  copy.className = "task-meeting-copy";
+  const title = document.createElement("strong");
+  title.textContent = first.meetingTitle;
+  const detail = document.createElement("small");
+  const sourceName = platform === "discord" ? `# ${first.channelName}` : first.guildName;
+  detail.textContent = `${sourceName} · ${shortDate(first.startedAt)}`;
+  copy.append(title, detail);
+  toggle.append(platformMark(platform), copy);
+
+  // Opening the meeting is a separate target so the header can toggle.
+  const open = document.createElement("button");
+  open.type = "button";
+  open.className = "icon-button task-group-open";
+  open.title = t("Abrir la reunión");
+  open.setAttribute("aria-label", t("Abrir la reunión"));
+  open.append(icon("arrow-right"));
+  open.addEventListener("click", () => openMeeting(first.meetingId));
+  head.append(open);
+
+  rows.append(...items.map(globalTaskRow));
+  return group;
+}
+
+/** One owner and everything they took on, across meetings. */
+function taskPersonGroup(key, items, expanded) {
+  const first = items[0];
+  const { group, toggle, rows } = taskGroupShell(key, items, expanded);
+
+  toggle.append(participantAvatar({
+    displayName: first.task.assignee || "Sin asignar",
+    avatarUrl: first.assigneeAvatarUrl,
+    color: first.assigneeColor,
+  }, 28));
+  const name = document.createElement("strong");
+  name.className = "task-owner-name";
+  name.textContent = first.task.assignee || t("Sin asignar");
+  toggle.append(name);
+
+  rows.append(...items.map((item) => globalTaskRow(item, { showOrigin: true })));
+  return group;
+}
+
+function globalTaskRow(item, { showOrigin = false } = {}) {
+  const row = document.createElement("label");
+  row.className = `global-task-row${item.task.done ? " done" : ""}`;
+
   const checkbox = document.createElement("input");
   checkbox.type = "checkbox";
   checkbox.checked = item.task.done;
@@ -1934,15 +3537,9 @@ function globalTaskCard(item) {
   );
   checkbox.addEventListener("change", async () => {
     try {
-      await invoke("set_task_done", {
-        meetingId: item.meetingId,
-        taskId: item.task.id,
-        done: checkbox.checked,
-      });
-      item.task.done = checkbox.checked;
-      const openTask = state.viewing?.summary?.actionItems?.find((task) => task.id === item.task.id);
-      if (openTask) openTask.done = checkbox.checked;
+      await setTaskCompletion(item, checkbox.checked);
       renderGlobalTasks();
+      renderHome();
       if (state.viewing?.meta.id === item.meetingId) renderMeetingTasks();
     } catch (error) {
       checkbox.checked = !checkbox.checked;
@@ -1954,41 +3551,23 @@ function globalTaskCard(item) {
     displayName: item.task.assignee || "Sin asignar",
     avatarUrl: item.assigneeAvatarUrl,
     color: item.assigneeColor,
-  }, 32);
-  const content = document.createElement("div");
+  }, 28);
+
+  const content = document.createElement("span");
   content.className = "global-task-content";
   const taskText = document.createElement("strong");
   taskText.textContent = item.task.text;
-  const details = document.createElement("div");
+  const details = document.createElement("small");
   details.className = "global-task-details";
-  const owner = document.createElement("span");
-  owner.textContent = item.task.assignee || t("Sin asignar");
-  details.append(owner);
-  if (item.task.due) details.append(document.createTextNode(` · ${item.task.due}`));
+  details.textContent = (showOrigin
+    ? [item.meetingTitle, shortDate(item.startedAt), item.task.due]
+    : [item.task.assignee || t("Sin asignar"), item.task.due])
+    .filter(Boolean)
+    .join(" · ");
   content.append(taskText, details);
 
-  // Origin metadata supports filtering and navigation but is not part of the
-  // task itself, so it lives in a separate block.
-  const origin = document.createElement("aside");
-  origin.className = "task-origin";
-  origin.append(platformMark(meetingPlatform({ guildName: item.guildName })));
-  const originCopy = document.createElement("span");
-  originCopy.className = "task-origin-copy";
-  const originLabel = document.createElement("small");
-  originLabel.textContent = t("Reunión");
-  const meeting = document.createElement("button");
-  meeting.type = "button";
-  meeting.className = "task-meeting-link";
-  meeting.textContent = item.meetingTitle;
-  meeting.addEventListener("click", () => openMeeting(item.meetingId));
-  const originMeta = document.createElement("span");
-  const platform = meetingPlatform({ guildName: item.guildName });
-  const sourceName = platform === "discord" ? `# ${item.channelName}` : item.guildName;
-  originMeta.textContent = `${sourceName} · ${shortDate(item.startedAt)}`;
-  originCopy.append(originLabel, meeting, originMeta);
-  origin.append(originCopy);
-  card.append(checkbox, avatar, content, origin);
-  return card;
+  row.append(checkbox, showOrigin ? platformMark(meetingPlatform({ guildName: item.guildName })) : avatar, content);
+  return row;
 }
 
 // --- setup guide ----------------------------------------------------------
@@ -2288,7 +3867,7 @@ function renderDiscordGuideStep({ focus = false } = {}) {
     next.textContent = t("Conecta el bot primero");
   } else {
     next.disabled = false;
-    next.textContent = step === lastStep ? t("Terminar guía") : t("Siguiente →");
+    next.querySelector("span").textContent = step === lastStep ? t("Terminar guía") : t("Siguiente");
   }
 
   if (focus) {
@@ -2319,7 +3898,8 @@ function renderMeetGuideStep({ focus = false } = {}) {
   $("meet-guide-progress").setAttribute("aria-valuenow", String(step + 1));
   $("meet-guide-progress-bar").style.width = `${((step + 1) / MEET_GUIDE_TITLES.length) * 100}%`;
   $("btn-meet-guide-back").disabled = step === 0;
-  $("btn-meet-guide-next").textContent = step === lastStep ? t("Terminar guía") : t("Siguiente →");
+  $("btn-meet-guide-next").querySelector("span").textContent =
+    step === lastStep ? t("Terminar guía") : t("Siguiente");
   if (focus) {
     const heading = pages[step]?.querySelector("h4");
     if (heading) {
@@ -2506,6 +4086,13 @@ function handleEvent(event) {
   switch (event.type) {
     case "statusChanged":
       state.status = event.status;
+      // Neither draining audio nor summarizing means nothing is left in flight,
+      // so a failed summary cannot leave a meeting marked forever.
+      if (!["finalizing", "summarizing"].includes(event.status)) {
+        state.processingMeetings.clear();
+        renderMeetingList();
+        if (state.viewing) renderMeetingProgress();
+      }
       renderRequiredModelNotice($("required-model-select").value);
       renderStatus();
       renderUpdateState();
@@ -2586,6 +4173,7 @@ function handleEvent(event) {
 
     case "meetingEnded": {
       const endedWasOpen = state.viewing?.meta.id === event.meetingId;
+        state.processingMeetings.set(event.meetingId, "finalizing");
         state.liveMeetings.delete(event.meetingId);
         renderRequiredModelNotice($("required-model-select").value);
         state.talking.delete(event.meetingId);
@@ -2671,11 +4259,21 @@ function handleEvent(event) {
       if (state.viewing?.meta.id === event.meetingId) renderMeeting();
       break;
 
+    case "guildsUpdated":
+      refreshGuildIcons().then(renderMeetingList);
+      break;
+
     case "summaryStarted":
-      if (state.viewing?.meta.id === event.meetingId) renderSummary();
+      state.processingMeetings.set(event.meetingId, "summarizing");
+      renderMeetingList();
+      if (state.viewing?.meta.id === event.meetingId) {
+        renderSummary();
+        renderMeetingProgress();
+      }
       break;
 
     case "summaryReady":
+      state.processingMeetings.delete(event.meetingId);
       {
         const meeting = meetingForEvent(event.meetingId);
         if (meeting) {
@@ -2735,6 +4333,72 @@ function selectSettingsTab(name, focus = false) {
   if (focus) selected.focus();
 }
 
+/** Languages whisper.cpp can decode. Names are resolved with Intl so the list
+ *  arrives in the interface language without shipping 99 translations. */
+const WHISPER_LANGUAGES = [
+  "af", "am", "ar", "as", "az", "ba", "be", "bg", "bn", "bo", "br", "bs", "ca",
+  "cs", "cy", "da", "de", "el", "en", "es", "et", "eu", "fa", "fi", "fo", "fr",
+  "gl", "gu", "ha", "haw", "he", "hi", "hr", "ht", "hu", "hy", "id", "is", "it",
+  "ja", "jw", "ka", "kk", "km", "kn", "ko", "la", "lb", "ln", "lo", "lt", "lv",
+  "mg", "mi", "mk", "ml", "mn", "mr", "ms", "mt", "my", "ne", "nl", "nn", "no",
+  "oc", "pa", "pl", "ps", "pt", "ro", "ru", "sa", "sd", "si", "sk", "sl", "sn",
+  "so", "sq", "sr", "su", "sv", "sw", "ta", "te", "tg", "th", "tk", "tl", "tr",
+  "tt", "uk", "ur", "uz", "vi", "yi", "yo", "yue", "zh",
+];
+
+/** Codes older ICU builds cannot name on their own. */
+const LANGUAGE_FALLBACKS = { jw: "Basa Jawa", yue: "粵語", haw: "ʻŌlelo Hawaiʻi" };
+
+/** Offered first: what the system speaks, then the two interface languages and
+ *  the most spoken language in the world. */
+function suggestedAudioLanguages() {
+  const system = (navigator.language ?? "").split("-")[0].toLowerCase();
+  return [...new Set([system, "es", "en", "zh"].filter((code) =>
+    WHISPER_LANGUAGES.includes(code)))];
+}
+
+function languageName(code) {
+  try {
+    const name = new Intl.DisplayNames([currentLocale()], { type: "language" }).of(code);
+    if (name && name !== code) return name.charAt(0).toLocaleUpperCase(currentLocale()) + name.slice(1);
+  } catch {
+    // Fall through to the bundled name.
+  }
+  return LANGUAGE_FALLBACKS[code] ?? code;
+}
+
+function languageOption(code) {
+  return Object.assign(document.createElement("option"), {
+    value: code,
+    textContent: languageName(code),
+  });
+}
+
+function renderAudioLanguages() {
+  const select = $("cfg-language");
+  const suggested = suggestedAudioLanguages();
+  const rest = WHISPER_LANGUAGES
+    .filter((code) => !suggested.includes(code))
+    .sort((a, b) => languageName(a).localeCompare(languageName(b), currentLocale()));
+
+  const suggestedGroup = document.createElement("optgroup");
+  suggestedGroup.label = t("Sugeridos");
+  suggestedGroup.append(...suggested.map(languageOption));
+
+  const allGroup = document.createElement("optgroup");
+  allGroup.label = t("Todos los idiomas");
+  allGroup.append(...rest.map(languageOption));
+
+  select.replaceChildren(
+    Object.assign(document.createElement("option"), {
+      value: "auto",
+      textContent: t("Detectar automáticamente (no recomendado)"),
+    }),
+    suggestedGroup,
+    allGroup,
+  );
+}
+
 async function openSettings() {
   closeWhisperModelPicker();
   let snapshot;
@@ -2777,6 +4441,7 @@ async function openSettings() {
 
   renderWhisperModelOptions(c.whisper.model);
   $("cfg-models-directory").value = c.whisper["models-directory"] ?? "";
+  renderAudioLanguages();
   $("cfg-language").value = c.whisper.language;
   state.customVocabulary = [...(c.whisper["custom-vocabulary"] ?? [])];
   $("cfg-vocabulary-input").value = "";
@@ -2791,7 +4456,9 @@ async function openSettings() {
   state.selectedProvider = c.llm["preferred-provider"] ?? "";
   renderProviders();
 
-  $("cfg-output-language").value = c.llm["output-language"] ?? "español";
+  // An empty field is the automatic setting: the summary follows the meeting.
+  const outputLanguage = (c.llm["output-language"] ?? "").trim();
+  $("cfg-output-language").value = outputLanguage.toLowerCase() === "auto" ? "" : outputLanguage;
   $("cfg-summarize").checked = c.llm["summarize-on-leave"] !== false;
   updateSummarySettingsVisibility();
   $("cfg-ui-language").value = c.application?.language ?? "auto";
@@ -3560,10 +5227,7 @@ function renderCustomVocabulary() {
 
       const text = document.createElement("span");
       text.textContent = term;
-      const remove = document.createElement("span");
-      remove.className = "remove-term";
-      remove.setAttribute("aria-hidden", "true");
-      remove.textContent = "×";
+      const remove = icon("close", "icon remove-term");
       chip.append(text, remove);
       chip.addEventListener("click", () => {
         state.customVocabulary.splice(index, 1);
@@ -3678,7 +5342,7 @@ async function saveSettings() {
   // Provider-specific model settings superseded the global one. Clear it so it
   // cannot be applied again after a reload.
   c.llm["model-override"] = null;
-  c.llm["output-language"] = $("cfg-output-language").value.trim() || "español";
+  c.llm["output-language"] = $("cfg-output-language").value.trim() || "auto";
   c.llm["summarize-on-leave"] = $("cfg-summarize").checked;
 
   c.application ??= {};
@@ -3914,10 +5578,52 @@ function wireUp() {
     renderForLanguageChange().catch((error) => toast(String(error), "Kuali", true));
   });
   $("context-select").addEventListener("click", toggleContextSelection);
+  $("context-move").addEventListener("click", () => {
+    const target = state.libraryContextTarget;
+    const returnFocus = state.libraryContextReturnFocus;
+    closeLibraryContextMenu();
+    if (!target) return;
+    const ids = contextTargetMeetings(target)
+      .filter((meeting) => !isLiveMeeting(meeting.id))
+      .map((meeting) => meeting.id);
+    openFolderDialog(ids, returnFocus);
+  });
+  $("btn-move-selected").addEventListener("click", () => {
+    openFolderDialog([...state.selectedMeetingIds]);
+  });
+  $("btn-cancel-folder").addEventListener("click", closeFolderDialog);
+  $("btn-clear-folder").addEventListener("click", () => moveTargetsTo(null));
+  $("folder-modal").addEventListener("pointerdown", (event) => {
+    if (event.target === $("folder-modal")) closeFolderDialog();
+  });
+  $("folder-new").addEventListener("keydown", async (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    const input = event.currentTarget;
+    const name = input.value.trim();
+    if (!name) return;
+    try {
+      state.folders = await invoke("create_folder", { name });
+    } catch (error) {
+      toast(String(error), t("carpetas"), true);
+      return;
+    }
+    if (state.folderDialogMode === "move") {
+      moveTargetsTo(name);
+      return;
+    }
+    // Managing: keep going, several folders are usually created at once.
+    input.value = "";
+    renderFolderOptions();
+    renderMeetingList();
+    input.focus();
+  });
+  $("btn-new-folder").addEventListener("click", () => openFolderManager());
   $("context-delete").addEventListener("click", deleteContextTarget);
   $("library-context-menu").addEventListener("keydown", (event) => {
     if (!["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) return;
-    const items = [$("context-select"), $("context-delete")].filter((item) => !item.disabled);
+    const items = [$("context-select"), $("context-move"), $("context-delete")]
+      .filter((item) => !item.disabled);
     if (items.length === 0) return;
     event.preventDefault();
     const current = items.indexOf(document.activeElement);
@@ -3983,11 +5689,63 @@ function wireUp() {
       controls[0].focus();
     }
   });
+  document.addEventListener("pointermove", (event) => {
+    if (orderDragActive()) {
+      event.preventDefault();
+      moveOrderDrag(event);
+      return;
+    }
+    if (orderDrag.candidate) {
+      const start = orderDrag.candidate;
+      if (Math.hypot(event.clientX - start.x, event.clientY - start.y) > 6) {
+        startOrderDrag(event);
+      }
+      return;
+    }
+    if (meetingDragActive()) {
+      event.preventDefault();
+      moveMeetingDrag(event);
+      return;
+    }
+    const candidate = meetingDrag.candidate;
+    if (!candidate) return;
+    // A few pixels of travel separate a click from a drag.
+    if (Math.hypot(event.clientX - candidate.x, event.clientY - candidate.y) > 6) {
+      startMeetingDrag(event);
+    }
+  });
+  document.addEventListener("pointerup", () => {
+    if (orderDragActive()) {
+      meetingDrag.blockClickUntil = Date.now() + 300;
+      endOrderDrag();
+      return;
+    }
+    orderDrag.candidate = null;
+    if (meetingDragActive()) endMeetingDrag();
+    else meetingDrag.candidate = null;
+  });
+  document.addEventListener("pointercancel", () => {
+    cancelOrderDrag();
+    cancelMeetingDrag();
+  });
+  // A drag ends over a row, and the click that follows must not open it.
+  document.addEventListener("click", (event) => {
+    if (Date.now() >= meetingDrag.blockClickUntil) return;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
   document.addEventListener("pointerdown", (event) => {
     const menu = $("library-context-menu");
     if (!menu.hidden && !menu.contains(event.target)) closeLibraryContextMenu();
     if (!event.target.closest(".task-filter-control")) closeTaskFilterPopovers();
+    if (!event.target.closest(".menu-anchor")) closeMeetingMenus();
   });
+  for (const [triggerId, menuId] of MEETING_MENUS) {
+    $(triggerId).addEventListener("click", () => toggleMeetingMenu(triggerId, menuId));
+    $(menuId).addEventListener("click", (event) => {
+      if (event.target.closest("[role='menuitem']")) closeMeetingMenus();
+    });
+  }
   $("btn-cancel-selection").addEventListener("click", () => setLibrarySelectionMode(false));
   $("btn-delete-selected").addEventListener("click", deleteSelectedMeetings);
   $("btn-select-visible").addEventListener("click", () => {
@@ -3995,6 +5753,39 @@ function wireUp() {
     const allSelected =
       meetings.length > 0 && meetings.every((meeting) => state.selectedMeetingIds.has(meeting.id));
     for (const meeting of meetings) setMeetingSelection(meeting, !allSelected);
+    renderMeetingList();
+  });
+  $("btn-meeting-folder").addEventListener("click", () => {
+    if (state.viewing) openFolderDialog([state.viewing.meta.id]);
+  });
+  $("btn-add-tag").addEventListener("click", () => {
+    if ($("tag-popover").hidden) openTagPopover();
+    else closeTagPopover();
+  });
+  $("tag-input").addEventListener("input", renderTagSuggestions);
+  $("tag-input").addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      addMeetingTag($("tag-input").value);
+    }
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeTagPopover();
+      $("btn-add-tag").focus();
+    }
+  });
+  document.addEventListener("pointerdown", (event) => {
+    if (!$("tag-popover").hidden && !event.target.closest(".tag-adder, .menu-anchor")) {
+      closeTagPopover();
+    }
+  });
+  $("library-grouping").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-grouping]");
+    if (!button || button.dataset.grouping === state.libraryGrouping) return;
+    state.libraryGrouping = button.dataset.grouping;
+    localStorage.setItem("kuali.library.grouping", state.libraryGrouping);
+    state.collapsedChannels.clear();
+    renderLibraryGrouping();
     renderMeetingList();
   });
   $("library-search").addEventListener("input", (event) => {
@@ -4022,6 +5813,7 @@ function wireUp() {
   $("nav-home").addEventListener("click", goHome);
   $("nav-tasks").addEventListener("click", showTasks);
   $("btn-guide").addEventListener("click", showGuide);
+  $("btn-home-all-tasks").addEventListener("click", showTasks);
   $("btn-finish-guide").addEventListener("click", finishInitialSetup);
   $("required-model-select").addEventListener("change", (event) =>
     renderRequiredModelNotice(event.currentTarget.value));
@@ -4098,31 +5890,69 @@ function wireUp() {
   $("btn-install-update").addEventListener("click", () => installAvailableUpdate());
   $("btn-settings-install-update").addEventListener("click", () => installAvailableUpdate());
 
-  for (const name of ["summary", "tasks"]) {
+  for (const name of MEETING_INSIGHT_TABS) {
     $(`meeting-tab-${name}`).addEventListener("click", () => selectMeetingInsightTab(name));
   }
   document.querySelector(".meeting-panel-tabs").addEventListener("keydown", (event) => {
     if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
     event.preventDefault();
-    const next = event.key === "ArrowRight" || event.key === "End" ? "tasks" : "summary";
-    selectMeetingInsightTab(next, true);
+    const current = MEETING_INSIGHT_TABS.indexOf(state.meetingInsightTab);
+    const next = {
+      Home: 0,
+      End: MEETING_INSIGHT_TABS.length - 1,
+      ArrowLeft: Math.max(0, current - 1),
+      ArrowRight: Math.min(MEETING_INSIGHT_TABS.length - 1, current + 1),
+    }[event.key];
+    selectMeetingInsightTab(MEETING_INSIGHT_TABS[next], true);
   });
   $("tasks-search").addEventListener("input", (event) => {
     clearTimeout(taskSearchTimer);
     state.taskFilters.query = event.currentTarget.value;
     state.taskRenderLimit = 250;
-    taskSearchTimer = setTimeout(renderGlobalTasks, 120);
-  });
-  for (const [id, key] of [
-    ["tasks-meeting-filter", "meeting"],
-    ["tasks-status-filter", "status"],
-  ]) {
-    $(id).addEventListener("change", (event) => {
-      state.taskFilters[key] = event.currentTarget.value;
-      state.taskRenderLimit = 250;
+    taskSearchTimer = setTimeout(() => {
+      renderTaskFilterState();
       renderGlobalTasks();
-    });
-  }
+    }, 120);
+  });
+  $("tasks-grouping").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-grouping]");
+    if (!button) return;
+    state.taskGrouping = button.dataset.grouping;
+    state.taskRenderLimit = 250;
+    renderGlobalTaskFilters();
+    renderGlobalTasks();
+  });
+  $("btn-clear-task-filters").addEventListener("click", resetTaskFilters);
+  $("btn-toggle-task-groups").addEventListener("click", () => {
+    const opening = $("btn-toggle-task-groups").querySelector("span").textContent === t("Abrir todo");
+    state.expandedTaskGroups.clear();
+    state.collapsedTaskGroups.clear();
+    const keys = filteredGlobalTasks()
+      .slice(0, state.taskRenderLimit)
+      .map((item) => (state.taskGrouping === "person" ? taskOwnerKey(item) : item.meetingId));
+    for (const key of new Set(keys)) {
+      (opening ? state.expandedTaskGroups : state.collapsedTaskGroups).add(key);
+    }
+    renderGlobalTasks();
+  });
+  $("tasks-date-presets").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-days]");
+    if (button) applyDatePreset(button.dataset.days);
+  });
+  $("calendar-grid").addEventListener("click", (event) => {
+    const day = event.target.closest("button[data-date]");
+    if (day) pickCalendarDay(day.dataset.date);
+  });
+  $("btn-calendar-prev").addEventListener("click", () => shiftCalendarMonth(-1));
+  $("btn-calendar-next").addEventListener("click", () => shiftCalendarMonth(1));
+  $("tasks-status-filter").addEventListener("click", (event) => {
+    const button = event.target.closest("button[data-status]");
+    if (!button) return;
+    state.taskFilters.status = button.dataset.status;
+    state.taskRenderLimit = 250;
+    renderGlobalTaskFilters();
+    renderGlobalTasks();
+  });
   $("tasks-person-trigger").addEventListener("click", () => {
     const open = $("tasks-person-popover").hidden;
     setTaskFilterPopover("person", open);
@@ -4132,21 +5962,15 @@ function wireUp() {
     state.taskFilters.people.clear();
     state.taskRenderLimit = 250;
     renderTaskPersonOptions();
+    renderTaskFilterState();
     renderGlobalTasks();
   });
   $("btn-close-task-people").addEventListener("click", closeTaskFilterPopovers);
   $("tasks-date-trigger").addEventListener("click", () => {
-    const open = $("tasks-date-popover").hidden;
-    setTaskFilterPopover("date", open);
-    if (open) $("tasks-date-from").focus();
+    setTaskFilterPopover("date", $("tasks-date-popover").hidden);
   });
-  $("btn-clear-task-dates").addEventListener("click", () => {
-    $("tasks-date-from").value = "";
-    $("tasks-date-to").value = "";
-    $("tasks-date-error").textContent = "";
-    applyTaskDateRange();
-  });
-  $("btn-close-task-dates").addEventListener("click", applyTaskDateRange);
+  $("btn-clear-task-dates").addEventListener("click", clearTaskDateRange);
+  $("btn-close-task-dates").addEventListener("click", closeTaskFilterPopovers);
   $("btn-settings").addEventListener("click", openSettings);
   $("btn-open-settings").addEventListener("click", openSettings);
   $("btn-close-settings").addEventListener("click", () => ($("settings-modal").hidden = true));
@@ -4407,6 +6231,12 @@ function wireUp() {
   });
 
   document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && (meetingDragActive() || orderDragActive())) {
+      e.preventDefault();
+      cancelMeetingDrag();
+      cancelOrderDrag();
+      return;
+    }
     if (e.key === "Escape" && !$("factory-reset-modal").hidden) {
       e.preventDefault();
       closeFactoryResetDialog();
@@ -4425,6 +6255,11 @@ function wireUp() {
     if (e.key === "Escape" && !$("library-context-menu").hidden) {
       e.preventDefault();
       closeLibraryContextMenu(true);
+      return;
+    }
+    if (e.key === "Escape" && MEETING_MENUS.some(([, menuId]) => !$(menuId).hidden)) {
+      e.preventDefault();
+      closeMeetingMenus({ returnFocus: true });
       return;
     }
     if (e.key === "Escape" && (!["tasks-person-popover", "tasks-date-popover"]
@@ -4469,8 +6304,11 @@ async function boot() {
   wireUp();
   await listen("kuali://event", (e) => handleEvent(e.payload));
   await listen("kuali://navigate", (event) => {
-    if (event.payload === "tasks") showTasks();
-    else if (event.payload === "guide") showGuide();
+    const destination = String(event.payload ?? "");
+    if (destination === "tasks") showTasks();
+    else if (destination === "guide") showGuide();
+    else if (destination === "settings") openSettings();
+    else if (destination.startsWith("meeting=")) openMeeting(destination.slice(8));
     else goHome();
   });
   await listen("kuali://config-changed", async () => {
@@ -4510,7 +6348,11 @@ async function boot() {
   void checkForUpdates();
   await resumeConfiguredModelAfterSetup();
 
+  state.taskFilters.dateFrom = presetRangeStart(DEFAULT_TASK_DAYS);
   await refreshMeetings();
+  refreshTagCatalog().catch(() => {});
+  refreshFolders().then(renderMeetingList).catch(() => {});
+  refreshGuildIcons().then(renderMeetingList).catch(() => {});
   refreshTasks().catch(() => {});
   renderStatus();
   renderUpdateState();

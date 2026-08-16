@@ -9,6 +9,61 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
+    <!-- Line-icon sprite. Icons inherit color and size from their button, so
+         markup only references a symbol instead of repeating geometry. -->
+    <svg class="icon-sprite" aria-hidden="true" focusable="false" data-i18n-skip>
+      <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 10.6 12 4l8 6.6"/><path d="M6.2 9.7V20h11.6V9.7"/></symbol>
+      <symbol id="i-tasks" viewBox="0 0 24 24"><path d="M4 6.5h4"/><path d="M4 12h4"/><path d="M4 17.5h4"/><path d="M11 6.5h9"/><path d="M11 12h9"/><path d="M11 17.5h9"/></symbol>
+      <symbol id="i-check-circle" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="m8.4 12.3 2.4 2.4 4.8-5.2"/></symbol>
+      <symbol id="i-check" viewBox="0 0 24 24"><path d="m5 12.6 4.6 4.6L19 7"/></symbol>
+      <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4.2 4.2"/></symbol>
+      <symbol id="i-settings" viewBox="0 0 24 24"><path d="M4 7.5h8.5"/><path d="M17.5 7.5H20"/><path d="M4 16.5h3"/><path d="M12 16.5h8"/><circle cx="15" cy="7.5" r="2.4"/><circle cx="9.5" cy="16.5" r="2.4"/></symbol>
+      <symbol id="i-folder" viewBox="0 0 24 24"><path d="M3.5 7.6A2.1 2.1 0 0 1 5.6 5.5h3.5l2 2.6h7.3a2.1 2.1 0 0 1 2.1 2.1v6.3a2.1 2.1 0 0 1-2.1 2.1H5.6a2.1 2.1 0 0 1-2.1-2.1z"/></symbol>
+      <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M9.7 9.5a2.4 2.4 0 1 1 3.1 2.4c-.6.2-1 .8-1 1.4v.4"/><path d="M11.8 16.6h.02"/></symbol>
+      <symbol id="i-close" viewBox="0 0 24 24"><path d="m6.6 6.6 10.8 10.8"/><path d="M17.4 6.6 6.6 17.4"/></symbol>
+      <symbol id="i-chevron-down" viewBox="0 0 24 24"><path d="m6.5 9.5 5.5 5.5 5.5-5.5"/></symbol>
+      <symbol id="i-chevron-right" viewBox="0 0 24 24"><path d="m9.5 6 6 6-6 6"/></symbol>
+      <symbol id="i-chevron-left" viewBox="0 0 24 24"><path d="m14.5 6-6 6 6 6"/></symbol>
+      <symbol id="i-arrow-right" viewBox="0 0 24 24"><path d="M4.5 12h14"/><path d="m13 6.5 5.5 5.5-5.5 5.5"/></symbol>
+      <symbol id="i-arrow-left" viewBox="0 0 24 24"><path d="M19.5 12h-14"/><path d="M11 6.5 5.5 12 11 17.5"/></symbol>
+      <symbol id="i-external" viewBox="0 0 24 24"><path d="M13.5 4.5H20v6.5"/><path d="M20 4.5 11.5 13"/><path d="M18 14v4.4a1.6 1.6 0 0 1-1.6 1.6H5.6A1.6 1.6 0 0 1 4 18.4V7.6A1.6 1.6 0 0 1 5.6 6H10"/></symbol>
+      <symbol id="i-download" viewBox="0 0 24 24"><path d="M12 4v10.5"/><path d="m7.5 10.5 4.5 4.5 4.5-4.5"/><path d="M5 19.5h14"/></symbol>
+      <symbol id="i-export" viewBox="0 0 24 24"><path d="M12 15.5V4.5"/><path d="m8 8.5 4-4 4 4"/><path d="M5 14v4.4A1.6 1.6 0 0 0 6.6 20h10.8a1.6 1.6 0 0 0 1.6-1.6V14"/></symbol>
+      <symbol id="i-copy" viewBox="0 0 24 24"><rect x="9" y="9" width="11" height="11" rx="2.2"/><path d="M15 6.6A2.6 2.6 0 0 0 12.4 4H6.6A2.6 2.6 0 0 0 4 6.6v5.8A2.6 2.6 0 0 0 6.6 15"/></symbol>
+      <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 12a8 8 0 1 1-2.6-5.9"/><path d="M20 4.2v4.6h-4.6"/></symbol>
+      <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4.8 7h14.4"/><path d="M9.6 7V5.6A1.6 1.6 0 0 1 11.2 4h1.6a1.6 1.6 0 0 1 1.6 1.6V7"/><path d="M6.8 7 7.6 18.6A1.6 1.6 0 0 0 9.2 20h5.6a1.6 1.6 0 0 0 1.6-1.4L17.2 7"/></symbol>
+      <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="12" cy="12" r="1.5" fill="currentColor" stroke="none"/><circle cx="18" cy="12" r="1.5" fill="currentColor" stroke="none"/></symbol>
+      <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14"/><path d="M5 12h14"/></symbol>
+      <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9.2" cy="8.6" r="3.4"/><path d="M3.2 19.5c0-3.1 2.7-4.9 6-4.9s6 1.8 6 4.9"/><path d="M16.2 5.5a3.4 3.4 0 0 1 0 6.2"/><path d="M17.6 14.9c2 .6 3.2 2 3.2 4.6"/></symbol>
+      <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8.4" r="3.7"/><path d="M5.2 20c0-3.3 3-5.4 6.8-5.4s6.8 2.1 6.8 5.4"/></symbol>
+      <symbol id="i-calendar" viewBox="0 0 24 24"><rect x="3.5" y="5.6" width="17" height="14.4" rx="2.4"/><path d="M8 3.4v4"/><path d="M16 3.4v4"/><path d="M3.5 10.2h17"/></symbol>
+      <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M12 7.4V12l3 2"/></symbol>
+      <symbol id="i-mic" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.6 11.4a6.4 6.4 0 0 0 12.8 0"/><path d="M12 17.8V21"/></symbol>
+      <symbol id="i-waveform" viewBox="0 0 24 24"><path d="M4 10.5v3"/><path d="M8 7.5v9"/><path d="M12 4.5v15"/><path d="M16 7.5v9"/><path d="M20 10.5v3"/></symbol>
+      <symbol id="i-transcript" viewBox="0 0 24 24"><path d="M4 7.1A2.6 2.6 0 0 1 6.6 4.5h10.8A2.6 2.6 0 0 1 20 7.1v7.3a2.6 2.6 0 0 1-2.6 2.6H9.2L4.6 20a.4.4 0 0 1-.6-.35z"/><path d="M7.6 9.2h8.8"/><path d="M7.6 12.6h5.4"/></symbol>
+      <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="m10.5 4 1.7 4.3 4.3 1.7-4.3 1.7L10.5 16l-1.7-4.3L4.5 10l4.3-1.7z"/><path d="m17.8 14.4.9 2.2 2.2.9-2.2.9-.9 2.2-.9-2.2-2.2-.9 2.2-.9z"/></symbol>
+      <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3.6 5.4 6.2v5.6c0 4 2.7 7.1 6.6 8.6 3.9-1.5 6.6-4.6 6.6-8.6V6.2z"/></symbol>
+      <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.8" y="10.4" width="14.4" height="9.6" rx="2.4"/><path d="M8.2 10.4V7.8a3.8 3.8 0 0 1 7.6 0v2.6"/></symbol>
+      <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 4.4 2.9 20.1h18.2z"/><path d="M12 10.2v3.9"/><path d="M12 17.1h.02"/></symbol>
+      <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.5"/><path d="M12 11.2v5.4"/><path d="M12 7.7h.02"/></symbol>
+      <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.4"/><path d="M3.6 12h16.8"/><path d="M12 3.6c2.3 2.3 3.5 5.2 3.5 8.4s-1.2 6.1-3.5 8.4c-2.3-2.3-3.5-5.2-3.5-8.4S9.7 5.9 12 3.6z"/></symbol>
+      <symbol id="i-video" viewBox="0 0 24 24"><rect x="3" y="6" width="12" height="12" rx="2.6"/><path d="m15 11.2 4.4-2.7a.7.7 0 0 1 1.1.6v5.8a.7.7 0 0 1-1.1.6L15 12.8z"/></symbol>
+      <symbol id="i-link" viewBox="0 0 24 24"><path d="M10.4 13.6a4.1 4.1 0 0 0 5.8 0l2.3-2.3a4.1 4.1 0 1 0-5.8-5.8l-1.2 1.2"/><path d="M13.6 10.4a4.1 4.1 0 0 0-5.8 0l-2.3 2.3a4.1 4.1 0 1 0 5.8 5.8l1.2-1.2"/></symbol>
+      <symbol id="i-key" viewBox="0 0 24 24"><circle cx="8.2" cy="12" r="3.6"/><path d="M11.8 12H20"/><path d="M17.2 12v3.2"/><path d="M20 12v2.2"/></symbol>
+      <symbol id="i-window" viewBox="0 0 24 24"><rect x="3.5" y="4.6" width="17" height="14.8" rx="2.6"/><path d="M3.5 9.2h17"/></symbol>
+      <symbol id="i-pause" viewBox="0 0 24 24"><rect x="7.2" y="5.4" width="3.6" height="13.2" rx="1.5"/><rect x="13.2" y="5.4" width="3.6" height="13.2" rx="1.5"/></symbol>
+      <symbol id="i-play" viewBox="0 0 24 24"><path d="M8.4 5.6 18 12l-9.6 6.4z"/></symbol>
+      <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4.2L19 9.2a2.1 2.1 0 0 0 0-3l-1.2-1.2a2.1 2.1 0 0 0-3 0L4 15.8z"/><path d="m13.6 6.4 4 4"/></symbol>
+      <!-- The only full-colour mark in the sprite: Meet's logo is the brand, so
+           it carries its own fills instead of inheriting currentColor. -->
+      <symbol id="i-brand-meet" viewBox="0 0 176 138"><path fill="url(#meet-gold)" stroke="none" d="M102.015 81.88c-6.829-4.718-6.921-14.778-.179-19.62L157 22.643c7.94-5.701 19-.038 19 9.737v77.755c0 9.675-10.861 15.359-18.821 9.859z"/><path fill="url(#meet-body)" stroke="none" d="M0 44C0 19.7 19.7 0 44 0h64c11.046 0 20 8.954 20 20v98c0 11.046-8.954 20-20 20H20c-11.046 0-20-8.954-20-20Z"/><mask id="meet-mask" width="129" height="138" x="8" y="27" maskUnits="userSpaceOnUse"><path fill="#fff" stroke="none" d="M8 71c0-24.3 19.7-44 44-44h64c11.046 0 20 8.954 20 20v98c0 11.046-8.954 20-20 20H28c-11.046 0-20-8.954-20-20Z"/></mask><g filter="url(#meet-blur)" mask="url(#meet-mask)" transform="translate(-8 -27)"><path fill="url(#meet-sheen)" stroke="none" d="m73.906 99.198 110-63.198v124z"/></g><circle cx="30" cy="108" r="14" fill="#fff" stroke="none"/><defs><linearGradient id="meet-gold" x1="128.8" x2="227.2" y1="104.44" y2="104.44" gradientTransform="translate(-8 -27)" gradientUnits="userSpaceOnUse"><stop stop-color="#f6a100"/><stop offset="1" stop-color="#ffbe00"/></linearGradient><radialGradient id="meet-body" cx="0" cy="0" r="1" gradientTransform="matrix(-159.725 0 0 -135.852 152.325 69)" gradientUnits="userSpaceOnUse"><stop offset=".15" stop-color="#ffe921"/><stop offset="1" stop-color="#fec700"/></radialGradient><linearGradient id="meet-sheen" x1="136.22" x2="78.5" y1="91.32" y2="91.19" gradientUnits="userSpaceOnUse"><stop offset=".15" stop-color="#ffb5e8"/><stop offset="1" stop-color="#ffdbf5" stop-opacity="0"/></linearGradient><filter id="meet-blur" width="166" height="180" x="45.91" y="8" color-interpolation-filters="sRGB" filterUnits="userSpaceOnUse"><feFlood flood-opacity="0" result="BackgroundImageFix"/><feBlend in="SourceGraphic" in2="BackgroundImageFix" mode="normal" result="shape"/><feGaussianBlur result="effect1_foregroundBlur" stdDeviation="14"/></filter></defs></symbol>
+      <symbol id="i-brand-zoom" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M4.4 8.4a1.9 1.9 0 0 1 1.9-1.9h7.2a1.9 1.9 0 0 1 1.9 1.9v7.2a1.9 1.9 0 0 1-1.9 1.9H6.3a1.9 1.9 0 0 1-1.9-1.9z"/><path fill="currentColor" stroke="none" d="M16.8 10.6 19.3 8a.6.6 0 0 1 1 .45v7.1a.6.6 0 0 1-1 .45l-2.5-2.6z"/></symbol>
+      <symbol id="i-brand-teams" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M4 7.6h8.2v2.1H9.4v7.7H6.8V9.7H4z"/><circle fill="currentColor" stroke="none" cx="16.6" cy="7.4" r="2.3"/><path fill="currentColor" stroke="none" d="M13.6 11.4h5.2a1.4 1.4 0 0 1 1.4 1.4v2.8a3.2 3.2 0 0 1-3.2 3.2 3.2 3.2 0 0 1-3.4-3.2z"/></symbol>
+      <symbol id="i-hash" viewBox="0 0 24 24"><path d="M9.5 4 7.8 20"/><path d="M16.2 4 14.5 20"/><path d="M4.5 9h15"/><path d="M4 15h15"/></symbol>
+      <symbol id="i-tag" viewBox="0 0 24 24"><path d="M4 11.4V5.6A1.6 1.6 0 0 1 5.6 4h5.8a1.6 1.6 0 0 1 1.13.47l7 7a1.6 1.6 0 0 1 0 2.26l-5.8 5.8a1.6 1.6 0 0 1-2.26 0l-7-7A1.6 1.6 0 0 1 4 11.4z"/><path d="M8.2 8.2h.02"/></symbol>
+      <symbol id="i-expand" viewBox="0 0 24 24"><path d="M9.5 4.5H4.5V9.5"/><path d="m4.5 4.5 6 6"/><path d="M14.5 19.5h5v-5"/><path d="m19.5 19.5-6-6"/></symbol>
+      <symbol id="i-discord" viewBox="0 0 24 24"><path fill="currentColor" stroke="none" d="M19.6 5.6a17.3 17.3 0 0 0-4.3-1.3l-.5 1.1a16 16 0 0 0-4.6 0l-.5-1.1a17.3 17.3 0 0 0-4.3 1.3C2.7 9.6 2 13.4 2.4 17.2a17.5 17.5 0 0 0 5.3 2.7c.4-.6.8-1.2 1.1-1.8-.6-.2-1.2-.5-1.7-.8l.4-.3a12.4 12.4 0 0 0 10.6 0l.4.3c-.5.3-1.1.6-1.7.9.3.6.7 1.2 1.1 1.7a17.4 17.4 0 0 0 5.3-2.7c.5-4.4-.8-8.2-3.6-11.6zM8.9 14.9c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1zm6.2 0c-1 0-1.9-.9-1.9-2.1s.8-2.1 1.9-2.1 1.9 1 1.9 2.1-.8 2.1-1.9 2.1z"/></symbol>
+    </svg>
     <a class="skip-link" href="#content">Saltar al contenido</a>
     <header class="topbar">
       <a class="brand brand-button" id="btn-home" href="#home" aria-label="Ir a Inicio">
@@ -28,29 +83,26 @@
 
       <div class="status" id="status" role="status" aria-live="polite">
         <span class="status-dot" id="status-dot"></span>
-        <span class="status-copy">
-          <small>Estado</small>
-          <strong id="status-text">Iniciando…</strong>
-        </span>
+        <strong id="status-text">Iniciando…</strong>
         <span class="elapsed" id="elapsed" hidden></span>
       </div>
 
       <div class="topbar-actions">
-        <button type="button" class="ghost compact" id="btn-guide">
-          <span aria-hidden="true">?</span> Guía
+        <button type="button" class="subtle compact" id="btn-guide">
+          <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg> <span>Guía</span>
         </button>
-        <button type="button" class="ghost compact" id="btn-folder" title="Abrir la carpeta de reuniones">
-          <span aria-hidden="true">↗</span> Carpeta
+        <button type="button" class="subtle compact" id="btn-folder" title="Abrir la carpeta de reuniones">
+          <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg> <span>Carpeta</span>
         </button>
-        <button type="button" class="ghost compact" id="btn-settings">
-          <span aria-hidden="true">⚙</span> Ajustes
+        <button type="button" class="subtle compact" id="btn-settings">
+          <svg class="icon" aria-hidden="true"><use href="#i-settings"/></svg> <span>Ajustes</span>
         </button>
       </div>
     </header>
 
     <section class="update-banner" id="update-banner" aria-live="polite" hidden>
       <div class="update-banner-copy">
-        <span class="update-mark" aria-hidden="true">↑</span>
+        <span class="update-mark" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-download"/></svg></span>
         <span><strong id="update-banner-title">Hay una actualización de Kuali</strong><small id="update-banner-detail"></small></span>
       </div>
       <button type="button" class="primary compact" id="btn-install-update">Actualizar y reiniciar</button>
@@ -60,11 +112,11 @@
       <aside class="sidebar">
         <nav class="app-nav" aria-label="Navegación principal">
           <button type="button" class="app-nav-item active" id="nav-home" aria-current="page">
-            <span class="nav-glyph" aria-hidden="true">⌂</span>
+            <span class="nav-glyph" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-home"/></svg></span>
             <span>Inicio</span>
           </button>
           <button type="button" class="app-nav-item" id="nav-tasks">
-            <span class="nav-glyph" aria-hidden="true">✓</span>
+            <span class="nav-glyph" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-check-circle"/></svg></span>
             <span>Tareas</span>
             <span class="nav-count" id="pending-task-count" hidden></span>
           </button>
@@ -84,22 +136,48 @@
 
         <div class="sidebar-divider"></div>
         <div class="sidebar-head">
-          <div>
-            <span class="eyebrow">Biblioteca</span>
-            <h2>Reuniones</h2>
+          <div class="sidebar-head-title">
+            <div>
+              <span class="eyebrow">Biblioteca</span>
+              <h2>Reuniones</h2>
+            </div>
+            <span class="count" id="meeting-count"></span>
           </div>
           <div class="sidebar-head-actions">
-            <span class="count" id="meeting-count"></span>
+            <div class="library-grouping" id="library-grouping" role="group" aria-label="Agrupar reuniones">
+              <button type="button" data-grouping="channel" aria-pressed="true" title="Agrupar por servidor" aria-label="Agrupar por servidor">
+                <svg class="icon" aria-hidden="true"><use href="#i-hash"/></svg>
+              </button>
+              <button type="button" data-grouping="folder" aria-pressed="false" title="Agrupar por carpeta" aria-label="Agrupar por carpeta">
+                <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>
+              </button>
+              <button type="button" data-grouping="date" aria-pressed="false" title="Agrupar por fecha" aria-label="Agrupar por fecha">
+                <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
+              </button>
+              <button type="button" data-grouping="tag" aria-pressed="false" title="Agrupar por etiqueta" aria-label="Agrupar por etiqueta">
+                <svg class="icon" aria-hidden="true"><use href="#i-tag"/></svg>
+              </button>
+            </div>
+            <button
+              type="button"
+              class="icon-button new-folder"
+              id="btn-new-folder"
+              title="Nueva carpeta"
+              aria-label="Nueva carpeta"
+              hidden
+            >
+              <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+            </button>
           </div>
         </div>
         <div class="library-search">
           <label class="sr-only" for="library-search">Buscar en la biblioteca</label>
-          <span aria-hidden="true">⌕</span>
+          <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
           <input
             type="search"
             id="library-search"
             name="meeting-search"
-            placeholder="Canal, fecha o contenido…"
+            placeholder="Canal, etiqueta, carpeta o contenido…"
             autocomplete="off"
             spellcheck="false"
           />
@@ -114,6 +192,7 @@
           <span id="library-selection-count">0 seleccionadas</span>
           <div>
             <button type="button" class="ghost" id="btn-select-visible">Todas</button>
+            <button type="button" class="ghost" id="btn-move-selected" disabled>Mover a…</button>
             <button type="button" class="ghost danger" id="btn-delete-selected" disabled>
               Eliminar
             </button>
@@ -186,45 +265,77 @@
 
         <!-- No meeting selected -->
         <div class="pane idle" id="pane-idle" hidden>
-          <div class="idle-shell">
-            <div class="listening-visual" aria-hidden="true">
-              <span class="wave wave-one"></span>
-              <span class="wave wave-two"></span>
-              <span class="wave wave-three"></span>
-              <span class="listening-core"><i></i><i></i><i></i></span>
+          <div class="home">
+            <section class="home-hero">
+              <div class="home-hero-main">
+                <div class="listening-visual" aria-hidden="true">
+                  <span class="wave wave-one"></span>
+                  <span class="wave wave-two"></span>
+                  <span class="wave wave-three"></span>
+                  <span class="listening-core"><i></i><i></i><i></i></span>
+                </div>
+                <div class="home-hero-copy">
+                  <span class="eyebrow" id="idle-eyebrow">Seguimiento automático</span>
+                  <h2 id="idle-title">Kuali está listo para una llamada</h2>
+                  <p id="idle-sub">
+                    Entra a un canal de voz de Discord. Kuali te seguirá y empezará a transcribir.
+                  </p>
+                  <div class="home-hero-actions">
+                    <button type="button" class="primary compact" id="btn-open-live" hidden>
+                      <svg class="icon" aria-hidden="true"><use href="#i-waveform"/></svg>
+                      <span>Ver la transcripción en vivo</span>
+                    </button>
+                    <button
+                      type="button"
+                      class="ghost compact idle-follow-toggle"
+                      id="btn-toggle-follow"
+                      aria-pressed="true"
+                      hidden
+                    >
+                      Pausar seguimiento de Discord
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <div class="readiness" aria-label="Estado de preparación">
+                <div class="readiness-item">
+                  <span class="ready-dot" id="ready-discord-dot"></span>
+                  <span><small>Discord</small><strong id="ready-discord">Conectado</strong></span>
+                </div>
+                <div class="readiness-item">
+                  <span class="ready-dot" id="ready-follow-dot"></span>
+                  <span><small>Entrada a llamadas</small><strong id="ready-follow">Preparando…</strong></span>
+                </div>
+                <div class="readiness-item">
+                  <span class="ready-dot" id="ready-web-dot"></span>
+                  <span><small>Extensión web</small><strong id="ready-web">Preparando…</strong></span>
+                </div>
+                <div class="readiness-item">
+                  <span class="ready-dot private"></span>
+                  <span><small>Procesamiento</small><strong>En tu Mac</strong></span>
+                </div>
+              </div>
+            </section>
+
+            <div class="home-columns">
+              <section class="home-card" aria-labelledby="home-recent-title">
+                <header>
+                  <h3 id="home-recent-title">Reuniones recientes</h3>
+                </header>
+                <div class="home-list" id="home-recent" data-i18n-skip></div>
+              </section>
+
+              <section class="home-card" aria-labelledby="home-tasks-title">
+                <header>
+                  <h3 id="home-tasks-title">Tareas pendientes</h3>
+                  <button type="button" class="subtle compact" id="btn-home-all-tasks">
+                    <span>Ver todas</span>
+                    <svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg>
+                  </button>
+                </header>
+                <div class="home-list" id="home-tasks" data-i18n-skip></div>
+              </section>
             </div>
-            <span class="eyebrow" id="idle-eyebrow">Seguimiento automático</span>
-            <h2 id="idle-title">Kuali está listo para una llamada</h2>
-            <p id="idle-sub">
-              Entra a un canal de voz de Discord. Kuali te seguirá y empezará a transcribir.
-            </p>
-            <div class="readiness" aria-label="Estado de preparación">
-              <div class="readiness-item">
-                <span class="ready-dot" id="ready-discord-dot"></span>
-                <span><small>Discord</small><strong id="ready-discord">Conectado</strong></span>
-              </div>
-              <div class="readiness-item">
-                <span class="ready-dot" id="ready-follow-dot"></span>
-                <span><small>Entrada a llamadas</small><strong id="ready-follow">Preparando…</strong></span>
-              </div>
-              <div class="readiness-item">
-                <span class="ready-dot" id="ready-web-dot"></span>
-                <span><small>Extensión web</small><strong id="ready-web">Preparando…</strong></span>
-              </div>
-              <div class="readiness-item">
-                <span class="ready-dot private"></span>
-                <span><small>Procesamiento</small><strong>En tu Mac</strong></span>
-              </div>
-            </div>
-            <button
-              type="button"
-              class="ghost compact idle-follow-toggle"
-              id="btn-toggle-follow"
-              aria-pressed="true"
-              hidden
-            >
-              Pausar seguimiento de Discord
-            </button>
           </div>
         </div>
 
@@ -239,51 +350,83 @@
             <span class="page-stat" id="tasks-page-count">0 pendientes</span>
           </div>
 
-          <div class="task-filters" aria-label="Filtros de tareas">
-            <label class="task-filter-control task-search-control">
-              <span>Buscar</span>
-              <span class="task-search"><span aria-hidden="true">⌕</span><input type="search" id="tasks-search" name="tasks-search" placeholder="Escribe una tarea…" autocomplete="off" /></span>
-            </label>
-
-            <div class="task-filter-control task-person-filter">
-              <span>Personas</span>
-              <button type="button" class="filter-trigger" id="tasks-person-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="tasks-person-popover">
-                <span id="tasks-person-label">Todas las personas</span><span aria-hidden="true">⌄</span>
-              </button>
-              <div class="filter-popover people-popover" id="tasks-person-popover" role="dialog" aria-label="Elegir personas" hidden>
-                <label class="popover-search" for="tasks-person-search"><span aria-hidden="true">⌕</span><input type="search" id="tasks-person-search" name="tasks-person-search" placeholder="Buscar persona…" autocomplete="off" /></label>
-                <div class="people-options" id="tasks-person-options" role="group" aria-label="Personas disponibles"></div>
-                <p class="filter-result-note" id="tasks-person-result-note"></p>
-                <div class="filter-popover-actions"><button type="button" class="ghost" id="btn-clear-task-people">Limpiar</button><button type="button" class="primary" id="btn-close-task-people">Listo</button></div>
+          <div class="task-toolbar" aria-label="Filtros de tareas">
+            <div class="task-toolbar-row">
+              <label class="task-search">
+                <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
+                <input type="search" id="tasks-search" name="tasks-search" placeholder="Buscar una tarea o una persona…" autocomplete="off" />
+              </label>
+              <div class="segmented" id="tasks-status-filter" role="group" aria-label="Estado de las tareas">
+                <button type="button" data-status="pending" aria-pressed="true">Pendientes</button>
+                <button type="button" data-status="done" aria-pressed="false">Completadas</button>
+                <button type="button" data-status="all" aria-pressed="false">Todas</button>
               </div>
             </div>
 
-            <label class="task-filter-control">
-              <span>Reunión de origen</span>
-              <select id="tasks-meeting-filter" name="tasks-meeting-filter"><option value="all">Todas</option></select>
-            </label>
-
-            <div class="task-filter-control task-date-filter">
-              <span>Fecha</span>
-              <button type="button" class="filter-trigger" id="tasks-date-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="tasks-date-popover"><span id="tasks-date-label">Cualquier fecha</span><span aria-hidden="true">⌄</span></button>
-              <div class="filter-popover date-popover" id="tasks-date-popover" role="dialog" aria-label="Elegir rango de fechas" hidden>
-                <div class="date-range-fields">
-                  <label for="tasks-date-from"><span>Desde</span><input type="date" id="tasks-date-from" name="tasks-date-from" autocomplete="off" /></label>
-                  <label for="tasks-date-to"><span>Hasta</span><input type="date" id="tasks-date-to" name="tasks-date-to" autocomplete="off" /></label>
+            <div class="task-toolbar-row task-chips">
+              <div class="task-filter-control task-date-filter">
+                <button type="button" class="filter-chip" id="tasks-date-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="tasks-date-popover">
+                  <svg class="icon" aria-hidden="true"><use href="#i-calendar"/></svg>
+                  <span id="tasks-date-label">Última semana</span>
+                  <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                </button>
+                <div class="filter-popover date-popover" id="tasks-date-popover" role="dialog" aria-label="Elegir rango de fechas" hidden>
+                  <div class="date-presets" id="tasks-date-presets" role="group" aria-label="Rangos rápidos">
+                    <button type="button" data-days="7">Última semana</button>
+                    <button type="button" data-days="30">Últimos 30 días</button>
+                    <button type="button" data-days="90">Últimos 3 meses</button>
+                    <button type="button" data-days="all">Cualquier fecha</button>
+                  </div>
+                  <div class="calendar" id="tasks-calendar">
+                    <div class="calendar-head">
+                      <button type="button" class="icon-button" id="btn-calendar-prev" aria-label="Mes anterior">
+                        <svg class="icon" aria-hidden="true"><use href="#i-chevron-left"/></svg>
+                      </button>
+                      <strong id="calendar-month" aria-live="polite"></strong>
+                      <button type="button" class="icon-button" id="btn-calendar-next" aria-label="Mes siguiente">
+                        <svg class="icon" aria-hidden="true"><use href="#i-chevron-right"/></svg>
+                      </button>
+                    </div>
+                    <div class="calendar-weekdays" id="calendar-weekdays" aria-hidden="true"></div>
+                    <div class="calendar-grid" id="calendar-grid" role="grid" aria-label="Días del mes" data-i18n-skip></div>
+                  </div>
+                  <p class="date-range-hint" id="tasks-date-error" role="status" aria-live="polite"></p>
+                  <div class="filter-popover-actions">
+                    <button type="button" class="ghost" id="btn-clear-task-dates">Limpiar</button>
+                    <button type="button" class="primary" id="btn-close-task-dates">Listo</button>
+                  </div>
                 </div>
-                <p class="date-range-error" id="tasks-date-error" role="status" aria-live="polite"></p>
-                <div class="filter-popover-actions"><button type="button" class="ghost" id="btn-clear-task-dates">Limpiar</button><button type="button" class="primary" id="btn-close-task-dates">Aplicar rango</button></div>
+              </div>
+
+              <div class="task-filter-control task-person-filter">
+                <button type="button" class="filter-chip" id="tasks-person-trigger" aria-haspopup="dialog" aria-expanded="false" aria-controls="tasks-person-popover">
+                  <svg class="icon" aria-hidden="true"><use href="#i-users"/></svg>
+                  <span id="tasks-person-label">Todas las personas</span>
+                  <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                </button>
+                <div class="filter-popover people-popover" id="tasks-person-popover" role="dialog" aria-label="Elegir personas" hidden>
+                  <label class="popover-search" for="tasks-person-search"><svg class="icon" aria-hidden="true"><use href="#i-search"/></svg><input type="search" id="tasks-person-search" name="tasks-person-search" placeholder="Buscar persona…" autocomplete="off" /></label>
+                  <div class="people-options" id="tasks-person-options" role="group" aria-label="Personas disponibles"></div>
+                  <p class="filter-result-note" id="tasks-person-result-note"></p>
+                  <div class="filter-popover-actions"><button type="button" class="ghost" id="btn-clear-task-people">Limpiar</button><button type="button" class="primary" id="btn-close-task-people">Listo</button></div>
+                </div>
+              </div>
+
+              <button type="button" class="subtle compact task-clear" id="btn-clear-task-filters" hidden>
+                <svg class="icon" aria-hidden="true"><use href="#i-close"/></svg>
+                <span>Quitar filtros</span>
+              </button>
+
+              <button type="button" class="subtle compact task-fold" id="btn-toggle-task-groups" hidden>
+                <svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                <span>Abrir todo</span>
+              </button>
+
+              <div class="segmented task-grouping" id="tasks-grouping" role="group" aria-label="Agrupar tareas">
+                <button type="button" data-grouping="meeting" aria-pressed="true">Por reunión</button>
+                <button type="button" data-grouping="person" aria-pressed="false">Por persona</button>
               </div>
             </div>
-
-            <label class="task-filter-control">
-              <span>Estado</span>
-              <select id="tasks-status-filter" name="tasks-status-filter">
-                <option value="pending">Pendientes</option>
-                <option value="done">Completadas</option>
-                <option value="all">Todas</option>
-              </select>
-            </label>
           </div>
           <div class="global-task-list" id="global-task-list" aria-live="polite" data-i18n-skip></div>
         </div>
@@ -302,7 +445,7 @@
           <div class="guide-grid">
             <section class="guide-card" aria-labelledby="guide-discord-title">
               <div class="guide-card-head">
-                <span class="integration-logo discord" aria-hidden="true">D</span>
+                <span class="integration-logo discord" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-discord"/></svg></span>
                 <div><span class="eyebrow">Opción 1</span><h3 id="guide-discord-title">Discord</h3></div>
                 <span class="guide-state" id="guide-discord-state">Sin configurar</span>
               </div>
@@ -329,8 +472,8 @@
                       <h4 id="discord-step-1-title">Crea una aplicación para Kuali</h4>
                       <p>Abre el portal, inicia sesión y pulsa <strong>Nueva aplicación</strong>. Escribe <strong>Kuali</strong>, acepta las condiciones y confirma con <strong>Crear</strong>.</p>
                       <p>Discord creará un bot independiente para Kuali; tu cuenta personal nunca se automatiza.</p>
-                      <button type="button" class="primary guide-action" id="btn-open-discord-portal">Abrir portal de Discord ↗</button>
-                      <p class="guide-translation" data-language-only="es"><span aria-hidden="true">A</span> Si el portal aparece en inglés: <em>New Application</em> y <em>Create</em>.</p>
+                      <button type="button" class="primary guide-action" id="btn-open-discord-portal"><span>Abrir portal de Discord</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></button>
+                      <p class="guide-translation" data-language-only="es"><svg class="icon" aria-hidden="true"><use href="#i-globe"/></svg> Si el portal aparece en inglés: <em>New Application</em> y <em>Create</em>.</p>
                       <details class="guide-example" data-guide-image hidden>
                         <summary>Ver ejemplo</summary>
                         <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
@@ -343,7 +486,7 @@
                             height="1440"
                             decoding="async"
                           />
-                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                          <span class="guide-image-open-hint"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg> Ver en grande</span>
                         </button>
                         <p class="guide-example-caption">Ejemplo: botón “Nueva aplicación”.</p>
                       </details>
@@ -356,7 +499,7 @@
                       <span class="eyebrow">Token privado</span>
                       <h4 id="discord-step-2-title">Copia el token y escribe tu usuario</h4>
                       <p>En el panel izquierdo entra en <strong>Bot</strong>. Pulsa <strong>Restablecer token</strong>, confirma y copia el valor que muestra Discord.</p>
-                      <p class="guide-secret-note"><span aria-hidden="true">!</span> El token es una contraseña. No lo publiques, no lo subas a Git y no lo envíes a nadie.</p>
+                      <p class="guide-secret-note"><svg class="icon" aria-hidden="true"><use href="#i-alert"/></svg> El token es una contraseña. No lo publiques, no lo subas a Git y no lo envíes a nadie.</p>
                       <details class="guide-example" data-guide-image hidden>
                         <summary>Ver ejemplo</summary>
                         <button type="button" class="guide-image-open" aria-label="Ampliar imagen de ejemplo">
@@ -369,7 +512,7 @@
                             height="1440"
                             decoding="async"
                           />
-                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                          <span class="guide-image-open-hint"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg> Ver en grande</span>
                         </button>
                         <p class="guide-example-caption">Ejemplo: Bot → “Restablecer token”.</p>
                       </details>
@@ -392,7 +535,7 @@
                             height="992"
                             decoding="async"
                           />
-                          <span class="guide-image-open-hint"><span aria-hidden="true">⛶</span> Ver en grande</span>
+                          <span class="guide-image-open-hint"><svg class="icon" aria-hidden="true"><use href="#i-expand"/></svg> Ver en grande</span>
                         </button>
                         <p class="guide-example-caption">Ejemplo: abre tu perfil y pulsa el icono junto a tu usuario.</p>
                       </details>
@@ -417,8 +560,8 @@
                         <li>Hablar</li>
                         <li>Usar actividad de voz</li>
                       </ul>
-                      <p class="guide-translation"><span aria-hidden="true">✓</span> Kuali no solicita Administrador ni acceso para leer tu historial de mensajes.</p>
-                      <button type="button" class="ghost guide-action" id="btn-open-discord-install">Abrir autorización otra vez ↗</button>
+                      <p class="guide-translation"><svg class="icon" aria-hidden="true"><use href="#i-check"/></svg> Kuali no solicita Administrador ni acceso para leer tu historial de mensajes.</p>
+                      <button type="button" class="ghost guide-action" id="btn-open-discord-install"><span>Abrir autorización otra vez</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></button>
                       <button type="button" class="primary guide-save" id="btn-save-discord-guide">Ya autoricé · conectar</button>
                       <p class="guide-note" id="guide-discord-note" role="status" aria-live="polite">Después podrás cambiar el token o el usuario en Ajustes → Discord.</p>
                       <ul class="guide-command-list">
@@ -429,15 +572,15 @@
                 </div>
 
                 <div class="guide-stepper-actions">
-                  <button type="button" class="ghost" id="btn-discord-guide-back" disabled>← Atrás</button>
-                  <button type="button" class="primary" id="btn-discord-guide-next">Siguiente →</button>
+                  <button type="button" class="ghost" id="btn-discord-guide-back" disabled><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Atrás</span></button>
+                  <button type="button" class="primary" id="btn-discord-guide-next"><span>Siguiente</span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
                 </div>
               </div>
             </section>
 
             <section class="guide-card" aria-labelledby="guide-meet-title">
               <div class="guide-card-head">
-                <span class="integration-logo meet" aria-hidden="true">M</span>
+                <span class="integration-logo meet" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-video"/></svg></span>
                 <div><span class="eyebrow">Opción 2</span><h3 id="guide-meet-title">Meet, Teams y Zoom</h3></div>
                 <span class="guide-state" id="guide-meet-state">Chrome Web Store</span>
               </div>
@@ -457,10 +600,10 @@
                       <h4 id="meet-step-1-title">Instala Kuali desde Chrome Web Store</h4>
                       <p>Elige el navegador donde usarás Meet, Teams o Zoom. Kuali abrirá su ficha oficial para que solo tengas que pulsar <strong>Instalar</strong>.</p>
                       <div class="browser-actions store-actions" role="group" aria-label="Instalar la extensión de Kuali">
-                        <button type="button" class="primary browser-action store-action" data-browser-store="chrome"><span aria-hidden="true">C</span><span>Instalar en Chrome</span><small aria-hidden="true">↗</small></button>
-                        <button type="button" class="primary browser-action store-action" data-browser-store="edge"><span aria-hidden="true">E</span><span>Instalar en Edge</span><small aria-hidden="true">↗</small></button>
-                        <button type="button" class="primary browser-action store-action" data-browser-store="brave"><span aria-hidden="true">B</span><span>Instalar en Brave</span><small aria-hidden="true">↗</small></button>
-                        <button type="button" class="primary browser-action store-action" data-browser-store="arc"><span aria-hidden="true">A</span><span>Instalar en Arc</span><small aria-hidden="true">↗</small></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="chrome"><span>Instalar en Chrome</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="edge"><span>Instalar en Edge</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="brave"><span>Instalar en Brave</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></button>
+                        <button type="button" class="primary browser-action store-action" data-browser-store="arc"><span>Instalar en Arc</span><svg class="icon" aria-hidden="true"><use href="#i-external"/></svg></button>
                       </div>
                       <p class="browser-support-note">Chrome Web Store también permite instalar extensiones en Edge, Brave y Arc.</p>
                       <details class="manual-install-fallback">
@@ -468,10 +611,10 @@
                         <div>
                           <p>Úsala solamente si la tienda no está disponible. Abre el administrador del navegador, activa <strong>Modo desarrollador</strong> y pulsa <strong>Cargar descomprimida</strong>.</p>
                           <div class="browser-actions" role="group" aria-label="Abrir el administrador de extensiones">
-                            <button type="button" class="ghost browser-action" data-browser="chrome"><span aria-hidden="true">C</span><span>Abrir en Chrome</span></button>
-                            <button type="button" class="ghost browser-action" data-browser="edge"><span aria-hidden="true">E</span><span>Abrir en Edge</span></button>
-                            <button type="button" class="ghost browser-action" data-browser="brave"><span aria-hidden="true">B</span><span>Abrir en Brave</span></button>
-                            <button type="button" class="ghost browser-action" data-browser="arc"><span aria-hidden="true">A</span><span>Abrir en Arc</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="chrome"><span>Abrir en Chrome</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="edge"><span>Abrir en Edge</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="brave"><span>Abrir en Brave</span></button>
+                            <button type="button" class="ghost browser-action" data-browser="arc"><span>Abrir en Arc</span></button>
                           </div>
                           <p>En el selector de carpetas presiona <kbd>⌘ Shift G</kbd>, pega esta ruta y confirma.</p>
                           <div class="copy-path"><code id="extension-path">Buscando carpeta…</code><button type="button" class="ghost" id="btn-copy-extension-path">Copiar ruta</button></div>
@@ -502,8 +645,8 @@
                 </div>
 
                 <div class="guide-stepper-actions">
-                  <button type="button" class="ghost" id="btn-meet-guide-back" disabled>← Atrás</button>
-                  <button type="button" class="primary" id="btn-meet-guide-next">Siguiente →</button>
+                  <button type="button" class="ghost" id="btn-meet-guide-back" disabled><svg class="icon" aria-hidden="true"><use href="#i-arrow-left"/></svg><span>Atrás</span></button>
+                  <button type="button" class="primary" id="btn-meet-guide-next"><span>Siguiente</span><svg class="icon" aria-hidden="true"><use href="#i-arrow-right"/></svg></button>
                 </div>
               </div>
             </section>
@@ -513,17 +656,91 @@
         <!-- Live or saved meeting -->
         <div class="pane meeting" id="pane-meeting" hidden>
           <div class="meeting-head">
-            <div>
-              <span class="eyebrow">Reunión</span>
+            <div class="meeting-head-copy">
               <h2 id="meeting-title"></h2>
-              <p class="meeting-meta" id="meeting-meta"></p>
+              <p class="meeting-meta" id="meeting-meta" data-i18n-skip></p>
+              <div class="meeting-tags" id="meeting-tags" hidden>
+                <button type="button" class="folder-pill" id="btn-meeting-folder">
+                  <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>
+                  <span id="meeting-folder-label">Sin carpeta</span>
+                </button>
+                <div class="meeting-tag-list" id="meeting-tag-list" data-i18n-skip></div>
+                <div class="menu-anchor">
+                  <button
+                    type="button"
+                    class="tag-add"
+                    id="btn-add-tag"
+                    aria-haspopup="dialog"
+                    aria-expanded="false"
+                    aria-controls="tag-popover"
+                  >
+                    <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                    <span>Etiqueta</span>
+                  </button>
+                  <div class="filter-popover tag-popover" id="tag-popover" role="dialog" aria-label="Añadir una etiqueta" hidden>
+                    <label class="popover-search" for="tag-input">
+                      <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+                      <input type="text" id="tag-input" name="meeting-tag" placeholder="Nombre de la etiqueta…" maxlength="24" autocomplete="off" />
+                    </label>
+                    <div class="tag-suggestions" id="tag-suggestions" data-i18n-skip></div>
+                    <p class="filter-result-note" id="tag-hint">Pulsa Intro para añadirla.</p>
+                  </div>
+                </div>
+              </div>
             </div>
             <div class="meeting-actions">
-              <button type="button" class="ghost danger" id="btn-leave-call" hidden>Sacar de la llamada</button>
-              <button type="button" class="ghost" id="btn-resummarize">Rehacer resumen</button>
-              <button type="button" class="ghost" id="btn-export-md">Markdown</button>
-              <button type="button" class="ghost" id="btn-export-json">JSON</button>
-              <button type="button" class="ghost danger" id="btn-delete">Eliminar</button>
+              <button type="button" class="ghost danger" id="btn-leave-call" hidden>
+                <svg class="icon" aria-hidden="true"><use href="#i-pause"/></svg>
+                <span>Sacar de la llamada</span>
+              </button>
+              <div class="menu-anchor">
+                <button
+                  type="button"
+                  class="ghost"
+                  id="btn-export-menu"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  aria-controls="export-menu"
+                >
+                  <svg class="icon" aria-hidden="true"><use href="#i-export"/></svg>
+                  <span>Exportar</span>
+                  <svg class="icon chevron" aria-hidden="true"><use href="#i-chevron-down"/></svg>
+                </button>
+                <div class="action-menu menu-end" id="export-menu" role="menu" hidden>
+                  <button type="button" role="menuitem" id="btn-export-md">
+                    <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+                    <span>Guardar como Markdown</span>
+                  </button>
+                  <button type="button" role="menuitem" id="btn-export-json">
+                    <svg class="icon" aria-hidden="true"><use href="#i-download"/></svg>
+                    <span>Guardar como JSON</span>
+                  </button>
+                </div>
+              </div>
+              <div class="menu-anchor">
+                <button
+                  type="button"
+                  class="icon-button"
+                  id="btn-meeting-more"
+                  aria-haspopup="menu"
+                  aria-expanded="false"
+                  aria-controls="meeting-more-menu"
+                  aria-label="Más acciones"
+                  title="Más acciones"
+                >
+                  <svg class="icon" aria-hidden="true"><use href="#i-more"/></svg>
+                </button>
+                <div class="action-menu menu-end" id="meeting-more-menu" role="menu" hidden>
+                  <button type="button" role="menuitem" id="btn-resummarize">
+                    <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                    <span>Rehacer resumen</span>
+                  </button>
+                  <button type="button" role="menuitem" class="danger" id="btn-delete">
+                    <svg class="icon" aria-hidden="true"><use href="#i-trash"/></svg>
+                    <span>Eliminar reunión</span>
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
 
@@ -533,13 +750,16 @@
             <div class="col transcript-col">
               <div class="col-head">
                 <div class="col-title">
+                  <svg class="icon" aria-hidden="true"><use href="#i-transcript"/></svg>
                   <h3>Transcripción</h3>
                   <span class="live-pill" id="transcript-live" hidden><i></i> En vivo</span>
                 </div>
-                <label class="toggle">
+                <label class="switch" id="follow-live-control" hidden>
                   <input type="checkbox" id="follow-live" checked />
-                  <span>Seguir en vivo</span>
+                  <span class="switch-track" aria-hidden="true"><span class="switch-thumb"></span></span>
+                  <span class="switch-label">Seguir en vivo</span>
                 </label>
+                <span class="meeting-progress" id="meeting-progress" role="status" hidden></span>
               </div>
               <div class="transcript" id="transcript" data-i18n-skip></div>
             </div>
@@ -547,10 +767,14 @@
             <div class="col insights-col">
               <div class="meeting-panel-tabs" role="tablist" aria-label="Información de la reunión">
                 <button type="button" id="meeting-tab-summary" role="tab" aria-selected="true" aria-controls="meeting-panel-summary">Resumen</button>
+                <button type="button" id="meeting-tab-notes" role="tab" aria-selected="false" aria-controls="meeting-panel-notes" tabindex="-1">Notas <span id="meeting-note-count"></span></button>
                 <button type="button" id="meeting-tab-tasks" role="tab" aria-selected="false" aria-controls="meeting-panel-tasks" tabindex="-1">Tareas <span id="meeting-task-count"></span></button>
               </div>
               <section class="meeting-insight-panel" id="meeting-panel-summary" role="tabpanel" aria-labelledby="meeting-tab-summary">
                 <div class="summary" id="summary" data-i18n-skip></div>
+              </section>
+              <section class="meeting-insight-panel meeting-notes" id="meeting-panel-notes" role="tabpanel" aria-labelledby="meeting-tab-notes" hidden>
+                <div id="meeting-notes-list" data-i18n-skip></div>
               </section>
               <section class="meeting-insight-panel meeting-tasks" id="meeting-panel-tasks" role="tabpanel" aria-labelledby="meeting-tab-tasks" hidden>
                 <div id="task-assignee-filter-section">
@@ -570,11 +794,10 @@
       <div class="modal" role="dialog" aria-modal="true" aria-labelledby="settings-title">
         <div class="modal-head">
           <div>
-            <span class="eyebrow">Kuali</span>
             <h2 id="settings-title">Ajustes</h2>
             <p>Configura cada parte de Kuali por separado.</p>
           </div>
-          <button type="button" class="ghost icon" id="btn-close-settings" aria-label="Cerrar">×</button>
+          <button type="button" class="icon-button" id="btn-close-settings" aria-label="Cerrar"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
         </div>
 
         <div class="modal-body">
@@ -588,7 +811,7 @@
               aria-controls="settings-panel-discord"
               data-settings-tab="discord"
             >
-              <span class="tab-index" aria-hidden="true">01</span>
+              <span class="tab-mark" aria-hidden="true"><svg class="icon"><use href="#i-discord"/></svg></span>
               <span><strong>Discord</strong><small>Conexión y llamadas</small></span>
             </button>
             <button
@@ -601,7 +824,7 @@
               data-settings-tab="transcription"
               tabindex="-1"
             >
-              <span class="tab-index" aria-hidden="true">02</span>
+              <span class="tab-mark" aria-hidden="true"><svg class="icon"><use href="#i-mic"/></svg></span>
               <span><strong>Transcripción</strong><small>Whisper y vocabulario</small></span>
             </button>
             <button
@@ -614,7 +837,7 @@
               data-settings-tab="summary"
               tabindex="-1"
             >
-              <span class="tab-index" aria-hidden="true">03</span>
+              <span class="tab-mark" aria-hidden="true"><svg class="icon"><use href="#i-sparkles"/></svg></span>
               <span><strong>Resumen</strong><small>Proveedor y tareas</small></span>
             </button>
             <button
@@ -627,7 +850,7 @@
               data-settings-tab="integrations"
               tabindex="-1"
             >
-              <span class="tab-index" aria-hidden="true">04</span>
+              <span class="tab-mark" aria-hidden="true"><svg class="icon"><use href="#i-link"/></svg></span>
               <span><strong>Integraciones</strong><small>Navegador y webhooks</small></span>
             </button>
             <button
@@ -640,7 +863,7 @@
               data-settings-tab="application"
               tabindex="-1"
             >
-              <span class="tab-index" aria-hidden="true">05</span>
+              <span class="tab-mark" aria-hidden="true"><svg class="icon"><use href="#i-window"/></svg></span>
               <span><strong>Aplicación</strong><small>Inicio y ayuda</small></span>
             </button>
           </nav>
@@ -715,7 +938,7 @@
               </label>
 
               <div class="consent-note">
-                <span aria-hidden="true">!</span>
+                <span aria-hidden="true"><svg class="icon"><use href="#i-info"/></svg></span>
                 <p>
                   <strong>Aviso de consentimiento obligatorio</strong>
                   Kuali lo dice en voz alta, lo publica en el chat y registra la entrega al entrar
@@ -778,7 +1001,7 @@
                         </span>
                         <small id="cfg-model-selected-detail"></small>
                       </span>
-                      <span class="model-select-chevron" aria-hidden="true">⌄</span>
+                      <span class="model-select-chevron" aria-hidden="true"><svg class="icon" aria-hidden="true"><use href="#i-chevron-down"/></svg></span>
                     </button>
                     <div
                       class="model-select-menu"
@@ -793,11 +1016,7 @@
 
                 <label class="field">
                   <span>Idioma del audio</span>
-                  <select id="cfg-language" name="whisper-language">
-                    <option value="es">Español</option>
-                    <option value="en">Inglés</option>
-                    <option value="auto">Detectar automáticamente (no recomendado)</option>
-                  </select>
+                  <select id="cfg-language" name="whisper-language" data-i18n-skip></select>
                   <small>El idioma y el vocabulario se fijan al entrar y se aplican desde la próxima llamada. Detectar automáticamente decide idioma en cada turno de habla, y en las respuestas cortas se equivoca: un «ajá» de medio segundo puede acabar transcrito en ruso.</small>
                 </label>
               </div>
@@ -980,9 +1199,10 @@
                   type="text"
                   id="cfg-output-language"
                   name="summary-language"
-                  placeholder="Español…"
+                  placeholder="Automático…"
                   autocomplete="off"
                 />
+                <small>Si lo dejas vacío, cada resumen sale en el idioma de la reunión.</small>
               </label>
               </div>
             </section>
@@ -1084,9 +1304,9 @@
               <label class="field">
                 <span>Idioma de la interfaz</span>
                 <select id="cfg-ui-language" name="interface-language">
-                  <option value="auto">Automático (idioma del sistema)</option>
-                  <option value="es">Español</option>
-                  <option value="en">English</option>
+                  <option value="auto">🌐 Automático (idioma del sistema)</option>
+                  <option value="es" data-i18n-skip>🇪🇸 Español</option>
+                  <option value="en" data-i18n-skip>🇬🇧 English</option>
                 </select>
                 <small>Solo cambia la interfaz; no modifica el idioma del audio ni del resumen.</small>
               </label>
@@ -1141,8 +1361,32 @@
 
     <div class="context-menu" id="library-context-menu" role="menu" hidden>
       <button type="button" id="context-select" role="menuitem">Seleccionar</button>
+      <button type="button" id="context-move" role="menuitem">Mover a…</button>
       <div class="context-menu-separator" role="separator"></div>
       <button type="button" class="danger" id="context-delete" role="menuitem">Eliminar…</button>
+    </div>
+
+    <div class="modal-backdrop confirm-backdrop" id="folder-modal" hidden>
+      <div
+        class="confirm-dialog folder-dialog"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="folder-title"
+        aria-describedby="folder-description"
+      >
+        <span class="eyebrow">Biblioteca</span>
+        <h2 id="folder-title">Mover a una carpeta</h2>
+        <p id="folder-description"></p>
+        <div class="folder-options" id="folder-options" data-i18n-skip></div>
+        <label class="popover-search folder-new" for="folder-new">
+          <svg class="icon" aria-hidden="true"><use href="#i-plus"/></svg>
+          <input type="text" id="folder-new" name="new-folder" placeholder="Crear una carpeta nueva…" maxlength="40" autocomplete="off" />
+        </label>
+        <div class="confirm-actions">
+          <button type="button" class="ghost danger" id="btn-clear-folder">Quitar de la carpeta</button>
+          <button type="button" class="ghost" id="btn-cancel-folder">Cancelar</button>
+        </div>
+      </div>
     </div>
 
     <div class="modal-backdrop confirm-backdrop" id="confirm-modal" hidden>
@@ -1215,7 +1459,7 @@
             <span class="eyebrow">Guía de Discord</span>
             <h2 id="guide-image-lightbox-title">Vista ampliada</h2>
           </div>
-          <button type="button" class="ghost icon" id="btn-close-guide-image" aria-label="Cerrar imagen">×</button>
+          <button type="button" class="icon-button" id="btn-close-guide-image" aria-label="Cerrar imagen"><svg class="icon" aria-hidden="true"><use href="#i-close"/></svg></button>
         </header>
         <div class="guide-image-stage">
           <img id="guide-image-large" alt="" width="2560" height="1440" />
