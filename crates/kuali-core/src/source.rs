@@ -89,6 +89,17 @@ pub enum VoiceEvent {
         guild_id: u64,
         reply: oneshot::Sender<Result<Meeting, String>>,
     },
+    /// Newest meeting recorded in one channel. A slash command carries no
+    /// meeting ID, and resolving it from the guild and channel keeps the answer
+    /// inside the place where the call actually happened.
+    ///
+    /// An empty channel answers `Ok(None)` rather than an error so the caller
+    /// can phrase it in the language of whoever asked.
+    LatestMeetingRequested {
+        guild_id: u64,
+        channel_id: u64,
+        reply: oneshot::Sender<Result<Option<Meeting>, String>>,
+    },
     /// The bot resolved the configured @username. The engine persists its exact
     /// ID and updates following immediately.
     FollowRequested {

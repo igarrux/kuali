@@ -891,6 +891,13 @@ async fn handle_voice_event(inner: &Arc<Inner>, source: VoiceSource, event: Voic
             let result = meeting_for_discord(inner, &meeting_id, guild_id);
             let _ = reply.send(result);
         }
+        VoiceEvent::LatestMeetingRequested {
+            guild_id,
+            channel_id,
+            reply,
+        } => {
+            let _ = reply.send(latest_meeting_for_discord(inner, guild_id, channel_id));
+        }
         VoiceEvent::FollowRequested { user_id, reply } => {
             let result = configure_discord_follow(inner, user_id).await;
             let _ = reply.send(result);
@@ -1059,6 +1066,13 @@ async fn handle_session_event(inner: &Arc<Inner>, session: VoiceSessionKey, even
             let result = meeting_for_discord(inner, &meeting_id, guild_id);
             let _ = reply.send(result);
         }
+        VoiceEvent::LatestMeetingRequested {
+            guild_id,
+            channel_id,
+            reply,
+        } => {
+            let _ = reply.send(latest_meeting_for_discord(inner, guild_id, channel_id));
+        }
         VoiceEvent::FollowRequested { user_id, reply } => {
             let result = configure_discord_follow(inner, user_id).await;
             let _ = reply.send(result);
@@ -1107,6 +1121,46 @@ fn meeting_for_discord(
         return Err("Esa reunión no pertenece a este servidor.".to_string());
     }
     Ok(meeting)
+}
+
+/// Newest meeting held in one voice channel, including the one still running.
+///
+/// A slash command names no meeting, so the channel it was typed in decides
+/// which history can be reached at all. Nothing outside that channel is
+/// considered, even inside the same server.
+fn latest_meeting_for_discord(
+    inner: &Arc<Inner>,
+    guild_id: u64,
+    channel_id: u64,
+) -> Result<Option<Meeting>, String> {
+    let live = inner
+        .active
+        .lock()
+        .values()
+        .map(|active| &active.meeting)
+        .filter(|meeting| {
+            meeting.meta.guild_id == guild_id && meeting.meta.channel_id == channel_id
+        })
+        .max_by_key(|meeting| meeting.meta.started_at)
+        .cloned();
+
+    let stored = kuali_store::list()
+        .map_err(|error| error.to_string())?
+        .into_iter()
+        .filter(|meta| meta.guild_id == guild_id && meta.channel_id == channel_id)
+        .max_by_key(|meta| meta.started_at);
+
+    // A live meeting is also on disk while it runs. Comparing both candidates
+    // keeps the in-memory copy, which already holds the newest utterances.
+    let newest = match (live, stored) {
+        (Some(live), Some(stored)) if stored.started_at > live.meta.started_at => {
+            kuali_store::load(&stored.id).map_err(|error| error.to_string())?
+        }
+        (Some(live), _) => live,
+        (None, Some(stored)) => kuali_store::load(&stored.id).map_err(|error| error.to_string())?,
+        (None, None) => return Ok(None),
+    };
+    Ok(Some(newest))
 }
 
 async fn start_meeting(

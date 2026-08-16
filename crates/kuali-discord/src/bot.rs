@@ -15,8 +15,8 @@ use kuali_core::{
 };
 use parking_lot::RwLock;
 use serenity::all::{
-    ApplicationId, Attachment, ButtonStyle, ChannelId, ComponentInteraction, Context,
-    CreateAllowedMentions, CreateButton, CreateCommand, CreateEmbed, CreateEmbedAuthor,
+    ApplicationId, Attachment, ButtonStyle, ChannelId, CommandInteraction, ComponentInteraction,
+    Context, CreateAllowedMentions, CreateButton, CreateCommand, CreateEmbed, CreateEmbedAuthor,
     CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
     EditInteractionResponse, EditMessage, EventHandler, GatewayIntents, Guild, GuildId, Http,
     Interaction, MessageId, Permissions, Ready, UserId, VoiceState,
@@ -60,6 +60,8 @@ const DISCORD_COMPONENTS_V2_FLAG: u32 = 1 << 15;
 const PUBLIC_TASK_LIMIT: usize = 6;
 const RECORD_COMMAND_ES: &str = "grabar";
 const RECORD_COMMAND_EN: &str = "record";
+const SUMMARY_COMMAND_ES: &str = "resumen";
+const SUMMARY_COMMAND_EN: &str = "summary";
 const INTERACTION_TOKEN_LIFETIME: Duration = Duration::from_secs(15 * 60);
 static NEXT_VOICE_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -81,6 +83,10 @@ fn discord_username_matches(configured: &str, actual: &str) -> bool {
 
 fn is_record_command(name: &str) -> bool {
     matches!(name, RECORD_COMMAND_ES | RECORD_COMMAND_EN)
+}
+
+fn is_summary_command(name: &str) -> bool {
+    matches!(name, SUMMARY_COMMAND_ES | SUMMARY_COMMAND_EN)
 }
 
 /// Request that rewrites Kuali's own answer to an interaction. The private
@@ -1669,6 +1675,23 @@ impl<'a> PrivateReply<'a> {
             attachment_size_limit: component.attachment_size_limit,
         }
     }
+
+    fn from_command(command: &'a CommandInteraction) -> Self {
+        Self {
+            application_id: command.application_id,
+            token: &command.token,
+            user_id: command
+                .member
+                .as_ref()
+                .map(|member| member.user.id)
+                .unwrap_or(command.user.id),
+            locale: DiscordLocale::from_discord_locale(&command.locale),
+            // A command answers with a message Kuali has not written yet, so
+            // there is never an attachment to reuse.
+            attachments: &[],
+            attachment_size_limit: command.attachment_size_limit,
+        }
+    }
 }
 
 impl Handler {
@@ -2199,6 +2222,30 @@ impl Handler {
             .await;
     }
 
+    async fn request_latest_meeting(
+        &self,
+        guild_id: GuildId,
+        channel_id: ChannelId,
+    ) -> Result<Option<Meeting>, String> {
+        let (reply, response) = tokio::sync::oneshot::channel();
+        if self
+            .tx
+            .send(VoiceEvent::LatestMeetingRequested {
+                guild_id: guild_id.get(),
+                channel_id: channel_id.get(),
+                reply,
+            })
+            .is_err()
+        {
+            return Err("Kuali no pudo consultar las reuniones ahora mismo.".to_string());
+        }
+
+        match tokio::time::timeout(Duration::from_secs(60), response).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) | Err(_) => Err("La consulta de la reunión tardó demasiado.".to_string()),
+        }
+    }
+
     async fn request_meeting(
         &self,
         meeting_id: String,
@@ -2456,6 +2503,82 @@ impl Handler {
             .await;
     }
 
+    /// Reads the newest meeting of the channel privately, which is how someone
+    /// asks for notes without a card in reach.
+    async fn handle_summary_command(&self, ctx: &Context, command: &CommandInteraction) {
+        let reply = PrivateReply::from_command(command);
+        let locale = reply.locale;
+        let Some(guild_id) = command.guild_id else {
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(locale.text(
+                        "Usa /resumen dentro del servidor donde ocurrió la reunión.",
+                        "Use /summary inside the server where the meeting happened.",
+                    ))
+                    .ephemeral(true),
+            );
+            let _ = command.create_response(&ctx.http, response).await;
+            return;
+        };
+
+        let deferred = CreateInteractionResponse::Defer(
+            CreateInteractionResponseMessage::new().ephemeral(true),
+        );
+        if command.create_response(&ctx.http, deferred).await.is_err() {
+            return;
+        }
+        self.replace_private_view(ctx, reply).await;
+
+        let meeting = match self
+            .request_latest_meeting(guild_id, command.channel_id)
+            .await
+        {
+            Ok(Some(meeting)) => meeting,
+            Ok(None) => {
+                self.edit_private_text(
+                    ctx,
+                    reply,
+                    locale
+                        .text(
+                            "Todavía no hay ninguna reunión grabada en este canal. Escribe /resumen en el chat del canal de voz donde ocurrió la llamada.",
+                            "No meeting has been recorded in this channel yet. Type /summary in the chat of the voice channel where the call happened.",
+                        )
+                        .to_string(),
+                )
+                .await;
+                return;
+            }
+            Err(message) => {
+                self.edit_private_text(ctx, reply, message).await;
+                return;
+            }
+        };
+
+        if !self.may_read_meeting(&meeting, reply.user_id) {
+            self.edit_private_text(ctx, reply, restricted_notice(locale))
+                .await;
+            return;
+        }
+
+        let Some(document) = private_meeting_document(&meeting, MeetingAction::Summary, locale, 0)
+        else {
+            self.edit_private_text(
+                ctx,
+                reply,
+                locale
+                    .text(
+                        "La última reunión de este canal todavía no tiene notas generadas.",
+                        "The latest meeting in this channel does not have generated notes yet.",
+                    )
+                    .to_string(),
+            )
+            .await;
+            return;
+        };
+        self.respond_with_private_document(ctx, reply, &meeting, document)
+            .await;
+    }
+
     async fn leave(&self, ctx: &Context, guild_id: GuildId) {
         let Some(current) = self.current.write().take() else {
             return;
@@ -2519,12 +2642,23 @@ impl EventHandler for Handler {
                 .description("Invite Kuali to record and transcribe your voice channel")
                 .default_member_permissions(Permissions::CONNECT)
                 .dm_permission(false);
+            let summary_es = CreateCommand::new(SUMMARY_COMMAND_ES)
+                .description("Recibe en privado el resumen de la última reunión de este canal")
+                .default_member_permissions(Permissions::CONNECT)
+                .dm_permission(false);
+            let summary_en = CreateCommand::new(SUMMARY_COMMAND_EN)
+                .description("Privately receive the summary of this channel's latest meeting")
+                .default_member_permissions(Permissions::CONNECT)
+                .dm_permission(false);
             if let Err(e) = guild_id
-                .set_commands(&ctx.http, vec![record_es, record_en])
+                .set_commands(
+                    &ctx.http,
+                    vec![record_es, record_en, summary_es, summary_en],
+                )
                 .await
             {
                 let _ = self.tx.send(VoiceEvent::Warning(format!(
-                    "no pude registrar los comandos /grabar y /record: {e}"
+                    "no pude registrar los comandos /grabar, /record, /resumen y /summary: {e}"
                 )));
             }
         }
@@ -2590,6 +2724,9 @@ impl EventHandler for Handler {
         match interaction {
             Interaction::Command(command) => match command.data.name.as_str() {
                 name if is_record_command(name) => self.handle_record_command(&ctx, &command).await,
+                name if is_summary_command(name) => {
+                    self.handle_summary_command(&ctx, &command).await
+                }
                 _ => {}
             },
             Interaction::Component(component) => {
@@ -3217,6 +3354,13 @@ mod tests {
         assert!(is_record_command("grabar"));
         assert!(is_record_command("record"));
         assert!(!is_record_command("transcription"));
+    }
+
+    #[test]
+    fn summary_command_is_available_in_spanish_and_english() {
+        assert!(is_summary_command("resumen"));
+        assert!(is_summary_command("summary"));
+        assert!(!is_summary_command("grabar"));
     }
 
     #[test]
