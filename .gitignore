@@ -12,6 +12,10 @@
 *.part
 *.kuali-moving
 
+# Local research material: recordings, corpora, and scratch notes that are
+# ours to work with but not ours to publish.
+/.ignore-public/
+
 # Local configuration, credentials, and logs
 .env
 .env.*
