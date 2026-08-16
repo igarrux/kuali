@@ -4432,6 +4432,7 @@ async function openSettings() {
   $("cfg-follow-automatically").checked = c.discord["follow-automatically"] !== false;
   $("cfg-leave-empty").checked = c.discord["leave-when-empty"];
   $("cfg-post-summary").checked = c.discord["post-summary-to-channel"];
+  $("cfg-participants-only").checked = c.discord["summary-for-participants-only"] === true;
   state.discordEditing = !(c.discord["bot-token"]?.trim() && state.discordConnected);
   renderDiscordSettingsAccess();
   $("cfg-web-enabled").checked = c.meet?.enabled !== false;
@@ -4483,7 +4484,12 @@ function renderDiscordSettingsAccess() {
   panel.classList.toggle("discord-settings-locked", locked);
 
   for (const id of ["cfg-token", "cfg-follow"]) $(id).readOnly = locked;
-  for (const id of ["cfg-follow-automatically", "cfg-leave-empty", "cfg-post-summary"]) {
+  for (const id of [
+    "cfg-follow-automatically",
+    "cfg-leave-empty",
+    "cfg-post-summary",
+    "cfg-participants-only",
+  ]) {
     $(id).disabled = locked;
   }
 
@@ -4504,6 +4510,7 @@ function cancelDiscordSettingsEdit() {
   $("cfg-follow-automatically").checked = discord["follow-automatically"] !== false;
   $("cfg-leave-empty").checked = discord["leave-when-empty"];
   $("cfg-post-summary").checked = discord["post-summary-to-channel"];
+  $("cfg-participants-only").checked = discord["summary-for-participants-only"] === true;
   state.discordEditing = false;
   renderDiscordSettingsAccess();
   $("btn-edit-discord").focus();
@@ -5323,6 +5330,7 @@ async function saveSettings() {
   c.discord["follow-automatically"] = $("cfg-follow-automatically").checked;
   c.discord["leave-when-empty"] = $("cfg-leave-empty").checked;
   c.discord["post-summary-to-channel"] = $("cfg-post-summary").checked;
+  c.discord["summary-for-participants-only"] = $("cfg-participants-only").checked;
 
   c.meet ??= {};
   c.meet.enabled = $("cfg-web-enabled").checked;

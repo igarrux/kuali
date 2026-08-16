@@ -408,6 +408,10 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Salir cuando el canal se quede vacío": "Leave when the channel is empty",
   "Publicar tareas y accesos al resumen en el canal al terminar":
     "Post action items and summary links to the channel when finished",
+  "Solo quienes estuvieron en la llamada pueden leer la reunión":
+    "Only the people who were in the call can read the meeting",
+  "La tarjeta del canal queda sin contenido y cada participante recibe el resumen, las decisiones y la transcripción en un mensaje privado con los botones o con":
+    "The channel card carries no content, and each participant receives the summary, decisions, and transcript in a private message through the buttons or with",
   "Whisper escucha localmente; el audio no sale de tu equipo.":
     "Whisper listens locally; audio never leaves your computer.",
   Reconocimiento: "Recognition",
@@ -802,6 +806,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   y: "and",
   "@usuario": "@username",
   "/grabar": "/grabar or /record",
+  "/resumen": "/resumen or /summary",
   "Nueva aplicación": "New Application",
   Crear: "Create",
   "Restablecer token": "Reset Token",
