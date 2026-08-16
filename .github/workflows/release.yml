@@ -102,20 +102,39 @@ jobs:
     needs: macos
     runs-on: ubuntu-24.04
     steps:
+      # Publishing the release matters more than updating the cask, so a
+      # missing token reports what to do instead of failing the release.
+      - name: Check whether the tap can be updated
+        id: gate
+        env:
+          TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          if [ -z "$TOKEN" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::HOMEBREW_TAP_TOKEN is not set, so the cask still points at the previous release. Update Casks/kuali.rb by hand or add the secret."
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Check out the tap
+        if: steps.gate.outputs.ready == 'true'
         uses: actions/checkout@v7
         with:
           repository: igarrux/homebrew-kuali
           token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
 
       - name: Point the cask at the release that was just published
+        if: steps.gate.outputs.ready == 'true'
         env:
           VERSION: ${{ needs.macos.outputs.version }}
           SHA256: ${{ needs.macos.outputs.dmg-sha256 }}
         run: |
           sed -i -E "s/^  version \".*\"$/  version \"${VERSION}\"/" Casks/kuali.rb
           sed -i -E "s/^  sha256 \".*\"$/  sha256 \"${SHA256}\"/" Casks/kuali.rb
-          git diff --exit-code Casks/kuali.rb && echo "Cask already current." && exit 0
+          if git diff --quiet Casks/kuali.rb; then
+            echo "The cask already points at ${VERSION}."
+            exit 0
+          fi
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -am "chore(cask): :bookmark: point Kuali at ${VERSION}"
