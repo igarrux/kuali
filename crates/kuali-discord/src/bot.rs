@@ -36,7 +36,7 @@ use crate::receiver::{
     VoiceChannelContext, VoiceReceiver,
 };
 use crate::speech::load_consent_audio;
-use kuali_core::{CallInfo, VoiceEvent, VoiceSessionId};
+use kuali_core::{color_for, CallInfo, Speaker, VoiceEvent, VoiceSessionId};
 
 const SUMMARY_BUTTON_PREFIX: &str = "kuali:summary:";
 const KEY_POINTS_BUTTON_PREFIX: &str = "kuali:key-points:";
@@ -1843,6 +1843,39 @@ impl Handler {
         }
     }
 
+    /// Registers someone who arrived after Kuali as present in the meeting.
+    ///
+    /// Audio is what normally reveals a participant, so a person who joins and
+    /// never speaks would be missing from their own meeting: absent from the
+    /// participant list and, with the restriction on, locked out of notes they
+    /// are entitled to.
+    fn register_arrival(&self, subject: &AuditSubject, state: &VoiceState) {
+        let Some(session_id) = self.current.read().map(|call| call.session_id) else {
+            return;
+        };
+        let speaker = match state.member.as_ref() {
+            Some(member) => Speaker {
+                user_id: subject.user_id,
+                source_id: None,
+                audio_kind: None,
+                display_name: subject.display_name.clone(),
+                username: member.user.name.clone(),
+                avatar_url: Some(member.user.face()),
+                color: color_for(subject.user_id).to_string(),
+                is_bot: member.user.bot,
+            },
+            None => Speaker {
+                display_name: subject.display_name.clone(),
+                ..Speaker::unknown(subject.user_id)
+            },
+        };
+        send_session(
+            &self.tx,
+            session_id,
+            VoiceEvent::ParticipantPresent(speaker),
+        );
+    }
+
     fn record_audit(&self, kind: AuditKind, context: &AnnouncementContext, detail: Option<&str>) {
         if let Err(error) = self.audit.record(kind, context, detail) {
             let _ = self.tx.send(VoiceEvent::Warning(format!(
@@ -2382,6 +2415,7 @@ impl EventHandler for Handler {
                         .await;
                     if entered_existing_call && outcome == JoinOutcome::AlreadyHere {
                         if let Some(audit_context) = join_context {
+                            self.register_arrival(&audit_context.subject, &new);
                             self.announce_consent(&ctx, guild_id, channel_id, audit_context)
                                 .await;
                         }
@@ -2419,6 +2453,7 @@ impl EventHandler for Handler {
             && old.as_ref().and_then(|state| state.channel_id) != Some(current.channel_id);
         if entered {
             if let Some(subject) = self.human_subject(&ctx, &new).await {
+                self.register_arrival(&subject, &new);
                 let audit_context = AnnouncementContext::for_join(
                     current.guild_id.get(),
                     current.channel_id.get(),
