@@ -1,0 +1,122 @@
+name: Release
+
+# A tag is the only trigger: whatever `v*` points at is exactly what people
+# install, so there is never a released build that no commit corresponds to.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+# Releases are never cancelled halfway: a partially uploaded release is worse
+# than a slow one.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  macos:
+    name: macOS bundle
+    # Apple Silicon runner, which is what Kuali ships for.
+    runs-on: macos-15
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      dmg-sha256: ${{ steps.checksums.outputs.dmg }}
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89
+          targets: aarch64-apple-darwin
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Read the version being released
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Refuse a tag that disagrees with the manifest
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          manifest=$(node -p "require('./src-tauri/tauri.conf.json').version")
+          if [ "$manifest" != "$VERSION" ]; then
+            echo "Tag $GITHUB_REF_NAME does not match tauri.conf.json ($manifest)." >&2
+            exit 1
+          fi
+
+      - name: Build the Chrome Web Store package
+        run: npm --prefix browser-extension run package:store
+
+      - name: Build the app and publish the release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Without these the updater artifacts are unsigned, and an unsigned
+          # update is one every installed copy will refuse.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: Kuali ${{ steps.version.outputs.version }}
+          releaseDraft: false
+          prerelease: false
+          # latest.json is the updater endpoint; it has to ship with the build
+          # it describes or installed copies check against a stale manifest.
+          includeUpdaterJson: true
+          args: --target aarch64-apple-darwin
+
+      - name: Checksum the disk image
+        id: checksums
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          dmg="target/aarch64-apple-darwin/release/bundle/dmg/Kuali_${VERSION}_aarch64.dmg"
+          digest=$(shasum -a 256 "$dmg" | cut -d' ' -f1)
+          printf '%s  %s\n' "$digest" "$(basename "$dmg")" > "$dmg.sha256"
+          echo "dmg=$digest" >> "$GITHUB_OUTPUT"
+
+      - name: Attach the checksum and the extension package
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release upload "$GITHUB_REF_NAME" \
+            "target/aarch64-apple-darwin/release/bundle/dmg/Kuali_${VERSION}_aarch64.dmg.sha256" \
+            browser-extension/dist/*.zip \
+            browser-extension/dist/*.zip.sha256 \
+            --clobber
+
+  tap:
+    name: Homebrew tap
+    needs: macos
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check out the tap
+        uses: actions/checkout@v7
+        with:
+          repository: igarrux/homebrew-kuali
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - name: Point the cask at the release that was just published
+        env:
+          VERSION: ${{ needs.macos.outputs.version }}
+          SHA256: ${{ needs.macos.outputs.dmg-sha256 }}
+        run: |
+          sed -i -E "s/^  version \".*\"$/  version \"${VERSION}\"/" Casks/kuali.rb
+          sed -i -E "s/^  sha256 \".*\"$/  sha256 \"${SHA256}\"/" Casks/kuali.rb
+          git diff --exit-code Casks/kuali.rb && echo "Cask already current." && exit 0
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -am "chore(cask): :bookmark: point Kuali at ${VERSION}"
+          git push
