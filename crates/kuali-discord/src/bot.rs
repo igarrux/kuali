@@ -421,7 +421,11 @@ fn task_preview(summary: &MeetingSummary, locale: DiscordLocale) -> String {
     truncate_text(&output, EMBED_FIELD_LIMIT)
 }
 
-fn completion_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
+fn completion_embed(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    audience: CardAudience,
+) -> CreateEmbed {
     let summary = meeting.summary.as_ref();
     let tasks = summary
         .map(|summary| task_preview(summary, locale))
@@ -430,7 +434,7 @@ fn completion_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
                 .text("Resumen no disponible.", "Summary unavailable.")
                 .into()
         });
-    CreateEmbed::new()
+    let embed = CreateEmbed::new()
         .author(
             CreateEmbedAuthor::new(locale.text(
                 "Kuali · Reunión finalizada",
@@ -439,10 +443,16 @@ fn completion_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
             .url(KUALI_WEBSITE),
         )
         .title(truncate_text(&meeting.meta.title(), 256))
-        .description(locale.text(
-            "La reunión quedó guardada. Revisa las tareas aquí o abre las notas completas en privado.",
-            "The meeting has been saved. Review action items here or open the complete notes privately.",
-        ))
+        .description(match audience {
+            CardAudience::Channel => locale.text(
+                "La reunión quedó guardada. Revisa las tareas aquí o abre las notas completas en privado.",
+                "The meeting has been saved. Review action items here or open the complete notes privately.",
+            ),
+            CardAudience::ParticipantsOnly => locale.text(
+                "La reunión quedó guardada. Solo quienes estuvieron en la llamada pueden leerla: usa /resumen o los botones para recibirla en privado.",
+                "The meeting has been saved. Only the people who were in the call can read it: use /summary or the buttons to receive it privately.",
+            ),
+        })
         .field(
             locale.text("Duración", "Duration"),
             human_duration(meeting.duration_ms(), locale),
@@ -457,22 +467,84 @@ fn completion_embed(meeting: &Meeting, locale: DiscordLocale) -> CreateEmbed {
             locale.text("Canal", "Channel"),
             truncate_text(&format!("#{}", one_line(&meeting.meta.channel_name)), 128),
             true,
-        )
-        .field(locale.text("Tareas pendientes", "Action items"), tasks, false)
+        );
+
+    // The task preview is meeting content, so a restricted card counts the
+    // pending work without naming any of it.
+    let embed = match audience {
+        CardAudience::Channel => embed.field(
+            locale.text("Tareas pendientes", "Action items"),
+            tasks,
+            false,
+        ),
+        CardAudience::ParticipantsOnly => embed.field(
+            locale.text("Tareas pendientes", "Action items"),
+            restricted_task_count(meeting, locale),
+            false,
+        ),
+    };
+
+    embed
         .thumbnail(KUALI_ICON)
-        .footer(CreateEmbedFooter::new(
-            "Kuali · Discord · kuali.garrux.dev",
-        ))
+        .footer(CreateEmbedFooter::new("Kuali · Discord · kuali.garrux.dev"))
         .color(KUALI_EMBED_COLOR)
+}
+
+/// How much of a meeting a message may show.
+///
+/// Restricted cards stay in the channel so people know the meeting exists and
+/// where to ask for it, while every excerpt moves behind the participant check.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum CardAudience {
+    Channel,
+    ParticipantsOnly,
+}
+
+impl CardAudience {
+    fn for_participants_only(participants_only: bool) -> Self {
+        if participants_only {
+            Self::ParticipantsOnly
+        } else {
+            Self::Channel
+        }
+    }
+}
+
+fn restricted_task_count(meeting: &Meeting, locale: DiscordLocale) -> String {
+    let Some(summary) = meeting.summary.as_ref() else {
+        return locale
+            .text("Resumen no disponible.", "Summary unavailable.")
+            .to_string();
+    };
+    let pending = summary
+        .action_items
+        .iter()
+        .filter(|task| !task.done)
+        .count();
+    match (locale, pending) {
+        (DiscordLocale::Spanish, 0) => "No se detectaron tareas pendientes.".to_string(),
+        (DiscordLocale::English, 0) => "No action items were detected.".to_string(),
+        (DiscordLocale::Spanish, 1) => {
+            "1 tarea, visible solo para quienes participaron.".to_string()
+        }
+        (DiscordLocale::English, 1) => "1 action item, visible only to participants.".to_string(),
+        (DiscordLocale::Spanish, pending) => {
+            format!("{pending} tareas, visibles solo para quienes participaron.")
+        }
+        (DiscordLocale::English, pending) => {
+            format!("{pending} action items, visible only to participants.")
+        }
+    }
 }
 
 fn summary_state_embed(
     meeting: &Meeting,
     locale: DiscordLocale,
     state: DiscordSummaryState,
+    audience: CardAudience,
 ) -> CreateEmbed {
     if state == DiscordSummaryState::Ready {
-        return completion_embed(meeting, locale);
+        return completion_embed(meeting, locale, audience);
     }
 
     let (author, description, next_step, color) = match state {
@@ -591,10 +663,11 @@ fn summary_state_message(
     meeting: &Meeting,
     locale: DiscordLocale,
     state: DiscordSummaryState,
+    audience: CardAudience,
 ) -> CreateMessage {
     let message = CreateMessage::new()
         .allowed_mentions(CreateAllowedMentions::new())
-        .embed(summary_state_embed(meeting, locale, state));
+        .embed(summary_state_embed(meeting, locale, state, audience));
     add_summary_state_buttons(message, meeting, locale, state)
 }
 
@@ -602,11 +675,12 @@ fn summary_state_edit_message(
     meeting: &Meeting,
     locale: DiscordLocale,
     state: DiscordSummaryState,
+    audience: CardAudience,
 ) -> EditMessage {
     let message = EditMessage::new()
         .content("")
         .allowed_mentions(CreateAllowedMentions::new())
-        .embed(summary_state_embed(meeting, locale, state));
+        .embed(summary_state_embed(meeting, locale, state, audience));
     add_summary_state_edit_buttons(message, meeting, locale, state)
 }
 
@@ -614,9 +688,12 @@ fn fallback_summary_state_message(
     meeting: &Meeting,
     locale: DiscordLocale,
     state: DiscordSummaryState,
+    audience: CardAudience,
 ) -> CreateMessage {
     let message = CreateMessage::new()
-        .content(fallback_summary_state_content(meeting, locale, state))
+        .content(fallback_summary_state_content(
+            meeting, locale, state, audience,
+        ))
         .allowed_mentions(CreateAllowedMentions::new());
     add_summary_state_buttons(message, meeting, locale, state)
 }
@@ -625,28 +702,40 @@ fn fallback_summary_state_edit_message(
     meeting: &Meeting,
     locale: DiscordLocale,
     state: DiscordSummaryState,
+    audience: CardAudience,
 ) -> EditMessage {
     let message = EditMessage::new()
-        .content(fallback_summary_state_content(meeting, locale, state))
+        .content(fallback_summary_state_content(
+            meeting, locale, state, audience,
+        ))
         .embeds(Vec::new())
         .allowed_mentions(CreateAllowedMentions::new());
     add_summary_state_edit_buttons(message, meeting, locale, state)
 }
 
 #[cfg(test)]
-fn completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
-    summary_state_message(meeting, locale, DiscordSummaryState::Ready)
+fn completion_message(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    audience: CardAudience,
+) -> CreateMessage {
+    summary_state_message(meeting, locale, DiscordSummaryState::Ready, audience)
 }
 
 #[cfg(test)]
-fn fallback_completion_message(meeting: &Meeting, locale: DiscordLocale) -> CreateMessage {
-    fallback_summary_state_message(meeting, locale, DiscordSummaryState::Ready)
+fn fallback_completion_message(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    audience: CardAudience,
+) -> CreateMessage {
+    fallback_summary_state_message(meeting, locale, DiscordSummaryState::Ready, audience)
 }
 
 fn fallback_summary_state_content(
     meeting: &Meeting,
     locale: DiscordLocale,
     state: DiscordSummaryState,
+    audience: CardAudience,
 ) -> String {
     if state != DiscordSummaryState::Ready {
         let description = match state {
@@ -670,22 +759,39 @@ fn fallback_summary_state_content(
         );
     }
 
-    fallback_completion_content(meeting, locale)
+    fallback_completion_content(meeting, locale, audience)
 }
 
-fn fallback_completion_content(meeting: &Meeting, locale: DiscordLocale) -> String {
-    let tasks = meeting
-        .summary
-        .as_ref()
-        .map(|summary| task_preview(summary, locale))
-        .unwrap_or_else(|| {
-            locale
-                .text("Resumen no disponible.", "Summary unavailable.")
-                .into()
-        });
+fn fallback_completion_content(
+    meeting: &Meeting,
+    locale: DiscordLocale,
+    audience: CardAudience,
+) -> String {
+    let tasks = match audience {
+        CardAudience::Channel => meeting
+            .summary
+            .as_ref()
+            .map(|summary| task_preview(summary, locale))
+            .unwrap_or_else(|| {
+                locale
+                    .text("Resumen no disponible.", "Summary unavailable.")
+                    .into()
+            }),
+        CardAudience::ParticipantsOnly => restricted_task_count(meeting, locale),
+    };
+    let access = match audience {
+        CardAudience::Channel => String::new(),
+        CardAudience::ParticipantsOnly => format!(
+            "\n{}",
+            locale.text(
+                "-# Solo quienes estuvieron en la llamada pueden abrirla: usa /resumen.",
+                "-# Only the people who were in the call can open it: use /summary.",
+            )
+        ),
+    };
     truncate_text(
         &format!(
-            "**{}**\n-# {} · {} · #{}\n\n**{}**\n{}",
+            "**{}**\n-# {} · {} · #{}\n\n**{}**\n{tasks}{access}",
             meeting.meta.title(),
             human_duration(meeting.duration_ms(), locale),
             match locale {
@@ -694,7 +800,6 @@ fn fallback_completion_content(meeting: &Meeting, locale: DiscordLocale) -> Stri
             },
             one_line(&meeting.meta.channel_name),
             locale.text("Tareas pendientes", "Action items"),
-            tasks
         ),
         1_900,
     )
@@ -2557,6 +2662,8 @@ impl DiscordHandle {
     ) -> Result<DiscordSummaryDelivery, serenity::Error> {
         let locale = DiscordLocale::from_summary_language(language);
         let channel_id = ChannelId::new(delivery.channel_id);
+        let audience =
+            CardAudience::for_participants_only(self.config.read().summary_for_participants_only);
 
         if let Some(message_id) = delivery.message_id {
             let message_id = MessageId::new(message_id);
@@ -2564,7 +2671,7 @@ impl DiscordHandle {
                 .edit_message(
                     &self.http,
                     message_id,
-                    summary_state_edit_message(meeting, locale, state),
+                    summary_state_edit_message(meeting, locale, state, audience),
                 )
                 .await
                 .is_ok()
@@ -2581,7 +2688,7 @@ impl DiscordHandle {
                 .edit_message(
                     &self.http,
                     message_id,
-                    fallback_summary_state_edit_message(meeting, locale, state),
+                    fallback_summary_state_edit_message(meeting, locale, state, audience),
                 )
                 .await
                 .is_ok()
@@ -2597,7 +2704,10 @@ impl DiscordHandle {
         }
 
         let message = match channel_id
-            .send_message(&self.http, summary_state_message(meeting, locale, state))
+            .send_message(
+                &self.http,
+                summary_state_message(meeting, locale, state, audience),
+            )
             .await
         {
             Ok(message) => message,
@@ -2610,7 +2720,7 @@ impl DiscordHandle {
                 channel_id
                     .send_message(
                         &self.http,
-                        fallback_summary_state_message(meeting, locale, state),
+                        fallback_summary_state_message(meeting, locale, state, audience),
                     )
                     .await?
             }
@@ -2981,6 +3091,43 @@ mod tests {
     }
 
     #[test]
+    fn a_restricted_card_leaves_no_meeting_content_in_the_channel() {
+        let meeting = completed_meeting();
+        let message = serde_json::to_value(completion_message(
+            &meeting,
+            DiscordLocale::Spanish,
+            CardAudience::ParticipantsOnly,
+        ))
+        .unwrap();
+        let rendered = message.to_string();
+
+        assert!(!rendered.contains("Preparar la publicación"));
+        assert!(!rendered.contains("El equipo cerró el plan"));
+        assert!(!rendered.contains("Publicar el viernes"));
+        assert!(!rendered.contains("¿A qué hora se publica?"));
+        // The card still says the meeting exists and how to ask for it.
+        assert!(rendered.contains("Plan de lanzamiento"));
+        assert!(rendered.contains("/resumen"));
+        assert_eq!(
+            message["components"][0]["components"]
+                .as_array()
+                .unwrap()
+                .len(),
+            5
+        );
+
+        let fallback = serde_json::to_value(fallback_completion_message(
+            &meeting,
+            DiscordLocale::Spanish,
+            CardAudience::ParticipantsOnly,
+        ))
+        .unwrap();
+        let content = fallback["content"].as_str().unwrap();
+        assert!(!content.contains("Preparar la publicación"));
+        assert!(content.contains("/resumen"));
+    }
+
+    #[test]
     fn a_short_message_stays_in_one_piece() {
         let chunks = split_message("hola\nqué tal", 100);
         assert_eq!(chunks, vec!["hola\nqué tal"]);
@@ -3084,6 +3231,7 @@ mod tests {
         let message = serde_json::to_value(completion_message(
             &completed_meeting(),
             DiscordLocale::Spanish,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert!(message.get("content").is_none());
@@ -3112,6 +3260,7 @@ mod tests {
         let fallback = serde_json::to_value(fallback_completion_message(
             &completed_meeting(),
             DiscordLocale::Spanish,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert!(fallback["embeds"].as_array().is_none_or(Vec::is_empty));
@@ -3128,6 +3277,7 @@ mod tests {
             &completed_meeting(),
             DiscordLocale::Spanish,
             DiscordSummaryState::Ready,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert_eq!(rich_edit["content"], "");
@@ -3144,6 +3294,7 @@ mod tests {
             &completed_meeting(),
             DiscordLocale::Spanish,
             DiscordSummaryState::Ready,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert!(fallback_edit["embeds"].as_array().unwrap().is_empty());
@@ -3174,8 +3325,12 @@ mod tests {
             })
             .collect();
 
-        let public =
-            serde_json::to_value(completion_embed(&meeting, DiscordLocale::Spanish)).unwrap();
+        let public = serde_json::to_value(completion_embed(
+            &meeting,
+            DiscordLocale::Spanish,
+            CardAudience::Channel,
+        ))
+        .unwrap();
         assert!(embed_text_length(&public) <= 6_000);
         for field in public["fields"].as_array().unwrap() {
             assert!(char_count(field["name"].as_str().unwrap()) <= 256);
@@ -3411,8 +3566,12 @@ mod tests {
             .to_string()
             .contains("Publicamos el viernes"));
 
-        let public =
-            serde_json::to_string(&completion_embed(&meeting, DiscordLocale::Spanish)).unwrap();
+        let public = serde_json::to_string(&completion_embed(
+            &meeting,
+            DiscordLocale::Spanish,
+            CardAudience::Channel,
+        ))
+        .unwrap();
         assert!(!public.contains("ID de reunión"));
         assert!(!public.contains("meeting-123"));
     }
@@ -3424,6 +3583,7 @@ mod tests {
             &meeting,
             DiscordLocale::Spanish,
             DiscordSummaryState::Preparing,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert!(preparing["embeds"][0]
@@ -3437,6 +3597,7 @@ mod tests {
             &meeting,
             DiscordLocale::Spanish,
             DiscordSummaryState::Failed,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert!(failed["embeds"][0]
@@ -3454,6 +3615,7 @@ mod tests {
             &meeting,
             DiscordLocale::Spanish,
             DiscordSummaryState::AttentionRequired,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert!(attention["embeds"][0].to_string().contains("credenciales"));
@@ -3468,6 +3630,7 @@ mod tests {
         let message = serde_json::to_value(completion_message(
             &completed_meeting(),
             DiscordLocale::English,
+            CardAudience::Channel,
         ))
         .unwrap();
         assert_eq!(
