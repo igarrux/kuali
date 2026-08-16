@@ -58,6 +58,24 @@ jobs:
       - name: Build the Chrome Web Store package
         run: npm --prefix browser-extension run package:store
 
+      # Kuali's releases have always carried written notes. An annotated tag
+      # is where they come from, so the description lives with the commit it
+      # describes instead of being retyped into the web interface afterwards.
+      - name: Open the release with the notes from the tag
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            echo "The release already exists; its notes are left as they are."
+            exit 0
+          fi
+          git fetch --force origin "refs/tags/$GITHUB_REF_NAME:refs/tags/$GITHUB_REF_NAME"
+          notes=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME")
+          gh release create "$GITHUB_REF_NAME" \
+            --title "Kuali $VERSION" \
+            --notes "${notes:-Kuali $VERSION.}"
+
       - name: Build the app and publish the release
         uses: tauri-apps/tauri-action@v0
         env:
