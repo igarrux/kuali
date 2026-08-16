@@ -15,11 +15,11 @@ use kuali_core::{
 };
 use parking_lot::RwLock;
 use serenity::all::{
-    ButtonStyle, ChannelId, ComponentInteraction, Context, CreateAllowedMentions, CreateButton,
-    CreateCommand, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter, CreateInteractionResponse,
-    CreateInteractionResponseMessage, CreateMessage, EditInteractionResponse, EditMessage,
-    EventHandler, GatewayIntents, Guild, GuildId, Http, Interaction, MessageId, Permissions, Ready,
-    UserId, VoiceState,
+    ApplicationId, Attachment, ButtonStyle, ChannelId, ComponentInteraction, Context,
+    CreateAllowedMentions, CreateButton, CreateCommand, CreateEmbed, CreateEmbedAuthor,
+    CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
+    EditInteractionResponse, EditMessage, EventHandler, GatewayIntents, Guild, GuildId, Http,
+    Interaction, MessageId, Permissions, Ready, UserId, VoiceState,
 };
 use serenity::Client;
 use songbird::driver::{Channels, DecodeConfig, DecodeMode, SampleRate};
@@ -81,6 +81,62 @@ fn discord_username_matches(configured: &str, actual: &str) -> bool {
 
 fn is_record_command(name: &str) -> bool {
     matches!(name, RECORD_COMMAND_ES | RECORD_COMMAND_EN)
+}
+
+/// Request that rewrites Kuali's own answer to an interaction. The private
+/// views need the raw endpoint because Serenity cannot build components v2.
+fn original_response_patch(reply: PrivateReply<'_>) -> reqwest::RequestBuilder {
+    let url = format!(
+        "https://discord.com/api/v10/webhooks/{}/{}/messages/@original",
+        reply.application_id.get(),
+        reply.token
+    );
+    reqwest::Client::new().patch(url).header(
+        reqwest::header::USER_AGENT,
+        format!("Kuali/{} ({KUALI_WEBSITE})", env!("CARGO_PKG_VERSION")),
+    )
+}
+
+async fn discord_outcome(response: reqwest::Response) -> Result<(), String> {
+    let status = response.status();
+    if status.is_success() {
+        return Ok(());
+    }
+    let body = response.text().await.unwrap_or_default();
+    Err(format!(
+        "Discord respondió {status}: {}",
+        truncate_text(&body, 300)
+    ))
+}
+
+/// Refusal shown to someone who was not in the call. It names the reason so the
+/// person can ask a participant instead of assuming Kuali failed.
+fn restricted_notice(locale: DiscordLocale) -> String {
+    locale
+        .text(
+            "Esta reunión es privada para quienes estuvieron en la llamada, y no apareces entre ellos. Pide el resumen a alguien que participara.",
+            "This meeting is private to the people who were in the call, and you are not among them. Ask a participant for the summary.",
+        )
+        .to_string()
+}
+
+/// Whether the meeting registered this account as present in the call.
+///
+/// Kuali resolves everyone who was in the voice channel, not only who spoke, so
+/// a quiet attendee still counts. Bots never do: the recording exists for the
+/// people who were there.
+fn is_meeting_participant(meeting: &Meeting, user_id: UserId) -> bool {
+    meeting
+        .speakers
+        .iter()
+        .any(|speaker| !speaker.is_bot && speaker.user_id == user_id.get())
+}
+
+/// Whether this account may open the meeting privately. Membership in the
+/// channel grants nothing while the restriction is on: only having been in the
+/// call does.
+fn may_read_meeting(participants_only: bool, meeting: &Meeting, user_id: UserId) -> bool {
+    !participants_only || is_meeting_participant(meeting, user_id)
 }
 
 fn session_sender(
@@ -1587,13 +1643,41 @@ fn private_meeting_document(
     })
 }
 
+/// The interaction fields Kuali needs to rewrite its own ephemeral answer.
+///
+/// Card buttons and slash commands only differ in whether an earlier answer
+/// already carries the downloadable file, so both reach the private renderer
+/// through this shape instead of duplicating it.
+#[derive(Clone, Copy)]
+struct PrivateReply<'a> {
+    application_id: ApplicationId,
+    token: &'a str,
+    user_id: UserId,
+    locale: DiscordLocale,
+    attachments: &'a [Attachment],
+    attachment_size_limit: u32,
+}
+
+impl<'a> PrivateReply<'a> {
+    fn from_component(component: &'a ComponentInteraction) -> Self {
+        Self {
+            application_id: component.application_id,
+            token: &component.token,
+            user_id: component.user.id,
+            locale: DiscordLocale::from_discord_locale(&component.locale),
+            attachments: &component.message.attachments,
+            attachment_size_limit: component.attachment_size_limit,
+        }
+    }
+}
+
 impl Handler {
-    async fn replace_private_view(&self, ctx: &Context, component: &ComponentInteraction) {
+    async fn replace_private_view(&self, ctx: &Context, reply: PrivateReply<'_>) {
         let previous_token = self
             .private_views
             .write()
-            .replace(component.user.id, component.token.clone());
-        let Some(previous_token) = previous_token.filter(|token| token != &component.token) else {
+            .replace(reply.user_id, reply.token.to_string());
+        let Some(previous_token) = previous_token.filter(|token| token != reply.token) else {
             return;
         };
 
@@ -1604,6 +1688,19 @@ impl Handler {
         {
             tracing::debug!(%error, "la vista privada anterior ya no estaba disponible");
         }
+    }
+
+    /// Whether meeting content may leave the group of people who were in the
+    /// call. Reading it on every request keeps the answer aligned with the
+    /// setting even for cards published before it was turned on.
+    fn participants_only(&self) -> bool {
+        self.config.read().summary_for_participants_only
+    }
+
+    /// Kuali refuses a private view whenever the restriction is on and the
+    /// meeting does not list this account as present.
+    fn may_read_meeting(&self, meeting: &Meeting, user_id: UserId) -> bool {
+        may_read_meeting(self.participants_only(), meeting, user_id)
     }
 
     fn follow_user(&self) -> Option<UserId> {
@@ -2129,14 +2226,13 @@ impl Handler {
     async fn respond_with_private_document(
         &self,
         ctx: &Context,
-        component: &ComponentInteraction,
+        reply: PrivateReply<'_>,
         meeting: &Meeting,
         document: PrivateMeetingDocument,
     ) {
         let filename = private_document_filename(document.action, document.locale);
         let has_existing_attachment = filename.is_some_and(|filename| {
-            component
-                .message
+            reply
                 .attachments
                 .iter()
                 .any(|attachment| attachment.filename == filename)
@@ -2144,10 +2240,10 @@ impl Handler {
         let can_upload = document
             .download
             .as_ref()
-            .is_some_and(|download| download.len() <= component.attachment_size_limit as usize);
+            .is_some_and(|download| download.len() <= reply.attachment_size_limit as usize);
         let include_download = has_existing_attachment || can_upload;
         let result = self
-            .edit_private_document_components(component, meeting, &document, include_download)
+            .edit_private_document_components(reply, meeting, &document, include_download)
             .await;
         let mut error = match result {
             Ok(()) => return,
@@ -2161,7 +2257,7 @@ impl Handler {
                 "Discord no permitió adjuntar el documento; reintentando sin descarga"
             );
             match self
-                .edit_private_document_components(component, meeting, &document, false)
+                .edit_private_document_components(reply, meeting, &document, false)
                 .await
             {
                 Ok(()) => return,
@@ -2174,10 +2270,11 @@ impl Handler {
             %error,
             "Discord rechazó la tarjeta moderna; usando una respuesta compatible"
         );
-        let _ = component
-            .edit_response(
-                &ctx.http,
-                EditInteractionResponse::new()
+        let _ = ctx
+            .http
+            .edit_original_interaction_response(
+                reply.token,
+                &EditInteractionResponse::new()
                     .embed(private_document_fallback_embed(
                         meeting,
                         document.locale,
@@ -2185,21 +2282,21 @@ impl Handler {
                         &document.visible,
                     ))
                     .allowed_mentions(CreateAllowedMentions::new()),
+                Vec::new(),
             )
             .await;
     }
 
     async fn edit_private_document_components(
         &self,
-        component: &ComponentInteraction,
+        reply: PrivateReply<'_>,
         meeting: &Meeting,
         document: &PrivateMeetingDocument,
         include_download: bool,
     ) -> Result<(), String> {
         let filename = private_document_filename(document.action, document.locale);
         let existing_attachment = filename.and_then(|filename| {
-            component
-                .message
+            reply
                 .attachments
                 .iter()
                 .find(|attachment| attachment.filename == filename)
@@ -2221,15 +2318,7 @@ impl Handler {
             document.page_count,
             attachment_id,
         );
-        let url = format!(
-            "https://discord.com/api/v10/webhooks/{}/{}/messages/@original",
-            component.application_id.get(),
-            component.token
-        );
-        let request = reqwest::Client::new().patch(url).header(
-            reqwest::header::USER_AGENT,
-            format!("Kuali/{} ({KUALI_WEBSITE})", env!("CARGO_PKG_VERSION")),
-        );
+        let request = original_response_patch(reply);
         let response = if include_download && existing_attachment.is_none() {
             let filename = filename.ok_or_else(|| "la vista no tiene una descarga".to_string())?;
             let download = document
@@ -2253,15 +2342,7 @@ impl Handler {
         }
         .map_err(|error| format!("falló la conexión con Discord: {}", error.without_url()))?;
 
-        let status = response.status();
-        if status.is_success() {
-            return Ok(());
-        }
-        let body = response.text().await.unwrap_or_default();
-        Err(format!(
-            "Discord respondió {status}: {}",
-            truncate_text(&body, 300)
-        ))
+        discord_outcome(response).await
     }
 
     async fn handle_meeting_button(
@@ -2276,7 +2357,8 @@ impl Handler {
         let Some(guild_id) = component.guild_id else {
             return;
         };
-        let locale = DiscordLocale::from_discord_locale(&component.locale);
+        let reply = PrivateReply::from_component(component);
+        let locale = reply.locale;
         let deferred = if update_existing {
             CreateInteractionResponse::Acknowledge
         } else {
@@ -2292,18 +2374,24 @@ impl Handler {
             return;
         }
         if !update_existing {
-            self.replace_private_view(ctx, component).await;
+            self.replace_private_view(ctx, reply).await;
         }
 
         let meeting = match self.request_meeting(meeting_id, guild_id).await {
             Ok(meeting) => meeting,
             Err(message) => {
-                let _ = component
-                    .edit_response(&ctx.http, EditInteractionResponse::new().content(message))
-                    .await;
+                self.edit_private_text(ctx, reply, message).await;
                 return;
             }
         };
+
+        // Pagination reuses an answer this person already holds, yet the check
+        // runs again: the restriction may have been turned on since then.
+        if !self.may_read_meeting(&meeting, reply.user_id) {
+            self.edit_private_text(ctx, reply, restricted_notice(locale))
+                .await;
+            return;
+        }
 
         let Some(document) = private_meeting_document(&meeting, action, locale, requested_page)
         else {
@@ -2318,12 +2406,53 @@ impl Handler {
                     "This meeting does not have generated notes yet.",
                 )
             };
-            let _ = component
-                .edit_response(&ctx.http, EditInteractionResponse::new().content(message))
+            self.edit_private_text(ctx, reply, message.to_string())
                 .await;
             return;
         };
-        self.respond_with_private_document(ctx, component, &meeting, document)
+        self.respond_with_private_document(ctx, reply, &meeting, document)
+            .await;
+    }
+
+    /// Answers a deferred interaction with plain text, replacing whatever the
+    /// person was looking at. A refusal must be able to take the place of a
+    /// card, and Discord never lets a components-v2 message go back to plain
+    /// content, so the notice is written as a component first and only falls
+    /// back to an ordinary edit for answers that never became a card.
+    async fn edit_private_text(&self, ctx: &Context, reply: PrivateReply<'_>, message: String) {
+        let payload = serde_json::json!({
+            "flags": DISCORD_COMPONENTS_V2_FLAG,
+            "content": null,
+            "embeds": [],
+            "attachments": [],
+            "allowed_mentions": { "parse": [] },
+            "components": [{ "type": 10, "content": truncate_text(&message, 3_800) }]
+        });
+        let rewritten = match original_response_patch(reply).json(&payload).send().await {
+            Ok(response) => discord_outcome(response).await,
+            Err(error) => Err(format!(
+                "falló la conexión con Discord: {}",
+                error.without_url()
+            )),
+        };
+        match rewritten {
+            Ok(()) => return,
+            Err(error) => {
+                tracing::debug!(%error, "no pude reescribir la respuesta privada con componentes");
+            }
+        }
+
+        let _ = ctx
+            .http
+            .edit_original_interaction_response(
+                reply.token,
+                &EditInteractionResponse::new()
+                    .content(message)
+                    .embeds(Vec::new())
+                    .components(Vec::new())
+                    .allowed_mentions(CreateAllowedMentions::new()),
+                Vec::new(),
+            )
             .await;
     }
 
@@ -3088,6 +3217,31 @@ mod tests {
         assert!(is_record_command("grabar"));
         assert!(is_record_command("record"));
         assert!(!is_record_command("transcription"));
+    }
+
+    #[test]
+    fn a_restricted_meeting_only_opens_for_the_people_who_were_in_the_call() {
+        let mut meeting = completed_meeting();
+        meeting.upsert_speaker(Speaker {
+            user_id: 3,
+            source_id: None,
+            audio_kind: None,
+            display_name: "Kuali".into(),
+            username: "kuali".into(),
+            avatar_url: None,
+            color: color_for(3).to_string(),
+            is_bot: true,
+        });
+
+        assert!(is_meeting_participant(&meeting, UserId::new(1)));
+        // Present but silent still counts; the bot itself never does.
+        assert!(!is_meeting_participant(&meeting, UserId::new(3)));
+        assert!(!is_meeting_participant(&meeting, UserId::new(99)));
+
+        assert!(may_read_meeting(true, &meeting, UserId::new(2)));
+        assert!(!may_read_meeting(true, &meeting, UserId::new(99)));
+        // Without the restriction the channel reads the meeting as before.
+        assert!(may_read_meeting(false, &meeting, UserId::new(99)));
     }
 
     #[test]
