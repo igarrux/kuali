@@ -99,6 +99,8 @@ en el sitio oficial.
 - Whisper local con aceleración Metal y detección de voz mediante Silero.
 - Biblioteca con búsqueda dentro de la transcripción, carpetas por canal y
   exportación Markdown o JSON.
+- Preguntas respondidas sobre reuniones pasadas desde Discord o la app, con
+  citas, y limitadas en Discord a las llamadas en las que estuvo quien pregunta.
 - Resúmenes, puntos clave, decisiones, preguntas y tareas por participante,
   completamente opcionales.
 - Filtros de tareas por persona, reunión, estado y rango de fechas.
@@ -160,6 +162,44 @@ Kuali responde únicamente a los participantes —en privado, con un mensaje
 efímero— desde los botones de la tarjeta o con `/resumen` y `/summary`.
 Cualquier otra persona del canal, por permisivo que sea su rol de Discord, no
 lee nada.
+
+### Preguntar por reuniones pasadas
+
+`/pregunta` y `/ask` responden preguntas sobre todo lo que Kuali ha grabado
+—«¿qué decidimos sobre el despliegue?», «¿qué me quedó pendiente?»— en lugar de
+obligarte a encontrar antes la reunión correcta.
+
+**La búsqueda se limita a las reuniones en las que estuviste.** Kuali usa la
+cuenta que Discord autenticó y busca solo en llamadas que la registraron como
+presente, dentro del servidor donde escribiste el comando. Esto no es un filtro
+aplicado a los resultados: las reuniones fuera de ese conjunto nunca se
+recuperan, así que el modelo no las ve y no puede citarlas. Haber estado en
+silencio también cuenta, y las reuniones de navegador quedan excluidas porque
+una cuenta de Discord no puede corresponderse con un participante de Google
+Meet, Teams o Zoom. Las respuestas son siempre efímeras y citan las reuniones en
+las que se apoyan, para que puedas comprobar lo que se afirma.
+
+La aplicación de escritorio tiene lo mismo en **Preguntar**, sin la restricción
+por participación: se ejecuta en la máquina que grabó las reuniones, para quien
+es su dueño.
+
+Las preguntas están **desactivadas hasta que las actives**, en **Preguntar**
+dentro de la aplicación. Responder bien necesita un modelo de 128 MB que entiende
+lo que se quiso decir y no solo qué palabras se usaron —es lo que encuentra
+*cortafuegos* cuando preguntas por *firewall*— y nada de ese tamaño se descarga
+sin preguntar. Al activarlo verás el tamaño de la descarga, cuántos fragmentos
+tiene tu biblioteca actual y una estimación de tiempo; durante el indexado la
+estimación pasa a medirse en tu propio equipo.
+
+Hasta que eso termine, las preguntas se rechazan en lugar de responderse solo con
+coincidencia de palabras. Una función que a veces acierta y a veces falla lo
+evidente enseña a no confiar en ella, así que es todo o nada.
+
+Responder además envía fragmentos de la transcripción al proveedor configurado,
+así que obedece el mismo interruptor de *Ajustes → resúmenes y tareas*. Con esa
+opción desactivada, las preguntas no están disponibles, igual que los resúmenes.
+El modelo de embeddings corre por completo en tu equipo y no envía nada a ningún
+sitio.
 
 ### Reuniones del navegador
 

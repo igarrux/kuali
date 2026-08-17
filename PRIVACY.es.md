@@ -66,7 +66,8 @@ Whisper transcribe localmente. Según lo que configures:
 
 - un proveedor OpenAI, Anthropic, Gemini, compatible con OpenAI o de línea de
   comandos recibe los metadatos, nombres visibles y transcripción necesarios
-  para producir el resumen;
+  para producir el resumen y, cuando alguien pregunta por reuniones pasadas,
+  los fragmentos seleccionados para responder;
 - Discord recibe avisos, resúmenes, tareas y transcripciones que solicites; y
 - cada webhook habilitado recibe la reunión terminada, incluyendo metadatos,
   participantes, transcripción, resumen y tareas.
@@ -81,6 +82,11 @@ operativo y los ajustes en su directorio de configuración. Los pesos de los
 modelos se guardan en `~/.kuali` de forma predeterminada o en la carpeta que
 elijas. En sistemas Unix, Kuali escribe la configuración con permisos exclusivos
 del propietario (`0600`); los secretos no tienen cifrado adicional en reposo.
+
+Junto a esos registros, Kuali mantiene un índice de búsqueda local derivado de
+ellos, para poder responder preguntas sobre reuniones pasadas sin leer todos los
+archivos. No contiene nada que las reuniones no guarden ya, nunca sale de tu
+equipo, y al eliminar una reunión también desaparece del índice.
 
 Las reuniones permanecen hasta que las elimines desde Kuali o borres sus
 archivos. Los pesos permanecen hasta que los elimines desde Kuali. Al quitar la

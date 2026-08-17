@@ -93,6 +93,8 @@ workflows on the official website.
 - Local Whisper inference with Metal acceleration and Silero voice detection.
 - Searchable meeting library with transcript excerpts, channel folders, and
   Markdown or JSON export.
+- Questions answered across past meetings from Discord or the desktop app, with
+  citations, and scoped in Discord to the calls the asker was actually in.
 - Optional summaries, key points, decisions, questions, and tasks by participant.
 - Task filters by person, meeting, status, and date range.
 - Signed webhooks containing the completed meeting and full transcript.
@@ -152,6 +154,43 @@ pending-task count but carries no excerpt, and Kuali answers only participants �
 privately, with an ephemeral message — through the card buttons or `/resumen`
 and `/summary`. Anyone else in the channel, however permissive their Discord
 role, reads nothing.
+
+### Asking about past meetings
+
+`/pregunta` and `/ask` answer questions across everything Kuali has recorded —
+"what did we decide about the rollout?", "what is still pending for me?" —
+instead of requiring the right meeting to be found first.
+
+**The search is limited to meetings you were actually in.** Kuali resolves the
+account Discord authenticated and searches only calls that recorded it as
+present, inside the server where the command was used. This is not a filter
+applied to results: meetings outside that set are never retrieved, so the model
+never sees them and cannot quote them. Attending silently still counts, and
+browser meetings are excluded because a Discord account cannot be matched
+against a Google Meet, Teams, or Zoom participant. Answers are always ephemeral
+and cite the meetings they rest on, so a claim about what the team decided can
+be checked.
+
+The desktop application has the same feature under **Ask**, without the
+participant restriction: it runs on the machine that recorded the meetings, for
+the person who owns them.
+
+Questions are **off until you turn them on**, under **Ask** in the desktop
+application. Answering well needs a 128 MB embedding model that understands what
+was meant rather than which words were used — it is what finds *cortafuegos*
+when you ask about *firewall* — and nothing that size is downloaded without
+asking. Turning it on states the download size, counts the passages in your
+existing library, and estimates the time before starting; indexing then reports
+a real estimate measured on your own machine.
+
+Until that finishes, questions are refused rather than answered by word matching
+alone. A feature that answers well sometimes and misses obvious things other
+times teaches people not to trust it, so it is all or nothing.
+
+Answering also sends transcript excerpts to your configured provider, so it
+obeys the same *Settings → summaries and tasks* switch. With that switch off,
+questions are unavailable along with summaries. The embedding model itself runs
+entirely on your computer and sends nothing anywhere.
 
 ### Browser meetings
 

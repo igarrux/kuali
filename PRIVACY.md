@@ -67,7 +67,8 @@ Whisper transcription runs locally. Depending on settings you choose:
 
 - a configured OpenAI, Anthropic, Gemini, OpenAI-compatible, or command-line
   summary provider receives meeting metadata, participant display names, and
-  the transcript needed to generate the summary;
+  the transcript needed to generate the summary, and, when someone asks a
+  question about past meetings, the excerpts selected to answer it;
 - Discord receives notices, summaries, tasks, and transcripts you request the
   bot to post; and
 - each enabled webhook receives the completed-meeting payload, including
@@ -84,6 +85,11 @@ Downloaded speech-model weights are stored in `~/.kuali` by default or in the
 folder you select. On Unix systems, Kuali writes its configuration file with
 owner-only (`0600`) permissions; secrets are not additionally encrypted at
 rest.
+
+Alongside those records, Kuali keeps a local search index derived from them, so
+questions about past meetings can be answered without reading every file. It
+contains no information the meeting records do not already hold, it never leaves
+your computer, and deleting a meeting removes it from the index as well.
 
 Meeting records remain until you delete them in Kuali or remove their files.
 Model weights remain until you delete them in Kuali. Removing the extension
