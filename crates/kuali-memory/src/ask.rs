@@ -1,10 +1,15 @@
 //! Turning retrieved passages into an answer.
 //!
 //! The prompt lives next to the retrieval that feeds it because the two are one
-//! contract: the model is told that the excerpts are the entire world, and
-//! retrieval is what makes that true. Passages outside the asker's audience were
-//! never fetched, so "answer only from the excerpts" and "answer only from what
-//! this person may read" are the same instruction.
+//! contract: the model is told that the excerpts are the only meeting material
+//! in existence, and retrieval is what makes that true. Passages outside the
+//! asker's audience were never fetched, so "say nothing about a meeting you were
+//! not shown" and "say nothing this person may not read" are one instruction.
+//!
+//! What the excerpts are not is a reason to talk about meetings. They are
+//! fetched before anyone has read the message, so a greeting arrives carrying
+//! evidence for a question that was never asked. The model is told to judge
+//! that and answer the message it actually got.
 //!
 //! Citations are validated against the passages that were actually sent. A model
 //! cannot cite a meeting into existence, and it cannot cite one it was not
@@ -140,11 +145,17 @@ impl Memory {
     }
 }
 
-/// Answers a question from passages already retrieved for a specific audience.
+/// Replies to a message from passages already retrieved for a specific
+/// audience.
 ///
 /// Every passage reaching this function came out of [`Memory::retrieve`], which
-/// cannot run without an [`Audience`]. That is what lets the prompt tell the
-/// model the excerpts are the entire world and be telling the truth.
+/// cannot run without an [`Audience`]. That is what lets the prompt forbid
+/// drawing on any meeting other than the ones in front of the model, and have
+/// that be the truth rather than a hope.
+///
+/// Retrieval runs before anyone knows whether the message is a question, so the
+/// passages here may have nothing to do with it. Deciding that is the model's
+/// job: a greeting is not a search, and it should not be answered like one.
 pub async fn answer(
     provider: &dyn LlmProvider,
     question: &str,
@@ -269,19 +280,20 @@ fn output_schema() -> serde_json::Value {
 pub fn system_prompt(language: &str) -> String {
     let language_rule = kuali_llm::language_rule(language);
     format!(
-        r#"You are Kuali's meeting memory. Someone is asking about meetings they took part in, and you answer from numbered excerpts of those meetings.
+        r#"You are Kuali's meeting memory, talking with someone about meetings they took part in. Under each message you are handed numbered excerpts, pulled from those meetings automatically.
 
-The excerpts are everything you have. They were selected for this person and this question, and there is nothing else to consult. Do not reason about what other meetings might have said.
+Those excerpts were fetched before anyone read the message, so they are frequently beside the point. Judging that is your job. What they are is the only meeting material you have: nothing else about these meetings is available to you, and you must never draw on a meeting that is not in front of you.
 
-- Answer only from the excerpts. If they do not contain the answer, say so plainly and stop. Being wrong about what a team decided is far worse than admitting the meetings do not cover it.
-- Every claim has to trace back to an excerpt you cite. Put those numbers in "citations" and never in "answer".
+- Not every message is a question about the meetings. A greeting, a thank-you, a remark, a question about what you can do — answer it as yourself, briefly and warmly, with "citations": []. Do not raise meetings nobody asked about, and never let the excerpts steer a reply that was not about them.
+- When the message is about the meetings, answer only from the excerpts. If they do not cover it, say so plainly and stop. Being wrong about what a team decided is far worse than admitting the meetings do not cover it.
+- Anything you state about what was said, decided or promised has to trace back to an excerpt you cite. Put those numbers in "citations" and never in "answer".
 - Write as someone who remembers the meetings. Do not mention excerpts, numbers, retrieval, or that you were given material.
 - The excerpts carry the meeting, the date and who was speaking. Use them: "on 3 August, in the planning call, Ana said the rollout was postponed" is worth far more than "it was postponed".
 - The text comes from automatic speech recognition, so proper nouns and technical terms arrive mangled. Read with common sense instead of repeating an obvious mistranscription.
 - When excerpts disagree, the more recent meeting is what stands. Say that the position changed rather than picking one silently.
 - A distilled line — a decision, a task, a note — states a conclusion. A transcript excerpt is what people actually said. When they conflict, the transcript is the evidence.
 - When you are told who is asking, resolve their "I", "me" and "my" to that person, and address them directly. Without that line you do not know which participant they are, so answer about the meeting rather than guessing, and never assume the asker is whoever speaks most.
-- Be brief. Two or three sentences of prose when that answers it.
+- Be brief. Two or three sentences of prose when that answers it, and a single line when someone just said hello.
 
 Format the answer as Markdown, using only what genuinely helps it be read:
 
@@ -297,7 +309,7 @@ Do not use headings, tables, images, links or horizontal rules. This is a short 
 Return a JSON object only, with no text around it and without wrapping it in a code block:
 
 {{
-  "answer": "what the meetings say, as Markdown, answering the question that was asked",
+  "answer": "your reply as Markdown: what the meetings say when that is what was asked, and otherwise simply an answer to the message",
   "citations": [1, 3]
 }}"#
     )
@@ -385,6 +397,59 @@ mod tests {
         assert_eq!(citations.len(), 2);
         assert_eq!(citations[0].meeting_id, "m1");
         assert_eq!(citations[1].meeting_id, "m2");
+    }
+
+    /// Passages are fetched before anyone reads the message, so every greeting
+    /// arrives carrying evidence for a question nobody asked. Two earlier rules
+    /// — that the excerpts were everything, and that every claim had to cite one
+    /// — left the model no way to just say hello back.
+    #[test]
+    fn the_prompt_lets_a_message_that_is_not_a_question_be_answered_as_one() {
+        let prompt = system_prompt("");
+
+        assert!(prompt.contains("Not every message is a question about the meetings"));
+        assert!(prompt.contains(r#""citations": []"#));
+        // The excerpts stop being the whole world without becoming optional:
+        // meetings the model was not shown are still out of reach.
+        assert!(prompt.contains("never draw on a meeting that is not in front of you"));
+        assert!(!prompt.contains("The excerpts are everything you have"));
+        assert!(!prompt.contains("Every claim has to trace back"));
+    }
+
+    /// The rule above is worth nothing if a real model still reaches for the
+    /// excerpts. Needs an authenticated Claude Code, so it stays out of the
+    /// suite.
+    #[tokio::test]
+    #[ignore = "requiere una sesión de Claude Code iniciada"]
+    async fn a_greeting_is_answered_with_a_greeting() {
+        let provider = kuali_llm::ClaudeCliProvider::new(None);
+        let passages = vec![
+            passage(
+                "m1",
+                "El despliegue queda aplazado hasta el martes, dijo Ana.",
+            ),
+            passage(
+                "m2",
+                "Sebas comentó que había un problema con el cortafuegos.",
+            ),
+        ];
+
+        let answer = answer(&provider, "Hola", &passages, "", &Asker::unknown())
+            .await
+            .unwrap();
+
+        let Answer::Answered { text, citations } = answer else {
+            panic!("un saludo no debería quedarse sin respuesta");
+        };
+        let lowered = text.to_lowercase();
+        assert!(
+            !lowered.contains("despliegue")
+                && !lowered.contains("cortafuegos")
+                && !lowered.contains("ana")
+                && !lowered.contains("sebas"),
+            "el saludo arrastró contenido de las reuniones: {text}"
+        );
+        assert!(citations.is_empty(), "un saludo no cita reuniones: {text}");
     }
 
     #[test]

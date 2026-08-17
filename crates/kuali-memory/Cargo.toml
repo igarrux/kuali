@@ -25,3 +25,7 @@ rusqlite = { version = "0.37", features = ["bundled"] }
 ort = "2.0.0-rc.13"
 ndarray = "0.17"
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
+
+[dev-dependencies]
+# Only the tests await a provider; the crate itself hands the future to its caller.
+tokio.workspace = true
