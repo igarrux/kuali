@@ -10,6 +10,33 @@ use serde::{Deserialize, Serialize};
 pub type SpeakerId = u64;
 pub type DiscordUserId = SpeakerId;
 
+/// High bits stamped on every identifier Kuali synthesizes for a browser
+/// meeting, spelling `WE` for "web".
+///
+/// Browser platforms give Kuali a textual participant ID, so it hashes one into
+/// the numeric space `SpeakerId` shares with Discord snowflakes. The tag keeps
+/// the two apart structurally instead of hoping a hash never lands on a real
+/// account: anything Kuali can attribute to a Discord user must be untagged.
+/// Discord will not reach this range on its own until roughly 2062, because a
+/// snowflake carries the milliseconds since 2015 in its top 42 bits.
+pub const BROWSER_ID_TAG: u64 = 0x5745_0000_0000_0000;
+const BROWSER_ID_MASK: u64 = 0x0000_ffff_ffff_ffff;
+
+/// Stamps the browser tag onto a hash so the result can never be mistaken for a
+/// Discord identifier.
+pub fn browser_identifier(hash: u64) -> SpeakerId {
+    BROWSER_ID_TAG | (hash & BROWSER_ID_MASK)
+}
+
+/// Whether this identifier was synthesized by Kuali for a browser meeting.
+///
+/// Access control depends on the answer: a Discord account can never prove it
+/// attended a meeting whose participants only exist as browser hashes, so those
+/// meetings stay out of anything scoped to a Discord user.
+pub fn is_browser_identifier(id: SpeakerId) -> bool {
+    id & !BROWSER_ID_MASK == BROWSER_ID_TAG
+}
+
 /// Stable speaker palette readable on light and dark backgrounds. Deriving the
 /// index from the participant ID keeps colors consistent across meetings.
 const SPEAKER_PALETTE: [&str; 8] = [

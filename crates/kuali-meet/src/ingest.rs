@@ -790,16 +790,16 @@ fn generic_participant_name(name: &str) -> bool {
         || normalized.starts_with("desconocido (")
 }
 
-/// FNV-1a reproduces the same ID across runs without persistent tables. A `WEB`
-/// prefix separates it from Discord snowflakes, while `Speaker::source_id`
-/// retains the original ID.
+/// FNV-1a reproduces the same ID across runs without persistent tables. The tag
+/// applied by `kuali_core::browser_identifier` separates the result from Discord
+/// snowflakes, while `Speaker::source_id` retains the original ID.
 fn web_id(value: &str) -> u64 {
     let mut hash = 0xcbf2_9ce4_8422_2325u64;
     for byte in value.as_bytes() {
         hash ^= u64::from(*byte);
         hash = hash.wrapping_mul(0x0000_0100_0000_01b3);
     }
-    0x5745_0000_0000_0000 | (hash & 0x0000_ffff_ffff_ffff)
+    kuali_core::browser_identifier(hash)
 }
 
 /// `VoiceEvent::Audio` uses `i16` to match Discord. The wire carries `f32` over
