@@ -27,36 +27,19 @@ impl ResolvedCommand {
     /// to authenticate and reach the network. See [`crate::confine`].
     pub(crate) fn process(&self) -> Command {
         let mut command = Command::new(&self.executable);
-        self.prepare(&mut command);
+        confine::apply_environment(&mut command, &self.search_path);
         command
     }
 
     /// The same command under a kernel sandbox, or an error when this platform
     /// has none to offer.
-    fn confined(&self) -> Result<(Command, confine::Profile), LlmError> {
-        let plan =
-            confine::plan(&self.name, &self.executable, &self.search_path).map_err(|message| {
-                LlmError::Provider {
-                    provider: self.name.clone(),
-                    message,
-                }
-            })?;
-
-        let mut command = Command::new(plan.wrapper);
-        command
-            .arg("-f")
-            .arg(plan.profile.path())
-            .arg(&self.executable);
-        self.prepare(&mut command);
-        Ok((command, plan.profile))
-    }
-
-    fn prepare(&self, command: &mut Command) {
-        command.env_clear();
-        for (name, value) in confine::inherited() {
-            command.env(name, value);
-        }
-        command.env("PATH", &self.search_path);
+    fn confined(&self) -> Result<(Command, confine::Guard), LlmError> {
+        confine::launch(&self.name, &self.executable, &self.search_path).map_err(|message| {
+            LlmError::Provider {
+                provider: self.name.clone(),
+                message,
+            }
+        })
     }
 
     pub(crate) fn label(&self) -> String {

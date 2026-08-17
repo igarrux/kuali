@@ -55,6 +55,7 @@ impl OpenAiApiProvider {
     fn body(&self, request: &CompletionRequest) -> serde_json::Value {
         let mut body = serde_json::json!({
             "model": self.model,
+            "store": true,
             "max_completion_tokens": request.max_tokens,
             "messages": [
                 { "role": "system", "content": request.system },

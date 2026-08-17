@@ -14,11 +14,15 @@
 //! Only macOS carries the third layer today. The first two are portable and run
 //! everywhere. Porting Kuali to another system means writing the kernel layer
 //! for it first — Landlock or seccomp on Linux, a restricted token or an
-//! AppContainer on Windows — because [`plan`] refuses to launch a CLI it cannot
+//! AppContainer on Windows — because [`launch`] refuses to launch a CLI it cannot
 //! confine, and the ports would otherwise ship with one layer missing.
 
 use std::ffi::{OsStr, OsString};
-use std::path::{Path, PathBuf};
+use std::path::Path;
+#[cfg(target_os = "macos")]
+use std::path::PathBuf;
+
+use tokio::process::Command;
 
 /// The flags that ask a CLI to refuse tools, and the home directories it still
 /// needs in order to authenticate.
@@ -28,7 +32,10 @@ use std::path::{Path, PathBuf};
 struct Confinement {
     program: &'static str,
     restrictions: &'static [&'static str],
-    /// Paths relative to the home folder that the CLI itself owns.
+    /// Paths relative to the home folder that the CLI itself owns. Only the
+    /// kernel layer reads them, so on a platform that has none yet the list sits
+    /// unused — deliberately, because a port needs it before it can write one.
+    #[cfg_attr(not(target_os = "macos"), allow(dead_code))]
     owned: &'static [&'static str],
 }
 
@@ -144,21 +151,32 @@ pub(crate) fn inherited() -> Vec<(&'static str, OsString)> {
         .collect()
 }
 
-/// The kernel sandbox a CLI runs under: a wrapper binary that applies a profile
-/// and then becomes the CLI itself.
-pub(crate) struct Sandbox {
-    pub(crate) wrapper: PathBuf,
-    pub(crate) profile: Profile,
+/// Empties the environment and refills it with the little a CLI needs.
+pub(crate) fn apply_environment(command: &mut Command, search_path: &OsStr) {
+    command.env_clear();
+    for (name, value) in inherited() {
+        command.env(name, value);
+    }
+    command.env("PATH", search_path);
 }
 
-/// Decides how to launch a CLI, or refuses when the platform has no kernel
-/// layer to offer. The refusal is the point: it is what makes a port implement
-/// this module instead of quietly shipping without it.
-pub(crate) fn plan(
+/// What has to stay alive for as long as the confined CLI runs. On macOS that
+/// is the sandbox profile on disk. A platform with no kernel layer never
+/// reaches this, which is why there is nothing for it to hold.
+#[cfg(target_os = "macos")]
+pub(crate) type Guard = Profile;
+#[cfg(not(target_os = "macos"))]
+pub(crate) type Guard = std::convert::Infallible;
+
+/// Builds the command that runs a CLI under this platform's kernel sandbox, or
+/// refuses when the platform has none to offer. The refusal is the point: it is
+/// what makes a port implement this module instead of quietly shipping without
+/// it.
+pub(crate) fn launch(
     program: &str,
     executable: &Path,
     search_path: &OsStr,
-) -> Result<Sandbox, String> {
+) -> Result<(Command, Guard), String> {
     if confinement(program).is_none() {
         return Err(format!(
             "`{program}` no tiene reglas de confinamiento; \
@@ -170,30 +188,40 @@ pub(crate) fn plan(
 }
 
 #[cfg(target_os = "macos")]
-fn isolate(program: &str, executable: &Path, search_path: &OsStr) -> Result<Sandbox, String> {
-    let text = profile(program, executable, search_path);
-    let profile = Profile::write(&text).map_err(|error| {
+fn isolate(
+    program: &str,
+    executable: &Path,
+    search_path: &OsStr,
+) -> Result<(Command, Guard), String> {
+    let written = Profile::write(&profile(program, executable, search_path)).map_err(|error| {
         format!("no se pudo escribir el perfil de aislamiento de `{program}`: {error}")
     })?;
-    Ok(Sandbox {
-        wrapper: PathBuf::from("/usr/bin/sandbox-exec"),
-        profile,
-    })
+
+    let mut command = Command::new("/usr/bin/sandbox-exec");
+    command.arg("-f").arg(written.path()).arg(executable);
+    apply_environment(&mut command, search_path);
+    Ok((command, written))
 }
 
 #[cfg(not(target_os = "macos"))]
-fn isolate(program: &str, _executable: &Path, _search_path: &OsStr) -> Result<Sandbox, String> {
+fn isolate(
+    program: &str,
+    _executable: &Path,
+    _search_path: &OsStr,
+) -> Result<(Command, Guard), String> {
     Err(format!(
         "Kuali todavía no sabe aislar procesos en este sistema, \
          así que no ejecuta `{program}`; usa un proveedor por API"
     ))
 }
 
+#[cfg(target_os = "macos")]
 /// A sandbox profile on disk, removed when the launch is over.
 pub(crate) struct Profile {
     path: PathBuf,
 }
 
+#[cfg(target_os = "macos")]
 impl Profile {
     fn write(text: &str) -> std::io::Result<Self> {
         let path = std::env::temp_dir().join(format!("kuali-sandbox-{}.sb", uuid::Uuid::new_v4()));
@@ -206,6 +234,7 @@ impl Profile {
     }
 }
 
+#[cfg(target_os = "macos")]
 impl Drop for Profile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.path);
@@ -218,6 +247,7 @@ impl Drop for Profile {
 /// The rules are ordered deny-then-allow because Seatbelt applies the last
 /// matching rule. Network access stays open: the CLI's whole job is to reach
 /// its own API.
+#[cfg(target_os = "macos")]
 pub(crate) fn profile(program: &str, executable: &Path, search_path: &OsStr) -> String {
     let home = real_path(&home_directory());
     let temp = real_path(&std::env::temp_dir());
@@ -290,6 +320,7 @@ pub(crate) fn profile(program: &str, executable: &Path, search_path: &OsStr) -> 
 /// Package managers install both under the home folder, which the profile has
 /// just hidden. Only their program directories are reopened, never the home
 /// folder itself: these hold executables, not the user's documents.
+#[cfg(target_os = "macos")]
 fn runtime_directories(executable: &Path, search_path: &OsStr, home: &Path) -> Vec<PathBuf> {
     let mut directories: Vec<PathBuf> = Vec::new();
     let mut push = |candidate: PathBuf| {
@@ -320,6 +351,7 @@ fn runtime_directories(executable: &Path, search_path: &OsStr, home: &Path) -> V
     directories
 }
 
+#[cfg(target_os = "macos")]
 fn home_directory() -> PathBuf {
     directories::BaseDirs::new()
         .map(|dirs| dirs.home_dir().to_path_buf())
@@ -328,10 +360,12 @@ fn home_directory() -> PathBuf {
 
 /// Seatbelt matches resolved paths, and on macOS the temporary directory and the
 /// home folder both reach their real location through symlinks.
+#[cfg(target_os = "macos")]
 fn real_path(path: &Path) -> PathBuf {
     std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf())
 }
 
+#[cfg(target_os = "macos")]
 fn quote(path: &Path) -> String {
     let text = path
         .to_string_lossy()
@@ -362,13 +396,15 @@ mod tests {
 
     #[test]
     fn an_undeclared_cli_is_not_launched() {
-        let error = plan(
+        // Discarding the success value keeps this readable on every platform:
+        // the guard a sandbox hands back does not implement `Debug`.
+        let error = launch(
             "cli-que-nadie-revisó",
             Path::new("/usr/bin/true"),
             OsStr::new("/usr/bin"),
         )
-        .err()
-        .expect("una CLI sin reglas no debería poder lanzarse");
+        .map(|_| ())
+        .unwrap_err();
         assert!(error.contains("cli-que-nadie-revisó"));
     }
 
