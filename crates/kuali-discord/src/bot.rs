@@ -15,9 +15,10 @@ use kuali_core::{
 };
 use parking_lot::RwLock;
 use serenity::all::{
-    ApplicationId, Attachment, ButtonStyle, ChannelId, CommandInteraction, ComponentInteraction,
-    Context, CreateAllowedMentions, CreateButton, CreateCommand, CreateEmbed, CreateEmbedAuthor,
-    CreateEmbedFooter, CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
+    ApplicationId, Attachment, ButtonStyle, ChannelId, CommandInteraction, CommandOptionType,
+    ComponentInteraction, Context, CreateAllowedMentions, CreateButton, CreateCommand,
+    CreateCommandOption, CreateEmbed, CreateEmbedAuthor, CreateEmbedFooter,
+    CreateInteractionResponse, CreateInteractionResponseMessage, CreateMessage,
     EditInteractionResponse, EditMessage, EventHandler, GatewayIntents, Guild, GuildId, Http,
     Interaction, MessageId, Permissions, Ready, UserId, VoiceState,
 };
@@ -62,6 +63,15 @@ const RECORD_COMMAND_ES: &str = "grabar";
 const RECORD_COMMAND_EN: &str = "record";
 const SUMMARY_COMMAND_ES: &str = "resumen";
 const SUMMARY_COMMAND_EN: &str = "summary";
+const ASK_COMMAND_ES: &str = "pregunta";
+const ASK_COMMAND_EN: &str = "ask";
+/// Name of the single option both spellings of the ask command carry.
+const ASK_OPTION_ES: &str = "pregunta";
+const ASK_OPTION_EN: &str = "question";
+/// Bounds on the question itself. Below the floor there is nothing to search
+/// for; the ceiling is Discord's own limit for a string option.
+const MIN_QUESTION_CHARS: usize = 3;
+const MAX_QUESTION_CHARS: usize = 300;
 const INTERACTION_TOKEN_LIFETIME: Duration = Duration::from_secs(15 * 60);
 static NEXT_VOICE_SESSION_ID: AtomicU64 = AtomicU64::new(1);
 
@@ -89,6 +99,29 @@ fn is_summary_command(name: &str) -> bool {
     matches!(name, SUMMARY_COMMAND_ES | SUMMARY_COMMAND_EN)
 }
 
+fn is_ask_command(name: &str) -> bool {
+    matches!(name, ASK_COMMAND_ES | ASK_COMMAND_EN)
+}
+
+/// The question itself, as a required text option.
+///
+/// Discord enforces the length bounds before the interaction ever reaches
+/// Kuali, which turns "too long" into a form error the person can fix instead
+/// of a rejection after a wait.
+fn ask_option(name: &str, locale: DiscordLocale) -> CreateCommandOption {
+    CreateCommandOption::new(
+        CommandOptionType::String,
+        name,
+        locale.text(
+            "Qué quieres saber de tus reuniones anteriores",
+            "What you want to know about your past meetings",
+        ),
+    )
+    .required(true)
+    .min_length(MIN_QUESTION_CHARS as u16)
+    .max_length(MAX_QUESTION_CHARS as u16)
+}
+
 /// Request that rewrites Kuali's own answer to an interaction. The private
 /// views need the raw endpoint because Serenity cannot build components v2.
 fn original_response_patch(reply: PrivateReply<'_>) -> reqwest::RequestBuilder {
@@ -113,6 +146,57 @@ async fn discord_outcome(response: reqwest::Response) -> Result<(), String> {
         "Discord respondió {status}: {}",
         truncate_text(&body, 300)
     ))
+}
+
+/// Lays out an answer with the meetings it rests on.
+///
+/// The question is echoed because the reply arrives well after it was typed and
+/// an ephemeral message has no visible command above it. The citations are the
+/// point of the format: an answer about what a team decided is only worth
+/// acting on if the reader can go and check it.
+fn render_answer(
+    question: &str,
+    answer: &kuali_core::MeetingAnswer,
+    locale: DiscordLocale,
+) -> String {
+    let mut message = format!(
+        "**{}**\n> {}\n\n{}",
+        locale.text("Tu pregunta", "Your question"),
+        truncate_text(question, 300),
+        answer.text.trim()
+    );
+
+    if !answer.citations.is_empty() {
+        message.push_str(&format!(
+            "\n\n**{}**\n",
+            locale.text("De estas reuniones", "From these meetings")
+        ));
+        for citation in &answer.citations {
+            let moment = citation
+                .start_ms
+                .map(|ms| format!(" · {}", kuali_core::format_timestamp(ms)))
+                .unwrap_or_default();
+            message.push_str(&format!(
+                "· {} — #{} · {}{}\n",
+                citation.title,
+                citation.channel_name,
+                citation
+                    .started_at
+                    .with_timezone(&chrono::Local)
+                    .format("%d/%m/%Y"),
+                moment
+            ));
+        }
+    }
+
+    message.push_str(&format!(
+        "\n-# {}",
+        locale.text(
+            "Solo busco en las reuniones de este servidor en las que estuviste.",
+            "I only search the meetings on this server that you were in.",
+        )
+    ));
+    message
 }
 
 /// Refusal shown to someone who was not in the call. It names the reason so the
@@ -2088,6 +2172,7 @@ impl Handler {
                 avatar_url: Some(member.user.face()),
                 color: color_for(subject.user_id).to_string(),
                 is_bot: member.user.bot,
+                is_self: false,
             },
             None => Speaker {
                 display_name: subject.display_name.clone(),
@@ -2579,6 +2664,115 @@ impl Handler {
             .await;
     }
 
+    /// Answers a question from the meetings this account took part in.
+    ///
+    /// Nothing here decides what may be read. The engine builds the audience
+    /// from the account Discord authenticated and the server the command
+    /// arrived in, so a question cannot ask for a wider scope than the person
+    /// has, however it is phrased.
+    async fn handle_ask_command(&self, ctx: &Context, command: &CommandInteraction) {
+        let reply = PrivateReply::from_command(command);
+        let locale = reply.locale;
+        let Some(guild_id) = command.guild_id else {
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(locale.text(
+                        "Usa /pregunta dentro del servidor cuyas reuniones quieres consultar.",
+                        "Use /ask inside the server whose meetings you want to consult.",
+                    ))
+                    .ephemeral(true),
+            );
+            let _ = command.create_response(&ctx.http, response).await;
+            return;
+        };
+
+        let question = command
+            .data
+            .options
+            .iter()
+            .find(|option| option.name == ASK_OPTION_ES || option.name == ASK_OPTION_EN)
+            .and_then(|option| option.value.as_str())
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if question.chars().count() < MIN_QUESTION_CHARS {
+            let response = CreateInteractionResponse::Message(
+                CreateInteractionResponseMessage::new()
+                    .content(locale.text(
+                        "Escribe una pregunta un poco más concreta.",
+                        "Write a slightly more specific question.",
+                    ))
+                    .ephemeral(true),
+            );
+            let _ = command.create_response(&ctx.http, response).await;
+            return;
+        }
+
+        // Ephemeral from the very first response: an answer built from meetings
+        // only this person may read must not land in the channel for everyone.
+        let deferred = CreateInteractionResponse::Defer(
+            CreateInteractionResponseMessage::new().ephemeral(true),
+        );
+        if command.create_response(&ctx.http, deferred).await.is_err() {
+            return;
+        }
+        self.replace_private_view(ctx, reply).await;
+
+        // The name Discord shows for this member in this server, which is what
+        // the transcripts recorded them as. Preferring the nickname over the
+        // account handle matches how the speaker resolver names people.
+        let asker_name = command
+            .member
+            .as_ref()
+            .map(|member| member.display_name().to_string())
+            .or_else(|| Some(command.user.name.clone()));
+
+        let answer = self
+            .request_answer(reply.user_id, guild_id, question.clone(), asker_name)
+            .await;
+        let message = match answer {
+            Ok(Some(answer)) => render_answer(&question, &answer, locale),
+            Ok(None) => locale
+                .text(
+                    "No encontré nada sobre eso en las reuniones en las que participaste en este servidor.",
+                    "I found nothing about that in the meetings you took part in on this server.",
+                )
+                .to_string(),
+            Err(message) => message,
+        };
+        self.edit_private_text(ctx, reply, message).await;
+    }
+
+    async fn request_answer(
+        &self,
+        user_id: UserId,
+        guild_id: GuildId,
+        question: String,
+        asker_name: Option<String>,
+    ) -> Result<Option<kuali_core::MeetingAnswer>, String> {
+        let (reply, response) = tokio::sync::oneshot::channel();
+        if self
+            .tx
+            .send(VoiceEvent::QuestionAsked {
+                user_id: user_id.get(),
+                guild_id: guild_id.get(),
+                question,
+                asker_name,
+                reply,
+            })
+            .is_err()
+        {
+            return Err("Kuali no pudo consultar las reuniones ahora mismo.".to_string());
+        }
+
+        // A model call is slower than a library lookup, and an interaction token
+        // stays valid for fifteen minutes, so the wait is generous.
+        match tokio::time::timeout(Duration::from_secs(180), response).await {
+            Ok(Ok(result)) => result,
+            Ok(Err(_)) | Err(_) => Err("La consulta tardó demasiado y la cancelé.".to_string()),
+        }
+    }
+
     async fn leave(&self, ctx: &Context, guild_id: GuildId) {
         let Some(current) = self.current.write().take() else {
             return;
@@ -2650,15 +2844,25 @@ impl EventHandler for Handler {
                 .description("Privately receive the summary of this channel's latest meeting")
                 .default_member_permissions(Permissions::CONNECT)
                 .dm_permission(false);
+            let ask_es = CreateCommand::new(ASK_COMMAND_ES)
+                .description("Pregunta sobre las reuniones en las que participaste")
+                .default_member_permissions(Permissions::CONNECT)
+                .dm_permission(false)
+                .add_option(ask_option(ASK_OPTION_ES, DiscordLocale::Spanish));
+            let ask_en = CreateCommand::new(ASK_COMMAND_EN)
+                .description("Ask about the meetings you took part in")
+                .default_member_permissions(Permissions::CONNECT)
+                .dm_permission(false)
+                .add_option(ask_option(ASK_OPTION_EN, DiscordLocale::English));
             if let Err(e) = guild_id
                 .set_commands(
                     &ctx.http,
-                    vec![record_es, record_en, summary_es, summary_en],
+                    vec![record_es, record_en, summary_es, summary_en, ask_es, ask_en],
                 )
                 .await
             {
                 let _ = self.tx.send(VoiceEvent::Warning(format!(
-                    "no pude registrar los comandos /grabar, /record, /resumen y /summary: {e}"
+                    "no pude registrar los comandos /grabar, /record, /resumen, /summary, /pregunta y /ask: {e}"
                 )));
             }
         }
@@ -2727,6 +2931,7 @@ impl EventHandler for Handler {
                 name if is_summary_command(name) => {
                     self.handle_summary_command(&ctx, &command).await
                 }
+                name if is_ask_command(name) => self.handle_ask_command(&ctx, &command).await,
                 _ => {}
             },
             Interaction::Component(component) => {
@@ -3258,6 +3463,7 @@ mod tests {
             avatar_url: None,
             color: color_for(1).to_string(),
             is_bot: false,
+            is_self: false,
         });
         meeting.upsert_speaker(Speaker {
             user_id: 2,
@@ -3268,6 +3474,7 @@ mod tests {
             avatar_url: None,
             color: color_for(2).to_string(),
             is_bot: false,
+            is_self: false,
         });
         meeting.push_utterance(Utterance {
             id: "u1".into(),
@@ -3364,6 +3571,55 @@ mod tests {
     }
 
     #[test]
+    fn ask_command_is_available_in_spanish_and_english() {
+        assert!(is_ask_command("pregunta"));
+        assert!(is_ask_command("ask"));
+        assert!(!is_ask_command("resumen"));
+    }
+
+    #[test]
+    fn an_answer_shows_the_meetings_it_rests_on_so_they_can_be_checked() {
+        let answer = kuali_core::MeetingAnswer {
+            text: "Se pospuso el despliegue hasta cerrar la migración.".into(),
+            citations: vec![kuali_core::AnswerCitation {
+                meeting_id: "m1".into(),
+                title: "Plan de migración".into(),
+                channel_name: "producto".into(),
+                started_at: chrono::Utc::now(),
+                start_ms: Some(750_000),
+            }],
+        };
+
+        let rendered = render_answer(
+            "¿qué pasó con el despliegue?",
+            &answer,
+            DiscordLocale::Spanish,
+        );
+
+        assert!(rendered.contains("¿qué pasó con el despliegue?"));
+        assert!(rendered.contains("Se pospuso el despliegue"));
+        assert!(rendered.contains("Plan de migración"));
+        assert!(rendered.contains("#producto"));
+        assert!(rendered.contains("12:30"));
+        // The scope is stated every time, so nobody reads an empty answer as
+        // "the team never discussed it".
+        assert!(rendered.contains("en las que estuviste"));
+    }
+
+    #[test]
+    fn an_answer_without_citations_still_states_its_scope() {
+        let answer = kuali_core::MeetingAnswer {
+            text: "Nobody settled that.".into(),
+            citations: Vec::new(),
+        };
+
+        let rendered = render_answer("what happened?", &answer, DiscordLocale::English);
+
+        assert!(!rendered.contains("From these meetings"));
+        assert!(rendered.contains("meetings on this server that you were in"));
+    }
+
+    #[test]
     fn a_restricted_meeting_only_opens_for_the_people_who_were_in_the_call() {
         let mut meeting = completed_meeting();
         meeting.upsert_speaker(Speaker {
@@ -3375,6 +3631,7 @@ mod tests {
             avatar_url: None,
             color: color_for(3).to_string(),
             is_bot: true,
+            is_self: false,
         });
 
         assert!(is_meeting_participant(&meeting, UserId::new(1)));
