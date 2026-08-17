@@ -7,6 +7,7 @@ members = [
     "crates/kuali-discord",
     "crates/kuali-meet",
     "crates/kuali-store",
+    "crates/kuali-memory",
     "crates/kuali-engine",
     "src-tauri",
 ]
@@ -25,6 +26,7 @@ kuali-stt = { path = "crates/kuali-stt" }
 kuali-discord = { path = "crates/kuali-discord" }
 kuali-meet = { path = "crates/kuali-meet" }
 kuali-store = { path = "crates/kuali-store" }
+kuali-memory = { path = "crates/kuali-memory" }
 kuali-engine = { path = "crates/kuali-engine" }
 
 anyhow = "1"

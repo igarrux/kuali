@@ -25,4 +25,4 @@ pub use provider::{
     CompletionRequest, LlmError, LlmFailureKind, LlmProvider, ProviderInfo, ProviderKind,
     ProviderStatus,
 };
-pub use summarize::{parse_summary, summarize, system_prompt, user_prompt};
+pub use summarize::{language_rule, parse_summary, summarize, system_prompt, user_prompt};

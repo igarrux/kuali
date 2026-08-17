@@ -1,0 +1,27 @@
+[package]
+name = "kuali-memory"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+kuali-core.workspace = true
+kuali-llm.workspace = true
+kuali-store.workspace = true
+
+chrono.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tracing.workspace = true
+
+# `bundled` compiles SQLite from source so the index behaves identically on
+# macOS and Windows instead of inheriting whatever the system ships.
+rusqlite = { version = "0.37", features = ["bundled"] }
+
+# ONNX Runtime links statically on the platforms Kuali ships, so the embedding
+# model needs no extra library beside the signed binary.
+ort = "2.0.0-rc.13"
+ndarray = "0.17"
+tokenizers = { version = "0.23", default-features = false, features = ["onig"] }

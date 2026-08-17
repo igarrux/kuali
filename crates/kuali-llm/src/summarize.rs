@@ -108,7 +108,7 @@ Return a JSON object only, with no text around it and without wrapping it in a c
 /// follows the meeting itself: the notes and tasks quote what people actually
 /// said, so translating them costs more fidelity than it buys. Any other value
 /// is an explicit request from the user and overrides the meeting.
-fn language_rule(language: &str) -> String {
+pub fn language_rule(language: &str) -> String {
     let choice = language.trim();
     let automatic = choice.is_empty()
         || ["auto", "automatic", "automático", "automatico"]
