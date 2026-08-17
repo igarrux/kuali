@@ -19,6 +19,7 @@ kuali-discord.workspace = true
 kuali-engine.workspace = true
 kuali-llm.workspace = true
 kuali-stt.workspace = true
+kuali-memory.workspace = true
 kuali-store.workspace = true
 
 serde.workspace = true

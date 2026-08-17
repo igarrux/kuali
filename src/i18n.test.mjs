@@ -305,10 +305,46 @@ test("Discord authorization actions disappear after the bot connects", () => {
   assert.match(app, /classList\.toggle\("guide-success-note", discordReady\)/);
 });
 
-test("finishing setup resets both guides before returning home", () => {
+test("answers are rendered as markdown without ever becoming markup", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const renderer = app.slice(
+    app.indexOf("function renderMarkdown("),
+    app.indexOf("function resizeAskField("),
+  );
+
+  // The answer is written by a model that just read meeting transcripts, and a
+  // transcript is untrusted: anyone in a call can say anything. Assigning it as
+  // HTML would turn a spoken sentence into markup.
+  assert.doesNotMatch(renderer, /innerHTML|outerHTML|insertAdjacentHTML/);
+  // Text always arrives through textContent or a text node.
+  assert.match(renderer, /createTextNode/);
+  assert.match(renderer, /textContent = /);
+  // The subset the prompt asks for is the subset that is rendered.
+  for (const tag of ["ul", "ol", "li", "strong", "em", "code", "p"]) {
+    assert.match(renderer, new RegExp(`"${tag}"`), `missing support for <${tag}>`);
+  }
+});
+
+test("configuration keys use the kebab-case the engine actually reads", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  // These config sections serialize with `rename_all = "kebab-case"` in Rust,
+  // and serde drops an unknown field in silence instead of rejecting it. A
+  // camelCase key therefore fails invisibly: the setting simply never takes
+  // effect, with no error anywhere to explain why.
+  const sections = "llm|discord|whisper|application|meet|integrations";
+  const camelCase = [
+    ...app.matchAll(new RegExp(`\\b(?:config|c|cfg)\\.(?:${sections})\\.([a-z]+[A-Z]\\w*)`, "g")),
+  ].map((match) => match[1]);
+
+  assert.deepEqual(camelCase, [], `use kebab-case and bracket access instead`);
+  // The switch that gates questions is the one this test was written for.
+  assert.match(app, /config\.llm\["meeting-questions"\] = true/);
+});
+
+test("finishing setup resets both guides and recommends questions once", () => {
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   const closeGuide = app.slice(
-    app.indexOf("async function closeCompletedGuide()"),
+    app.indexOf("async function closeCompletedGuide("),
     app.indexOf("async function finishInitialSetup()"),
   );
   const finishSetup = app.slice(
@@ -318,6 +354,45 @@ test("finishing setup resets both guides before returning home", () => {
 
   assert.match(closeGuide, /state\.discordGuideStep = 0/);
   assert.match(closeGuide, /state\.meetGuideStep = 0/);
-  assert.match(closeGuide, /await goHome\(\)/);
-  assert.equal((finishSetup.match(/return closeCompletedGuide\(\)/g) ?? []).length, 2);
+  // Home stays the default landing place; setup passes a destination only to
+  // avoid landing home and immediately jumping elsewhere.
+  assert.match(closeGuide, /destination = goHome/);
+  assert.match(closeGuide, /await destination\(\)/);
+
+  // Both paths still leave through the same door.
+  assert.equal((finishSetup.match(/closeCompletedGuide\(/g) ?? []).length, 2);
+  // The offer is shown, never accepted on the user's behalf.
+  assert.match(finishSetup, /questions\.enabled \? showAsk : goHome/);
+  assert.doesNotMatch(finishSetup, /prepare_questions/);
+});
+
+test("no element id is claimed twice", () => {
+  const markup = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const seen = new Map();
+  const repeated = [];
+  for (const [, id] of markup.matchAll(/\sid="([^"]+)"/g)) {
+    if (seen.has(id)) repeated.push(id);
+    seen.set(id, true);
+  }
+
+  // `$` resolves an id to whichever element comes first in the document, so a
+  // second element claiming a taken id silently steals every listener and every
+  // `disabled` toggle written for the first one.
+  assert.deepEqual([...new Set(repeated)], []);
+});
+
+test("asking is reachable from the top bar, not the sidebar", () => {
+  const markup = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const topbar = markup.slice(
+    markup.indexOf('<div class="topbar-actions">'),
+    markup.indexOf("</header>"),
+  );
+  const sidebarNav = markup.slice(
+    markup.indexOf('<nav class="app-nav"'),
+    markup.indexOf("</nav>"),
+  );
+
+  assert.match(topbar, /id="nav-ask"/);
+  assert.match(topbar, /#i-sparkles/);
+  assert.doesNotMatch(sidebarNav, /nav-ask/);
 });

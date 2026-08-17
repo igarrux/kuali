@@ -88,6 +88,9 @@
       </div>
 
       <div class="topbar-actions">
+        <button type="button" class="subtle compact topbar-ask" id="nav-ask" title="Preguntar a la IA sobre tus reuniones">
+          <svg class="icon" aria-hidden="true"><use href="#i-sparkles"/></svg> <span>Preguntar</span>
+        </button>
         <button type="button" class="subtle compact" id="btn-guide">
           <svg class="icon" aria-hidden="true"><use href="#i-help"/></svg> <span>Guía</span>
         </button>
@@ -340,6 +343,67 @@
         </div>
 
         <!-- Tasks across all meetings -->
+        <div class="pane ask-pane" id="pane-ask" hidden>
+          <div class="page-head">
+            <div>
+              <span class="eyebrow">Memoria de reuniones</span>
+              <h2>Preguntar</h2>
+              <p>Pregunta en lenguaje natural sobre todo lo que Kuali ha escuchado.</p>
+            </div>
+          </div>
+
+          <section class="ask-gate" id="ask-gate" hidden>
+            <h3 id="ask-gate-title">Activa las preguntas sobre reuniones</h3>
+            <p id="ask-gate-copy">
+              Para responder bien, Kuali necesita un modelo que entiende el significado
+              de lo que se dijo, no solo las palabras exactas. Así encuentra «cortafuegos»
+              cuando preguntas por «firewall».
+            </p>
+            <ul class="ask-gate-facts">
+              <li><strong id="ask-gate-size">128 MB</strong> de descarga, una sola vez</li>
+              <li><span id="ask-gate-work">Sin reuniones que indexar</span></li>
+              <li>Todo ocurre en tu equipo; el modelo no envía nada a ningún sitio</li>
+            </ul>
+            <p class="ask-gate-note" id="ask-gate-note"></p>
+            <div class="ask-gate-actions">
+              <button type="button" class="primary compact" id="btn-enable-questions">
+                Descargar y activar
+              </button>
+            </div>
+            <div class="ask-progress" id="ask-progress" hidden>
+              <div class="ask-progress-bar"><span id="ask-progress-fill"></span></div>
+              <p class="ask-progress-label" id="ask-progress-label"></p>
+            </div>
+          </section>
+
+          <div class="ask-thread" id="ask-thread" role="log" aria-live="polite" data-i18n-skip></div>
+
+          <div class="ask-suggestions" id="ask-suggestions">
+            <p>Prueba con algo así:</p>
+            <ul>
+              <li><button type="button" class="ask-suggestion">¿Qué quedó pendiente de la última reunión?</button></li>
+              <li><button type="button" class="ask-suggestion">¿Qué decidimos sobre el despliegue?</button></li>
+              <li><button type="button" class="ask-suggestion">¿De qué se habló esta semana?</button></li>
+            </ul>
+          </div>
+
+          <form class="ask-composer" id="ask-form">
+            <label class="sr-only" for="ask-question">Tu pregunta</label>
+            <textarea
+              id="ask-question"
+              name="ask-question"
+              rows="1"
+              placeholder="Pregunta sobre tus reuniones…"
+              maxlength="300"
+              autocomplete="off"
+            ></textarea>
+            <button type="submit" class="primary compact" id="btn-ask">Preguntar</button>
+          </form>
+          <p class="ask-scope" id="ask-status" role="status" aria-live="polite">
+            Busca en toda tu biblioteca local.
+          </p>
+        </div>
+
         <div class="pane tasks-pane" id="pane-tasks" hidden>
           <div class="page-head">
             <div>
@@ -1128,6 +1192,24 @@
               </label>
 
               <div id="summary-settings-details">
+              <div class="settings-subsection">
+                <div class="subsection-head">
+                  <h4>Quién eres</h4>
+                  <p>Cómo apareces en las reuniones, para que Kuali entienda «¿qué me quedó pendiente?».</p>
+                </div>
+                <label class="field">
+                  <span>Tus nombres en las reuniones</span>
+                  <input
+                    type="text"
+                    id="cfg-display-names"
+                    name="display-names"
+                    placeholder="Juan Sebastián, juansebas"
+                    autocomplete="off"
+                  />
+                  <small>Separa varios con comas. En Discord Kuali ya sabe quién eres; esto hace falta para Meet, Teams y Zoom, donde no hay ninguna cuenta que comprobar.</small>
+                </label>
+              </div>
+
               <div class="settings-subsection">
                 <div class="subsection-head">
                   <h4>Proveedor</h4>

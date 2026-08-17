@@ -11,6 +11,52 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Navegación principal": "Main navigation",
   Inicio: "Home",
   Tareas: "Tasks",
+  Preguntar: "Ask",
+  "Memoria de reuniones": "Meeting memory",
+  "Pregunta en lenguaje natural sobre todo lo que Kuali ha escuchado.":
+    "Ask in plain language about everything Kuali has listened to.",
+  "Tu pregunta": "Your question",
+  "Busca en toda tu biblioteca local.": "Searches your entire local library.",
+  "Pregunta sobre tus reuniones…": "Ask about your meetings\u2026",
+  "Prueba con algo así:": "Try something like:",
+  "¿Qué quedó pendiente de la última reunión?":
+    "What is still pending from the last meeting?",
+  "¿Qué decidimos sobre el despliegue?": "What did we decide about the rollout?",
+  "¿De qué se habló esta semana?": "What was discussed this week?",
+  "De estas reuniones": "From these meetings",
+  "Escribe una pregunta un poco más concreta.": "Write a slightly more specific question.",
+  "Buscando en tus reuniones…": "Searching your meetings…",
+  "No encontré nada sobre eso en tus reuniones.":
+    "I found nothing about that in your meetings.",
+  "Quién eres": "Who you are",
+  "Cómo apareces en las reuniones, para que Kuali entienda «¿qué me quedó pendiente?».":
+    "How you appear in meetings, so Kuali understands \u201cwhat is still pending for me?\u201d.",
+  "Tus nombres en las reuniones": "Your names in meetings",
+  "Juan Sebastián, juansebas": "Alex Rivera, alexr",
+  "Separa varios con comas. En Discord Kuali ya sabe quién eres; esto hace falta para Meet, Teams y Zoom, donde no hay ninguna cuenta que comprobar.":
+    "Separate several with commas. On Discord Kuali already knows who you are; this is what makes it work on Meet, Teams and Zoom, where there is no account to check.",
+  "Activa las preguntas sobre reuniones": "Turn on questions about meetings",
+  "Termina de preparar las preguntas": "Finish preparing questions",
+  "Para responder bien, Kuali necesita un modelo que entiende el significado de lo que se dijo, no solo las palabras exactas. Así encuentra «cortafuegos» cuando preguntas por «firewall».":
+    "To answer well, Kuali needs a model that understands what was meant, not only the exact words. That is how it finds \u201ccortafuegos\u201d when you ask about \u201cfirewall\u201d.",
+  "de descarga, una sola vez": "to download, once",
+  "Sin reuniones que indexar": "No meetings to index",
+  "Indexar {n} fragmentos de tus reuniones actuales":
+    "Index {n} passages from your existing meetings",
+  "Todo ocurre en tu equipo; el modelo no envía nada a ningún sitio":
+    "Everything happens on your computer; the model sends nothing anywhere",
+  "La indexación tarda aproximadamente {time}. Puedes seguir usando Kuali mientras ocurre.":
+    "Indexing takes about {time}. You can keep using Kuali while it runs.",
+  "Descargar y activar": "Download and turn on",
+  "Indexar y activar": "Index and turn on",
+  "Preparando…": "Preparing\u2026",
+  "Descargando el modelo… {done} de {total}": "Downloading the model\u2026 {done} of {total}",
+  "Indexando {done} de {total} fragmentos · quedan {time}":
+    "Indexing {done} of {total} passages \u00b7 {time} left",
+  "Indexando {done} de {total} fragmentos": "Indexing {done} of {total} passages",
+  "menos de un minuto": "less than a minute",
+  "un minuto": "one minute",
+  "{n} minutos": "{n} minutes",
   Ahora: "Now",
   "En vivo": "Live",
   Biblioteca: "Library",

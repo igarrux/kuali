@@ -318,6 +318,12 @@ fn main() {
                 }
             });
 
+            // Meetings recorded before the index existed — or while it was
+            // missing — become searchable without the user doing anything. It
+            // runs in the background because a large library takes a moment and
+            // nothing else waits on it.
+            engine.sync_memory();
+
             // The browser receiver must be ready as soon as the window appears.
             // Preparing or moving models on an external drive must not delay the
             // local port.
@@ -367,6 +373,10 @@ fn main() {
             commands::list_meetings,
             commands::search_meetings,
             commands::load_meeting,
+            commands::ask_meetings,
+            commands::questions_status,
+            commands::prepare_questions,
+            commands::discard_question_data,
             commands::list_tasks,
             commands::open_main_window,
             commands::close_tray_panel,

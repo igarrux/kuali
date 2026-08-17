@@ -183,6 +183,94 @@ pub fn load_meeting(engine: State<'_, Engine>, id: String) -> Result<Meeting, St
     engine.load_meeting(&id).map_err(fail)
 }
 
+/// Answer to a question about past meetings, shaped for the interface.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingAnswerView {
+    /// `false` when no meeting discusses the question, so the interface can say
+    /// that plainly instead of showing an empty answer.
+    pub found: bool,
+    pub text: String,
+    pub citations: Vec<AnswerCitationView>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AnswerCitationView {
+    pub meeting_id: String,
+    pub title: String,
+    pub channel_name: String,
+    pub started_at: String,
+    /// Transcript position, so the interface can open the meeting at the moment
+    /// the claim came from.
+    pub start_ms: Option<u64>,
+}
+
+/// What still stands between the user and asking a question.
+#[tauri::command]
+pub fn questions_status(engine: State<'_, Engine>) -> kuali_engine::QuestionsStatus {
+    engine.questions_status()
+}
+
+/// Downloads the embedding model and embeds the existing library.
+///
+/// Long-running by nature; progress arrives as `QuestionSetupProgress` events
+/// so the interface can show a real bar and a measured estimate rather than a
+/// spinner.
+#[tauri::command]
+pub async fn prepare_questions(engine: State<'_, Engine>) -> Result<(), String> {
+    engine.prepare_questions().await.map_err(fail)
+}
+
+/// Frees the model and the vectors when the feature is turned off.
+#[tauri::command]
+pub fn discard_question_data(engine: State<'_, Engine>) -> Result<u64, String> {
+    engine.discard_question_data().map_err(fail)
+}
+
+/// Asks about past meetings across the whole library.
+///
+/// Unlike the Discord command, this reaches every meeting. Kuali runs on the
+/// machine that recorded them, for the person who owns them, so there is no
+/// second party to protect here — the participant restriction exists because
+/// Discord has other people in it.
+#[tauri::command]
+pub async fn ask_meetings(
+    engine: State<'_, Engine>,
+    question: String,
+) -> Result<MeetingAnswerView, String> {
+    let answer = engine
+        .ask(
+            kuali_memory::Audience::Everything,
+            question.trim(),
+            engine.local_asker(),
+        )
+        .await
+        .map_err(fail)?;
+
+    Ok(match answer {
+        kuali_memory::Answer::NothingFound => MeetingAnswerView {
+            found: false,
+            text: String::new(),
+            citations: Vec::new(),
+        },
+        kuali_memory::Answer::Answered { text, citations } => MeetingAnswerView {
+            found: true,
+            text,
+            citations: citations
+                .into_iter()
+                .map(|citation| AnswerCitationView {
+                    meeting_id: citation.meeting_id,
+                    title: citation.meeting_title,
+                    channel_name: citation.channel_name,
+                    started_at: citation.started_at.to_rfc3339(),
+                    start_ms: citation.start_ms,
+                })
+                .collect(),
+        },
+    })
+}
+
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskListItem {

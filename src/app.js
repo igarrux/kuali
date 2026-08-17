@@ -88,6 +88,14 @@ const state = {
   /** Selected provider ID; empty means automatic selection. */
   selectedProvider: "",
   libraryQuery: "",
+  /** Prevents a second question while one is still being answered. */
+  asking: false,
+  /** Readiness of the meeting-questions feature, or null before it is known. */
+  questions: null,
+  /** True while the model is downloading or the library is being embedded. */
+  preparingQuestions: false,
+  /** When the current preparation began, used to measure the real rate. */
+  questionSetupStartedAt: 0,
   /** Tags already in use, newest counts first, for suggestions. */
   tagCatalog: [],
   /** Folders the user created, empty ones included. */
@@ -628,7 +636,7 @@ function updateElapsed() {
 // --- panes ----------------------------------------------------------------
 
 function showPane(name) {
-  for (const pane of ["setup", "idle", "tasks", "guide", "meeting"]) {
+  for (const pane of ["setup", "idle", "tasks", "ask", "guide", "meeting"]) {
     $(`pane-${pane}`).hidden = pane !== name;
   }
   state.currentPane = name;
@@ -636,7 +644,9 @@ function showPane(name) {
   $("sidebar-library-content").hidden = !showingLibrary;
   $("app-layout").classList.toggle("focus-section", !showingLibrary);
   const active = ["idle", "meeting"].includes(name) ? "home" : name;
-  for (const [id, view] of [["nav-home", "home"], ["nav-tasks", "tasks"]]) {
+  // Asking lives in the top bar rather than the sidebar, but it is still a
+  // destination and marks itself as the current one.
+  for (const [id, view] of [["nav-home", "home"], ["nav-tasks", "tasks"], ["nav-ask", "ask"]]) {
     const button = $(id);
     const selected = view === active;
     button.classList.toggle("active", selected);
@@ -659,6 +669,339 @@ async function showTasks() {
   renderStatus();
   history.replaceState(null, "", "#tasks");
   await refreshTasks();
+}
+
+async function showAsk() {
+  state.viewing = null;
+  showPane("ask");
+  renderStatus();
+  history.replaceState(null, "", "#ask");
+  await refreshQuestionsStatus();
+  if (state.questions?.ready) $("ask-question").focus();
+}
+
+/// Shows either the gate or the question box, never both.
+///
+/// A half-ready state is still the gate: asking with the model missing, or with
+/// passages left to embed, would answer from part of the library and look like
+/// the meeting was never recorded.
+async function refreshQuestionsStatus() {
+  try {
+    state.questions = await invoke("questions_status");
+  } catch {
+    return;
+  }
+  const status = state.questions;
+  const ready = status.ready && !state.preparingQuestions;
+  $("ask-gate").hidden = ready;
+  $("ask-form").hidden = !ready;
+  $("ask-status").hidden = !ready;
+  // Suggestions belong to an empty thread only; once someone has asked, the
+  // thread itself is the better prompt for what to ask next.
+  $("ask-suggestions").hidden = !ready || $("ask-thread").childElementCount > 0;
+  renderQuestionGate();
+}
+
+function renderQuestionGate() {
+  const status = state.questions;
+  if (!status) return;
+
+  const pending = status.pendingPassages;
+  $("ask-gate-work").textContent = pending
+    ? t("Indexar {n} fragmentos de tus reuniones actuales", { n: pending })
+    : t("Sin reuniones que indexar");
+
+  // Before anything is measured this is a conservative guess, and it says so.
+  // Once indexing starts the label is replaced by the observed rate.
+  const note = $("ask-gate-note");
+  if (pending) {
+    note.textContent = t(
+      "La indexación tarda aproximadamente {time}. Puedes seguir usando Kuali mientras ocurre.",
+      { time: humanDuration(Math.ceil((pending * 25) / 1000)) },
+    );
+  } else {
+    note.textContent = "";
+  }
+
+  $("ask-gate-title").textContent = status.modelReady
+    ? t("Termina de preparar las preguntas")
+    : t("Activa las preguntas sobre reuniones");
+  $("btn-enable-questions").textContent = status.modelReady
+    ? t("Indexar y activar")
+    : t("Descargar y activar");
+  $("btn-enable-questions").disabled = Boolean(state.preparingQuestions);
+}
+
+function humanDuration(seconds) {
+  if (seconds < 60) return t("menos de un minuto");
+  const minutes = Math.round(seconds / 60);
+  return minutes === 1 ? t("un minuto") : t("{n} minutos", { n: minutes });
+}
+
+/// Turns the feature on: saves the preference, then downloads and indexes.
+async function enableQuestions() {
+  if (state.preparingQuestions) return;
+  state.preparingQuestions = true;
+  state.questionSetupStartedAt = 0;
+  $("btn-enable-questions").disabled = true;
+  $("ask-progress").hidden = false;
+  $("ask-progress-label").textContent = t("Preparando…");
+
+  try {
+    // Saved before the work starts so an interrupted download resumes on the
+    // next launch instead of being forgotten.
+    // Kebab-case, like every other key in this section: the Rust config
+    // serializes that way, and an unknown field is dropped in silence rather
+    // than rejected, so a camelCase slip here is invisible until the feature
+    // never turns on.
+    const config = await invoke("get_config");
+    config.llm["meeting-questions"] = true;
+    await invoke("set_config", { config });
+    state.config = config;
+
+    await invoke("prepare_questions");
+  } catch (error) {
+    $("ask-progress-label").textContent = String(error);
+    state.preparingQuestions = false;
+    await refreshQuestionsStatus();
+    return;
+  }
+  state.preparingQuestions = false;
+  $("ask-progress").hidden = true;
+  await refreshQuestionsStatus();
+}
+
+/// Renders progress, deriving the remaining time from the rate actually
+/// observed on this machine rather than from a constant.
+function renderQuestionProgress(event) {
+  if (!state.questionSetupStartedAt) state.questionSetupStartedAt = Date.now();
+  $("ask-progress").hidden = false;
+
+  const total = event.total ?? 0;
+  const fraction = total ? Math.min(1, event.done / total) : 0;
+  $("ask-progress-fill").style.width = `${Math.round(fraction * 100)}%`;
+
+  if (event.stage === "downloading") {
+    $("ask-progress-label").textContent = t("Descargando el modelo… {done} de {total}", {
+      done: humanBytes(event.done),
+      total: humanBytes(total || event.done),
+    });
+    return;
+  }
+
+  const elapsed = (Date.now() - state.questionSetupStartedAt) / 1000;
+  const remaining =
+    event.done > 0 && total > event.done
+      ? humanDuration(Math.ceil((elapsed / event.done) * (total - event.done)))
+      : null;
+  $("ask-progress-label").textContent = remaining
+    ? t("Indexando {done} de {total} fragmentos · quedan {time}", {
+        done: event.done,
+        total,
+        time: remaining,
+      })
+    : t("Indexando {done} de {total} fragmentos", { done: event.done, total });
+}
+
+/// Asks the engine and appends the exchange to the thread.
+///
+/// Each question keeps its answer beneath it instead of replacing the previous
+/// one: following up is the normal way people use this, and losing what was
+/// just answered makes the second question harder to phrase.
+async function submitQuestion(event) {
+  event?.preventDefault();
+  const field = $("ask-question");
+  const question = field.value.trim();
+  if (question.length < 3 || state.asking) return;
+
+  state.asking = true;
+  $("btn-ask").disabled = true;
+  field.value = "";
+  resizeAskField();
+  $("ask-suggestions").hidden = true;
+
+  const turn = appendAskTurn(question);
+  try {
+    const answer = await invoke("ask_meetings", { question });
+    if (answer.found) {
+      fillAskTurn(turn, answer.text, answer.citations);
+    } else {
+      fillAskTurn(turn, t("No encontré nada sobre eso en tus reuniones."), []);
+    }
+  } catch (error) {
+    fillAskTurn(turn, String(error), [], { markdown: false });
+    turn.classList.add("failed");
+  } finally {
+    state.asking = false;
+    $("btn-ask").disabled = false;
+    field.focus();
+  }
+}
+
+/// Adds the question with a placeholder answer, and returns the turn so the
+/// answer can replace the placeholder in place once it arrives.
+function appendAskTurn(question) {
+  const turn = document.createElement("article");
+  turn.className = "ask-turn";
+
+  const asked = document.createElement("p");
+  asked.className = "ask-turn-question";
+  asked.textContent = question;
+
+  const answer = document.createElement("div");
+  answer.className = "ask-turn-answer pending";
+  answer.textContent = t("Buscando en tus reuniones…");
+
+  turn.append(asked, answer);
+  $("ask-thread").append(turn);
+  turn.scrollIntoView({ behavior: "smooth", block: "start" });
+  return turn;
+}
+
+function fillAskTurn(turn, text, citations, { markdown = true } = {}) {
+  const answer = turn.querySelector(".ask-turn-answer");
+  answer.classList.remove("pending");
+  answer.replaceChildren();
+
+  const body = document.createElement("div");
+  body.className = "ask-turn-text";
+  // An error message is Kuali's own words and never Markdown; treating it as
+  // such would mangle a path or a quoted value inside it.
+  if (markdown) body.append(renderMarkdown(text));
+  else body.textContent = text;
+  answer.append(body);
+
+  if (citations?.length) answer.append(renderCitations(citations));
+}
+
+/// Every citation opens its meeting, because an answer about what was decided
+/// is only useful if the reader can go and read the call it came from.
+function renderCitations(citations) {
+  const container = document.createElement("div");
+  container.className = "ask-citations";
+
+  const heading = document.createElement("h3");
+  heading.textContent = t("De estas reuniones");
+
+  const list = document.createElement("ul");
+  list.append(
+    ...citations.map((citation) => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "ask-citation";
+      const when = new Date(citation.startedAt).toLocaleDateString();
+      const at = citation.startMs != null ? ` \u00b7 ${timestamp(citation.startMs)}` : "";
+      button.textContent = `${citation.title} \u2014 #${citation.channelName} \u00b7 ${when}${at}`;
+      button.addEventListener("click", () => openMeeting(citation.meetingId));
+      item.append(button);
+      return item;
+    }),
+  );
+
+  container.append(heading, list);
+  return container;
+}
+
+/// Renders the small Markdown subset the answer prompt asks for.
+///
+/// Written by hand and building DOM nodes rather than assigning HTML, because
+/// the text comes from a model that just read meeting transcripts. A transcript
+/// is untrusted input — someone can say anything in a call — so nothing here
+/// ever becomes markup by accident.
+///
+/// Supported: paragraphs, bullet and numbered lists, **bold**, *italic* and
+/// `inline code`. Everything else is shown as the literal text it is.
+function renderMarkdown(source) {
+  const fragment = document.createDocumentFragment();
+  const lines = String(source ?? "").replace(/\r\n?/g, "\n").split("\n");
+  let index = 0;
+
+  while (index < lines.length) {
+    if (!lines[index].trim()) {
+      index += 1;
+      continue;
+    }
+
+    const bullet = /^\s*[-*+]\s+/;
+    const numbered = /^\s*\d+[.)]\s+/;
+    const isBullet = bullet.test(lines[index]);
+    const isNumbered = !isBullet && numbered.test(lines[index]);
+
+    if (isBullet || isNumbered) {
+      const list = document.createElement(isBullet ? "ul" : "ol");
+      const pattern = isBullet ? bullet : numbered;
+      while (index < lines.length && pattern.test(lines[index])) {
+        const item = document.createElement("li");
+        item.append(...renderInline(lines[index].replace(pattern, "")));
+        list.append(item);
+        index += 1;
+      }
+      fragment.append(list);
+      continue;
+    }
+
+    // Everything else is a paragraph, running until a blank line or a list.
+    const paragraph = document.createElement("p");
+    const collected = [];
+    while (
+      index < lines.length &&
+      lines[index].trim() &&
+      !bullet.test(lines[index]) &&
+      !numbered.test(lines[index])
+    ) {
+      collected.push(lines[index].trim());
+      index += 1;
+    }
+    paragraph.append(...renderInline(collected.join(" ")));
+    fragment.append(paragraph);
+  }
+
+  return fragment;
+}
+
+/// Splits one line into text and the three inline marks the prompt allows.
+///
+/// Code is matched first: backticks win over emphasis, so `**not bold**` inside
+/// them stays literal, which is what someone reading a command name expects.
+function renderInline(text) {
+  const pattern = /`([^`]+)`|\*\*([^*]+)\*\*|__([^_]+)__|\*([^*]+)\*|_([^_]+)_/g;
+  const nodes = [];
+  let cursor = 0;
+
+  for (const match of text.matchAll(pattern)) {
+    if (match.index > cursor) {
+      nodes.push(document.createTextNode(text.slice(cursor, match.index)));
+    }
+    const [, code, boldStars, boldUnders, italicStar, italicUnder] = match;
+    const bold = boldStars ?? boldUnders;
+    const italic = italicStar ?? italicUnder;
+
+    let element;
+    if (code !== undefined) {
+      element = document.createElement("code");
+      element.textContent = code;
+    } else if (bold !== undefined) {
+      element = document.createElement("strong");
+      element.textContent = bold;
+    } else {
+      element = document.createElement("em");
+      element.textContent = italic;
+    }
+    nodes.push(element);
+    cursor = match.index + match[0].length;
+  }
+
+  if (cursor < text.length) nodes.push(document.createTextNode(text.slice(cursor)));
+  return nodes;
+}
+
+/// Grows the field with its content so a long question is fully visible without
+/// a scrollbar, and without a resize handle the user has to drag.
+function resizeAskField() {
+  const field = $("ask-question");
+  field.style.height = "auto";
+  field.style.height = `${Math.min(field.scrollHeight, 160)}px`;
 }
 
 async function showGuide() {
@@ -3806,10 +4149,15 @@ async function cancelModelDownload() {
   }
 }
 
-async function closeCompletedGuide() {
+/// Resets both guides and lands somewhere sensible.
+///
+/// The destination is a parameter so finishing setup for the first time can go
+/// straight to the questions offer instead of landing home and then jumping,
+/// which reads as a glitch.
+async function closeCompletedGuide(destination = goHome) {
   state.discordGuideStep = 0;
   state.meetGuideStep = 0;
-  await goHome();
+  await destination();
   return true;
 }
 
@@ -3838,7 +4186,14 @@ async function finishInitialSetup() {
     state.config = config;
   }
   localStorage.setItem("kuali.onboarding.completed", "true");
-  return closeCompletedGuide();
+
+  // Recommending questions here is the right moment: the person has just
+  // decided what Kuali is for. The offer states its cost and waits — nothing is
+  // downloaded until they press the button on that screen. A failed status
+  // check simply lands home, because it is no reason to interrupt a finished
+  // setup.
+  const questions = await invoke("questions_status").catch(() => null);
+  return closeCompletedGuide(questions && !questions.enabled ? showAsk : goHome);
 }
 
 function renderDiscordGuideStep({ focus = false } = {}) {
@@ -4084,6 +4439,15 @@ async function saveDiscordFromGuide() {
 
 function handleEvent(event) {
   switch (event.type) {
+    case "questionSetupProgress":
+      renderQuestionProgress(event);
+      break;
+    case "questionSetupFinished":
+      state.preparingQuestions = false;
+      if (event.error) $("ask-progress-label").textContent = String(event.error);
+      else $("ask-progress").hidden = true;
+      refreshQuestionsStatus().catch(() => {});
+      break;
     case "statusChanged":
       state.status = event.status;
       // Neither draining audio nor summarizing means nothing is left in flight,
@@ -4461,6 +4825,7 @@ async function openSettings() {
   const outputLanguage = (c.llm["output-language"] ?? "").trim();
   $("cfg-output-language").value = outputLanguage.toLowerCase() === "auto" ? "" : outputLanguage;
   $("cfg-summarize").checked = c.llm["summarize-on-leave"] !== false;
+  $("cfg-display-names").value = (c.application?.["display-names"] ?? []).join(", ");
   updateSummarySettingsVisibility();
   $("cfg-ui-language").value = c.application?.language ?? "auto";
   $("cfg-autostart").checked = state.autostartEnabled;
@@ -5352,6 +5717,10 @@ async function saveSettings() {
   c.llm["model-override"] = null;
   c.llm["output-language"] = $("cfg-output-language").value.trim() || "auto";
   c.llm["summarize-on-leave"] = $("cfg-summarize").checked;
+  c.application["display-names"] = $("cfg-display-names")
+    .value.split(",")
+    .map((name) => name.trim())
+    .filter(Boolean);
 
   c.application ??= {};
   c.application.language = $("cfg-ui-language").value;
@@ -5820,6 +6189,25 @@ function wireUp() {
   $("btn-home").addEventListener("click", goHome);
   $("nav-home").addEventListener("click", goHome);
   $("nav-tasks").addEventListener("click", showTasks);
+  $("nav-ask").addEventListener("click", showAsk);
+  $("btn-enable-questions").addEventListener("click", enableQuestions);
+  $("ask-form").addEventListener("submit", submitQuestion);
+  // Enter sends the question; Shift+Enter keeps a line break, which is what a
+  // multi-line field is expected to do.
+  $("ask-question").addEventListener("keydown", (event) => {
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      $("ask-form").requestSubmit();
+    }
+  });
+  $("ask-question").addEventListener("input", resizeAskField);
+  for (const suggestion of document.querySelectorAll(".ask-suggestion")) {
+    suggestion.addEventListener("click", () => {
+      $("ask-question").value = suggestion.textContent.trim();
+      resizeAskField();
+      $("ask-form").requestSubmit();
+    });
+  }
   $("btn-guide").addEventListener("click", showGuide);
   $("btn-home-all-tasks").addEventListener("click", showTasks);
   $("btn-finish-guide").addEventListener("click", finishInitialSetup);
@@ -6314,6 +6702,7 @@ async function boot() {
   await listen("kuali://navigate", (event) => {
     const destination = String(event.payload ?? "");
     if (destination === "tasks") showTasks();
+    else if (destination === "ask") showAsk();
     else if (destination === "guide") showGuide();
     else if (destination === "settings") openSettings();
     else if (destination.startsWith("meeting=")) openMeeting(destination.slice(8));
@@ -6367,6 +6756,7 @@ async function boot() {
   const destination = location.hash.slice(1);
   if (!initialSetupCompleted()) await showGuide();
   else if (destination === "tasks") await showTasks();
+  else if (destination === "ask") await showAsk();
   else if (destination === "guide") await showGuide();
   else if (destination.startsWith("meeting=")) await openMeeting(decodeURIComponent(destination.slice(8)));
   else await renderRoot();
