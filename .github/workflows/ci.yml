@@ -85,11 +85,12 @@ jobs:
       #
       # Updater artifacts are switched off because signing them needs the
       # release key, which a pull request from a fork cannot reach. Every real
-      # release signs them, so nothing here goes unchecked.
+      # release signs them, so nothing here goes unchecked. The config path is
+      # resolved from the repository root, not from `src-tauri`.
       - name: Build the bundle without publishing it
         uses: tauri-apps/tauri-action@v0
         with:
-          args: --target aarch64-apple-darwin --config tauri.ci.conf.json
+          args: --target aarch64-apple-darwin --config src-tauri/tauri.ci.conf.json
 
   interface:
     name: Desktop interface
