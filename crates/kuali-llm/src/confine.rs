@@ -154,7 +154,11 @@ pub(crate) struct Sandbox {
 /// Decides how to launch a CLI, or refuses when the platform has no kernel
 /// layer to offer. The refusal is the point: it is what makes a port implement
 /// this module instead of quietly shipping without it.
-pub(crate) fn plan(program: &str, executable: &Path, search_path: &OsStr) -> Result<Sandbox, String> {
+pub(crate) fn plan(
+    program: &str,
+    executable: &Path,
+    search_path: &OsStr,
+) -> Result<Sandbox, String> {
     if confinement(program).is_none() {
         return Err(format!(
             "`{program}` no tiene reglas de confinamiento; \
@@ -231,7 +235,10 @@ pub(crate) fn profile(program: &str, executable: &Path, search_path: &OsStr) -> 
     ];
 
     for directory in runtime_directories(executable, search_path, &home) {
-        lines.push(format!("(allow file-read* (subpath {}))", quote(&directory)));
+        lines.push(format!(
+            "(allow file-read* (subpath {}))",
+            quote(&directory)
+        ));
     }
 
     lines.push(String::new());
@@ -326,7 +333,10 @@ fn real_path(path: &Path) -> PathBuf {
 }
 
 fn quote(path: &Path) -> String {
-    let text = path.to_string_lossy().replace('\\', "\\\\").replace('"', "\\\"");
+    let text = path
+        .to_string_lossy()
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"");
     format!("\"{text}\"")
 }
 
@@ -415,7 +425,10 @@ mod tests {
             "{text}"
         );
         // Only program directories are reopened, never the home folder itself.
-        assert!(!text.contains(&format!("(allow file-read* (subpath \"{}\"))", home.display())));
+        assert!(!text.contains(&format!(
+            "(allow file-read* (subpath \"{}\"))",
+            home.display()
+        )));
     }
 
     #[cfg(target_os = "macos")]

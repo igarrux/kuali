@@ -34,12 +34,13 @@ impl ResolvedCommand {
     /// The same command under a kernel sandbox, or an error when this platform
     /// has none to offer.
     fn confined(&self) -> Result<(Command, confine::Profile), LlmError> {
-        let plan = confine::plan(&self.name, &self.executable, &self.search_path).map_err(
-            |message| LlmError::Provider {
-                provider: self.name.clone(),
-                message,
-            },
-        )?;
+        let plan =
+            confine::plan(&self.name, &self.executable, &self.search_path).map_err(|message| {
+                LlmError::Provider {
+                    provider: self.name.clone(),
+                    message,
+                }
+            })?;
 
         let mut command = Command::new(plan.wrapper);
         command
