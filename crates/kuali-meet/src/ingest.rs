@@ -371,6 +371,21 @@ fn on_text(json: &str, session: &mut Session, events: &UnboundedSender<VoiceEven
         "roster-state" => upsert_roster(&event, session, events),
         "participant-left" | "speaker-left" => {
             if let Some(id) = speaker_index_of(&event) {
+                if let Some(departing_source_id) = participant_source_id_of(&event) {
+                    let matches_current_owner = session
+                        .channels
+                        .get(&id)
+                        .and_then(|binding| binding.speaker.source_id.as_deref())
+                        == Some(departing_source_id.as_str());
+                    if !matches_current_owner {
+                        tracing::debug!(
+                            channel = id,
+                            source_id = %departing_source_id,
+                            "ignoring stale participant departure for a recycled channel"
+                        );
+                        return;
+                    }
+                }
                 if let Some(binding) = session.channels.remove(&id) {
                     let _ = events.send(VoiceEvent::ParticipantLeft(binding.speaker.user_id));
                 }
@@ -660,6 +675,14 @@ fn detail_string(detail: &serde_json::Value, keys: &[&str]) -> Option<String> {
 
 fn speaker_index_of(event: &MeetingEvent) -> Option<u32> {
     detail_u32(event.detail.as_ref()?, &["channel", "index"])
+}
+
+fn participant_source_id_of(event: &MeetingEvent) -> Option<String> {
+    detail_string(
+        event.detail.as_ref()?,
+        &["participantId", "participant_id", "id"],
+    )
+    .filter(|source_id| !source_id.trim().is_empty())
 }
 
 fn ended(event: &MeetingEvent) -> bool {
@@ -1380,6 +1403,98 @@ mod tests {
             Some("https://example.test/ana.jpg")
         );
         assert_eq!(session.speaker_id(3), speaker.user_id);
+    }
+
+    #[test]
+    fn a_recycled_channel_moves_to_its_current_participant() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = test_session();
+        on_text(
+            r#"{"kind":"participant-upsert","ts":1,"detail":{"channel":3,"participantId":"devices/vivetix","displayName":"Vivetix","audioKind":"separate"}}"#,
+            &mut session,
+            &tx,
+        );
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(VoiceEvent::ParticipantPresent(speaker))
+                if speaker.user_id == test_participant_id("devices/vivetix")
+        ));
+
+        on_text(
+            r#"{"kind":"participant-upsert","ts":2,"detail":{"channel":3,"participantId":"devices/luis","displayName":"Luis","audioKind":"separate"}}"#,
+            &mut session,
+            &tx,
+        );
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(VoiceEvent::ParticipantLeft(user_id))
+                if user_id == test_participant_id("devices/vivetix")
+        ));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(VoiceEvent::ParticipantPresent(speaker))
+                if speaker.user_id == test_participant_id("devices/luis")
+        ));
+        assert_eq!(session.speaker_id(3), test_participant_id("devices/luis"));
+    }
+
+    #[test]
+    fn a_late_departure_does_not_remove_a_recycled_channels_current_owner() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = test_session();
+        on_text(
+            r#"{"kind":"participant-upsert","ts":1,"detail":{"channel":3,"participantId":"devices/vivetix","displayName":"Vivetix"}}"#,
+            &mut session,
+            &tx,
+        );
+        on_text(
+            r#"{"kind":"participant-upsert","ts":2,"detail":{"channel":3,"participantId":"devices/luis","displayName":"Luis"}}"#,
+            &mut session,
+            &tx,
+        );
+        while rx.try_recv().is_ok() {}
+
+        on_text(
+            r#"{"kind":"participant-left","ts":3,"detail":{"channel":3,"participantId":"devices/vivetix"}}"#,
+            &mut session,
+            &tx,
+        );
+
+        assert_eq!(session.speaker_id(3), test_participant_id("devices/luis"));
+        assert!(
+            rx.try_recv().is_err(),
+            "the stale departure must not announce that Luis left"
+        );
+    }
+
+    #[test]
+    fn the_current_owner_can_leave_a_recycled_channel() {
+        let (tx, mut rx) = mpsc::unbounded_channel();
+        let mut session = test_session();
+        on_text(
+            r#"{"kind":"participant-upsert","ts":1,"detail":{"channel":3,"participantId":"devices/vivetix","displayName":"Vivetix"}}"#,
+            &mut session,
+            &tx,
+        );
+        on_text(
+            r#"{"kind":"participant-upsert","ts":2,"detail":{"channel":3,"participantId":"devices/luis","displayName":"Luis"}}"#,
+            &mut session,
+            &tx,
+        );
+        while rx.try_recv().is_ok() {}
+
+        on_text(
+            r#"{"kind":"participant-left","ts":3,"detail":{"channel":3,"participantId":"devices/luis"}}"#,
+            &mut session,
+            &tx,
+        );
+
+        assert!(!session.channels.contains_key(&3));
+        assert!(matches!(
+            rx.try_recv(),
+            Ok(VoiceEvent::ParticipantLeft(user_id))
+                if user_id == test_participant_id("devices/luis")
+        ));
     }
 
     #[test]
