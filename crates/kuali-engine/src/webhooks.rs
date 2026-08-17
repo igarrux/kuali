@@ -363,6 +363,7 @@ mod tests {
             avatar_url: None,
             color: "#fff".into(),
             is_bot: false,
+            is_self: false,
         });
         meeting.utterances.push(Utterance {
             id: "u1".into(),

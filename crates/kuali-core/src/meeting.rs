@@ -69,6 +69,17 @@ pub struct Speaker {
     pub avatar_url: Option<String>,
     pub color: String,
     pub is_bot: bool,
+    /// Whether this participant is the person running Kuali.
+    ///
+    /// Browser platforms say so directly: the local microphone belongs to
+    /// whoever is at the keyboard, and the page marks that tile as its own. It
+    /// is what lets "what did I commit to?" resolve in a Meet or Teams call,
+    /// where no account links back to anything Kuali knows.
+    ///
+    /// Discord leaves this `false`; there the identity comes from the
+    /// authenticated account behind the command instead.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub is_self: bool,
 }
 
 impl Speaker {
@@ -82,6 +93,7 @@ impl Speaker {
             avatar_url: None,
             color: color_for(user_id).to_string(),
             is_bot: false,
+            is_self: false,
         }
     }
 }
@@ -537,6 +549,7 @@ mod tests {
             avatar_url: None,
             color: color_for(10).to_string(),
             is_bot: false,
+            is_self: false,
         });
         m.upsert_speaker(Speaker {
             user_id: 20,
@@ -547,6 +560,7 @@ mod tests {
             avatar_url: None,
             color: color_for(20).to_string(),
             is_bot: false,
+            is_self: false,
         });
         for (speaker_id, start_ms, end_ms, text) in utterances {
             m.push_utterance(Utterance {

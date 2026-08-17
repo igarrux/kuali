@@ -530,6 +530,14 @@ fn upsert_roster(
             .unwrap_or_else(|| "Participante".to_string());
         speaker.avatar_url = detail_string(participant, &["avatarUrl", "avatar_url", "avatar"])
             .filter(|url| !url.trim().is_empty());
+        // The page knows which tile is its own, because that is the microphone
+        // this computer is speaking into. It is the only reliable way to tell
+        // who "I" am in a meeting with no account behind it.
+        speaker.is_self = participant
+            .get("isSelf")
+            .or_else(|| participant.get("is_self"))
+            .and_then(|value| value.as_bool())
+            .unwrap_or(false);
         speaker.color = color_for(user_id).to_string();
         let speaker = session.remember_identity(&source_id, speaker);
 

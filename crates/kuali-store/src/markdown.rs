@@ -149,6 +149,7 @@ mod tests {
             avatar_url: None,
             color: color_for(10).to_string(),
             is_bot: false,
+            is_self: false,
         });
         m.upsert_speaker(Speaker {
             user_id: 99,
@@ -159,6 +160,7 @@ mod tests {
             avatar_url: None,
             color: color_for(99).to_string(),
             is_bot: true,
+            is_self: false,
         });
         m.push_utterance(Utterance {
             id: "u1".into(),

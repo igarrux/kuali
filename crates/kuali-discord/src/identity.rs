@@ -60,6 +60,7 @@ impl MemberResolver {
                 avatar_url: Some(member.user.face()),
                 color: color_for(user_id).to_string(),
                 is_bot: member.user.bot,
+                is_self: false,
             },
             // If permissions, rate limits, or a departed user prevent lookup,
             // keep a placeholder. Missing a name is preferable to losing speech.
