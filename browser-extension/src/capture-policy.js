@@ -1,6 +1,11 @@
 /* Copyright 2026 Kuali contributors · SPDX-License-Identifier: Apache-2.0 */
 (() => {
   const MIC_CHANNEL = 1000;
+  const MEET_IDENTITY_VOTE_MAX_GAP_MS = 400;
+  const MEET_IDENTITY_VOTE_MIN_SAMPLES = 6;
+  const MEET_IDENTITY_VOTE_MIN_MS = 250;
+  const MEET_CURRENT_SOURCE_WINDOW_MS = 50;
+  const MEET_RECEIVER_LEASE_MS = 250;
 
   /**
    * A direct DOM/MediaStream identity belongs to that track. The microphone is
@@ -169,6 +174,123 @@
   }
 
   /**
+   * A remote participant's collection `disabled` flag is roster metadata, not
+   * a capture gate. Meet can leave that flag stale across mute/unmute updates
+   * even though decoded PCM and the active-speaker UI have already resumed.
+   * The local microphone is gated separately from its visible control; here we
+   * only reject a remote route that Meet identifies as another copy of self.
+   */
+  function shouldSendMeetRemoteAudio({ isSelf = false } = {}) {
+    return !isSelf;
+  }
+
+  /** Keep only a contiguous run of audio/activity agreement for one device. */
+  function nextMeetIdentityVote(previous, deviceId, now) {
+    const continuing = previous?.deviceId === deviceId
+      && Number.isFinite(previous.lastAt)
+      && now >= previous.lastAt
+      && now - previous.lastAt <= MEET_IDENTITY_VOTE_MAX_GAP_MS;
+    return continuing
+      ? { ...previous, samples: previous.samples + 1, lastAt: now }
+      : { deviceId, samples: 1, firstAt: now, lastAt: now };
+  }
+
+  function meetIdentityVoteReady(vote) {
+    return !!vote
+      && vote.samples >= MEET_IDENTITY_VOTE_MIN_SAMPLES
+      && vote.lastAt - vote.firstAt >= MEET_IDENTITY_VOTE_MIN_MS;
+  }
+
+  function meetIdentityVoteFresh(vote, now) {
+    return !!vote
+      && Number.isFinite(vote.lastAt)
+      && now >= vote.lastAt
+      && now - vote.lastAt <= MEET_IDENTITY_VOTE_MAX_GAP_MS;
+  }
+
+  /** Select only a current, clearly dominant CSRC from TrackProcessor metadata. */
+  function selectMeetContributingSource(sources) {
+    const participants = [...(sources || [])]
+      .filter((source) => {
+        const id = String(source?.source ?? "");
+        return id && id !== "42";
+      })
+      .sort((left, right) => Number(right.timestamp || 0) - Number(left.timestamp || 0));
+    const newestTimestamp = Number(participants[0]?.timestamp);
+    const current = Number.isFinite(newestTimestamp) && newestTimestamp > 0
+      ? participants.filter(
+        (source) => newestTimestamp - Number(source.timestamp || 0) <= MEET_CURRENT_SOURCE_WINDOW_MS,
+      )
+      : (participants.length === 1 ? participants : []);
+    current.sort((left, right) => Number(right.audioLevel || 0) - Number(left.audioLevel || 0));
+    const selected = current[0];
+    if (!selected) return null;
+    if (current.length === 1) return selected;
+    const strongestLevel = Number(selected.audioLevel);
+    const secondLevel = Number(current[1]?.audioLevel);
+    const clearWinner = Number.isFinite(strongestLevel)
+      && Number.isFinite(secondLevel)
+      && strongestLevel >= 0.01
+      && strongestLevel >= secondLevel * 2;
+    return clearWinner ? selected : null;
+  }
+
+  /** Lease a CSRC to one receiver while allowing handoff/reclock after a gap. */
+  function updateMeetReceiverLease(previous, receiver, timestamp, now) {
+    const frameTimestamp = Number(timestamp);
+    if (previous) {
+      const sameReceiver = previous.receiver === receiver;
+      const freshLease = now >= previous.seenAt
+        && now - previous.seenAt <= MEET_RECEIVER_LEASE_MS;
+      if ((!sameReceiver && freshLease)
+        || (sameReceiver && Number.isFinite(frameTimestamp)
+          && frameTimestamp <= previous.timestamp && freshLease)) {
+        return { accepted: false, lease: previous };
+      }
+    }
+    return {
+      accepted: true,
+      lease: {
+        receiver,
+        timestamp: Number.isFinite(frameTimestamp) ? frameTimestamp : Number.NEGATIVE_INFINITY,
+        seenAt: now,
+      },
+    };
+  }
+
+  /**
+   * Activity-confirmed ownership wins while Meet keeps publishing the exact
+   * protocol mapping it disproved. As soon as the protocol mapping changes, it
+   * is new evidence and becomes authoritative again.
+   */
+  function resolveMeetRouteIdentity({
+    protocolRawDeviceId = "",
+    protocolDeviceId = "",
+    currentDeviceId = "",
+    activityDeviceId = "",
+    overriddenProtocolRawDeviceId = "",
+    protocolStale = false,
+  } = {}) {
+    const activityStillOverrides = !!activityDeviceId && (
+      !protocolRawDeviceId
+      || protocolStale
+      || (!!overriddenProtocolRawDeviceId && protocolRawDeviceId === overriddenProtocolRawDeviceId)
+    );
+    if (activityStillOverrides) {
+      return {
+        deviceId: activityDeviceId,
+        activityDeviceId,
+        overriddenProtocolRawDeviceId,
+      };
+    }
+    return {
+      deviceId: protocolDeviceId || (protocolStale ? currentDeviceId : ""),
+      activityDeviceId: "",
+      overriddenProtocolRawDeviceId: "",
+    };
+  }
+
+  /**
    * The mute button is the closest thing Meet exposes to an authoritative
    * public state. Prefer its boolean data attribute; accessible labels are the
    * fallback and describe the action that clicking the button would perform.
@@ -212,6 +334,13 @@
     meetParticipantIdentity,
     mergeMeetRoster,
     localMeetAudioDisabled,
+    shouldSendMeetRemoteAudio,
+    nextMeetIdentityVote,
+    meetIdentityVoteReady,
+    meetIdentityVoteFresh,
+    selectMeetContributingSource,
+    updateMeetReceiverLease,
+    resolveMeetRouteIdentity,
     meetMicrophoneMuted,
     shouldSendMeetMicrophone,
   });

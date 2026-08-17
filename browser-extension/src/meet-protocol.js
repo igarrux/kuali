@@ -210,6 +210,48 @@
     return decodeCollectionBytes(await inflate(compressed));
   }
 
+  /** Preserve data-channel order even when packet decoding is asynchronous. */
+  function orderedAsyncHandler(handler) {
+    let tail = Promise.resolve();
+    return (...args) => {
+      const result = tail.then(() => handler(...args));
+      tail = result.catch(() => {});
+      return result;
+    };
+  }
+
+  /**
+   * Keep one current output per raw Meet device and a reverse source lookup.
+   * When Meet moves a device to another CSRC, remove the old reverse alias only
+   * if that device still owns it; a newer participant may already have reused it.
+   */
+  function indexDeviceOutput(byDevice, bySource, output) {
+    if (!(byDevice instanceof Map) || !(bySource instanceof Map)) {
+      throw new TypeError("Meet device output indexes must be Maps");
+    }
+    const deviceId = String(output?.deviceId || "");
+    const streamId = String(output?.streamId || "");
+    const outputType = Number(output?.outputType || 0);
+    if (!deviceId || !streamId || !outputType) return null;
+
+    const key = `${outputType}:${deviceId}`;
+    const previous = byDevice.get(key);
+    let staleSource = "";
+    if (previous?.streamId && previous.streamId !== streamId) {
+      staleSource = previous.streamId;
+      if (bySource.get(staleSource) === previous) bySource.delete(staleSource);
+    }
+    const indexed = { ...output, deviceId, streamId, outputType };
+    const displaced = bySource.get(streamId);
+    if (displaced && displaced !== previous) {
+      const displacedKey = `${displaced.outputType}:${displaced.deviceId}`;
+      if (byDevice.get(displacedKey) === displaced) byDevice.delete(displacedKey);
+    }
+    byDevice.set(key, indexed);
+    bySource.set(streamId, indexed);
+    return { indexed, staleSource };
+  }
+
   function decodeSyncUsersBase64(value) {
     const binary = atob(String(value || "").trim());
     const bytes = new Uint8Array(binary.length);
@@ -223,5 +265,7 @@
     decodeCollectionBytes,
     decodeCollectionPacket,
     decodeSyncUsersBase64,
+    orderedAsyncHandler,
+    indexDeviceOutput,
   });
 })();

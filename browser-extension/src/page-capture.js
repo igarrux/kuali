@@ -49,17 +49,20 @@
   const observedActive = new Map();
   const meetUsers = new Map();
   const meetIdentities = new Map();
+  const meetOutputsByDevice = new Map();
   const meetOutputsBySource = new Map();
   const meetRoutesBySource = new Map();
   const meetChannelsByDevice = new Map();
   const meetSourceIdentityVotes = new Map();
+  const meetActivityClaims = new Map();
   const meetAnnouncedChannels = new Set();
-  const meetLastFrameTimestamp = new Map();
+  const meetReceiverLeaseBySource = new Map();
   const observedMeetDataChannels = new WeakSet();
   const meetEncodedTaps = new Set();
   const meetEncodedTapByReceiver = new WeakMap();
   let meetEncodedStreamHookCalls = 0;
   let meetProtocolWarningSent = false;
+  let meetOutputRevision = 0;
   let meetProtocolMicMuted = null;
   let meetMicAllowed = false;
   let meetMicCheckedAt = 0;
@@ -120,29 +123,106 @@
     if (!route.deviceId) return;
     bind(route.channel, route.identity);
     if (route.pendingAudio?.length) {
-      for (const buffered of route.pendingAudio) post("audio", buffered);
+      for (const buffered of route.pendingAudio) {
+        post("audio", { ...buffered, channel: route.channel });
+      }
       route.pendingAudio.length = 0;
     }
   }
 
-  function updateMeetRouteIdentity(route) {
-    const output = meetOutputsBySource.get(route.source);
-    const nextDeviceId = canonicalMeetDeviceId(output?.deviceId || route.deviceId || "");
-    if (nextDeviceId && nextDeviceId !== route.deviceId) {
-      if (route.deviceId && meetChannelsByDevice.get(route.deviceId) === route.channel) {
-        meetChannelsByDevice.delete(route.deviceId);
-      }
+  function resetMeetSourcePcm(source) {
+    for (const tap of meetEncodedTaps) tap.pcmBuffers.delete(source);
+    for (const entry of remoteTracks.values()) entry.pcmBuffers?.delete(source);
+    meetReceiverLeaseBySource.delete(source);
+  }
+
+  function clearMeetRouteChallenge(route) {
+    route.challengeAudio.length = 0;
+    route.challengeSamples = 0;
+    route.challengeDeviceId = "";
+  }
+
+  function holdMeetRoutePcm(route, entry, samples) {
+    const copy = samples.slice();
+    route.challengeAudio.push({ entry, samples: copy });
+    route.challengeSamples += copy.length;
+    while (route.challengeSamples > TARGET_RATE && route.challengeAudio.length > 1) {
+      route.challengeSamples -= route.challengeAudio.shift().samples.length;
+    }
+  }
+
+  function flushMeetRouteChallenge(route) {
+    const buffered = route.challengeAudio.splice(0);
+    route.challengeSamples = 0;
+    route.challengeDeviceId = "";
+    for (const { entry, samples } of buffered) pushTrackProcessorPcm(entry, samples, route);
+  }
+
+  function assignMeetRouteDevice(route, nextDeviceId) {
+    if (nextDeviceId === route.deviceId) return false;
+    const previousDeviceId = route.deviceId;
+    const previousClaim = meetActivityClaims.get(previousDeviceId);
+    if (previousClaim?.source === route.source) meetActivityClaims.delete(previousDeviceId);
+
+    // A channel remains stable for the participant who first owned it. When a
+    // pooled Meet lane changes owner, use the new participant's existing channel
+    // or allocate another one; sharing the old channel would merge both people.
+    if (nextDeviceId) {
       const existingChannel = meetChannelsByDevice.get(nextDeviceId);
-      if (existingChannel !== undefined && existingChannel !== route.channel) {
+      const currentChannelOwned = [...meetChannelsByDevice.entries()].some(
+        ([deviceId, channel]) => deviceId !== nextDeviceId && channel === route.channel,
+      );
+      if (existingChannel !== undefined) {
         route.channel = existingChannel;
+      } else if (previousDeviceId || currentChannelOwned) {
+        route.channel = nextChannel++;
+        meetChannelsByDevice.set(nextDeviceId, route.channel);
       } else {
         meetChannelsByDevice.set(nextDeviceId, route.channel);
       }
-      route.deviceId = nextDeviceId;
     }
-    route.disabled = !!output?.disabled;
+    route.deviceId = nextDeviceId;
+    route.generation += 1;
+    resetMeetSourcePcm(route.source);
+    return true;
+  }
+
+  function updateMeetRouteIdentity(route) {
+    const output = meetOutputsBySource.get(route.source);
+    const previousProtocolRawDeviceId = route.protocolRawDeviceId;
+    route.protocolRawDeviceId = clean(output?.deviceId);
+    route.protocolDeviceId = canonicalMeetDeviceId(route.protocolRawDeviceId);
+    route.protocolStale = output
+      ? false
+      : (route.protocolStale || !!previousProtocolRawDeviceId);
+    const resolved = capturePolicy.resolveMeetRouteIdentity({
+      protocolRawDeviceId: route.protocolRawDeviceId,
+      protocolDeviceId: route.protocolDeviceId,
+      currentDeviceId: route.deviceId,
+      activityDeviceId: route.activityDeviceId,
+      overriddenProtocolRawDeviceId: route.overriddenProtocolRawDeviceId,
+      protocolStale: route.protocolStale,
+    });
+    route.activityDeviceId = resolved.activityDeviceId;
+    route.overriddenProtocolRawDeviceId = resolved.overriddenProtocolRawDeviceId;
+    const protocolConfirmsChallenge = !!resolved.deviceId
+      && resolved.deviceId === route.challengeDeviceId
+      && route.challengeAudio.length > 0;
+    if (resolved.deviceId !== route.deviceId && !protocolConfirmsChallenge) {
+      clearMeetRouteChallenge(route);
+    }
+    assignMeetRouteDevice(route, resolved.deviceId);
+    if (output) {
+      route.disabled = !!output.disabled;
+      route.protocolRevision = output.revision || route.protocolRevision;
+    }
     route.identity = meetIdentityForDevice(route.deviceId, route.source);
     announceMeetRoute(route);
+    if (protocolConfirmsChallenge) {
+      meetSourceIdentityVotes.delete(route.source);
+      meetActivityClaims.set(route.deviceId, { source: route.source, lastAt: performance.now() });
+      flushMeetRouteChallenge(route);
+    }
   }
 
   function meetRouteForSource(sourceValue) {
@@ -151,16 +231,27 @@
     let route = meetRoutesBySource.get(source);
     if (!route) {
       const output = meetOutputsBySource.get(source);
-      const deviceId = canonicalMeetDeviceId(output?.deviceId || "");
+      const protocolRawDeviceId = clean(output?.deviceId);
+      const deviceId = canonicalMeetDeviceId(protocolRawDeviceId);
       const existingChannel = deviceId ? meetChannelsByDevice.get(deviceId) : undefined;
       const channel = existingChannel ?? nextChannel++;
       route = {
         source,
         deviceId,
+        protocolRawDeviceId,
+        protocolDeviceId: deviceId,
+        activityDeviceId: "",
+        overriddenProtocolRawDeviceId: "",
+        protocolStale: false,
+        protocolRevision: output?.revision || 0,
+        generation: 0,
         channel,
         disabled: !!output?.disabled,
         identity: meetIdentityForDevice(deviceId, source),
         pendingAudio: [],
+        challengeAudio: [],
+        challengeSamples: 0,
+        challengeDeviceId: "",
       };
       meetRoutesBySource.set(source, route);
       if (deviceId) meetChannelsByDevice.set(deviceId, channel);
@@ -171,30 +262,87 @@
     return route;
   }
 
-  function correlateMeetRouteWithActiveSpeaker(route, peak) {
-    if (!route || route.deviceId || peak < 0.01) return;
-    const candidates = identitySnapshot().active.filter((identity) => {
-      if (identity.isSelf) return false;
-      return !meetUsers.get(identity.id)?.isCurrentUser;
-    });
-    if (candidates.length !== 1) return;
+  function correlateMeetRouteWithActiveSpeaker(route, peak, allowIdentityChallenge = true) {
+    if (!route) return "drop";
+    const candidatesByDevice = new Map();
+    for (const identity of identitySnapshot().active) {
+      const deviceId = canonicalMeetDeviceId(identity.id);
+      if (!deviceId || identity.isSelf || meetUsers.get(deviceId)?.isCurrentUser) continue;
+      candidatesByDevice.set(deviceId, { ...identity, id: deviceId });
+    }
+    const candidates = [...candidatesByDevice.values()];
+    if (candidates.length !== 1) {
+      meetSourceIdentityVotes.delete(route.source);
+      clearMeetRouteChallenge(route);
+      return !!route.activityDeviceId || !route.protocolStale ? "send" : "drop";
+    }
     const candidate = candidates[0];
+    const candidateDeviceId = candidate.id;
     const now = performance.now();
+    const loud = peak >= 0.01;
+    if (candidateDeviceId === route.deviceId) {
+      meetSourceIdentityVotes.delete(route.source);
+      clearMeetRouteChallenge(route);
+      if (loud) meetActivityClaims.set(candidateDeviceId, { source: route.source, lastAt: now });
+      return "send";
+    }
+
+    // Remote mute metadata never participates in routing. A syntactically valid
+    // collection owner can still be stale after Meet recycles a CSRC, so actual
+    // PCM plus sustained, exclusive activity is allowed to challenge it.
+    const hadDevice = !!route.deviceId;
+    const routeIdentityUsable = hadDevice && (
+      !!route.activityDeviceId || !route.protocolStale
+    );
+    if (!allowIdentityChallenge || (hadDevice && !meetUsers.has(candidateDeviceId))) {
+      meetSourceIdentityVotes.delete(route.source);
+      clearMeetRouteChallenge(route);
+      return !hadDevice || routeIdentityUsable ? "send" : "drop";
+    }
+
+    const claim = meetActivityClaims.get(candidateDeviceId);
+    if (claim && now - claim.lastAt > 750) meetActivityClaims.delete(candidateDeviceId);
+    else if (claim?.source !== undefined && claim.source !== route.source) {
+      meetSourceIdentityVotes.delete(route.source);
+      clearMeetRouteChallenge(route);
+      return routeIdentityUsable ? "send" : "drop";
+    }
+
+    if (route.challengeDeviceId !== candidateDeviceId) {
+      meetSourceIdentityVotes.delete(route.source);
+      clearMeetRouteChallenge(route);
+      route.challengeDeviceId = candidateDeviceId;
+    }
     const previous = meetSourceIdentityVotes.get(route.source);
-    const vote = previous?.deviceId === candidate.id
-      ? { ...previous, samples: previous.samples + 1, lastAt: now }
-      : { deviceId: candidate.id, identity: candidate, samples: 1, firstAt: now, lastAt: now };
+    if (!loud) {
+      // Do not erase a valid challenge on a single quiet codec frame; the vote
+      // helper expires it after a real gap. While ownership disagrees, holding
+      // these samples is safer than assigning them to the previous participant.
+      if (previous && !capturePolicy.meetIdentityVoteFresh(previous, now)) {
+        meetSourceIdentityVotes.delete(route.source);
+        clearMeetRouteChallenge(route);
+        route.challengeDeviceId = candidateDeviceId;
+      }
+      return "hold";
+    }
+    const vote = {
+      ...capturePolicy.nextMeetIdentityVote(previous, candidateDeviceId, now),
+      identity: candidate,
+    };
     meetSourceIdentityVotes.set(route.source, vote);
-    // Require sustained decoded speech, not a single glow edge. Once bound,
-    // Meet's CSRC remains stable for the participant's entire session.
-    if (vote.samples < 6 || vote.lastAt - vote.firstAt < 250) return;
-    const existingChannel = meetChannelsByDevice.get(candidate.id);
-    if (existingChannel !== undefined && existingChannel !== route.channel) return;
-    route.deviceId = candidate.id;
-    meetChannelsByDevice.set(candidate.id, route.channel);
-    route.identity = meetIdentityForDevice(candidate.id, route.source);
+    // Meet recycles CSRCs after mute/unmute. Hold an already-named route while
+    // its decoded PCM disagrees with the active tile, then correct the owner
+    // only after a sustained match. All challenge audio is buffered so its
+    // original ordering and first syllable survive the eventual reassignment.
+    if (!capturePolicy.meetIdentityVoteReady(vote)) return "hold";
+    route.activityDeviceId = candidateDeviceId;
+    route.overriddenProtocolRawDeviceId = route.protocolRawDeviceId || "";
+    assignMeetRouteDevice(route, candidateDeviceId);
+    route.identity = meetIdentityForDevice(candidateDeviceId, route.source);
     meetSourceIdentityVotes.delete(route.source);
+    meetActivityClaims.set(candidateDeviceId, { source: route.source, lastAt: now });
     announceMeetRoute(route);
+    return "rebind";
   }
 
   function applyMeetUsers(users) {
@@ -225,7 +373,11 @@
   function applyMeetDeviceOutputs(outputs) {
     for (const output of outputs || []) {
       if (!output?.streamId || !output?.deviceId || output.outputType !== 1) continue;
-      meetOutputsBySource.set(meetSourceKey(output.streamId), output);
+      meetProtocol.indexDeviceOutput(
+        meetOutputsByDevice,
+        meetOutputsBySource,
+        { ...output, revision: ++meetOutputRevision },
+      );
     }
     for (const route of meetRoutesBySource.values()) updateMeetRouteIdentity(route);
     refreshMeetMicrophoneState();
@@ -234,7 +386,7 @@
   function refreshMeetMicrophoneState() {
     meetProtocolMicMuted = capturePolicy.localMeetAudioDisabled(
       meetUsers.values(),
-      meetOutputsBySource.values(),
+      meetOutputsByDevice.values(),
     );
     meetMicCheckedAt = 0;
   }
@@ -301,13 +453,17 @@
     }
   }
 
+  const handleOrderedMeetCollectionMessage = meetProtocol
+    ? meetProtocol.orderedAsyncHandler(handleMeetCollectionMessage)
+    : handleMeetCollectionMessage;
+
   function observeMeetDataChannel(channel) {
     if (platform !== "google_meet" || !channel || observedMeetDataChannels.has(channel)) return;
     observedMeetDataChannels.add(channel);
     if (channel.label !== "collections") return;
     channel.binaryType = "arraybuffer";
     channel.addEventListener("message", (event) => {
-      handleMeetCollectionMessage(event.data);
+      handleOrderedMeetCollectionMessage(event.data);
     });
   }
 
@@ -354,9 +510,10 @@
       output(audioData) {
         try {
           tap.decodedFrames += 1;
-          const route = tap.routesByTimestamp.get(audioData.timestamp) || null;
+          const pendingRoute = tap.routesByTimestamp.get(audioData.timestamp) || null;
           tap.routesByTimestamp.delete(audioData.timestamp);
-          if (!running || !route) return;
+          const route = pendingRoute?.route || null;
+          if (!running || !route || route.generation !== pendingRoute.generation) return;
           const mono = new Float32Array(audioData.numberOfFrames);
           const plane = new Float32Array(audioData.numberOfFrames);
           for (let channel = 0; channel < audioData.numberOfChannels; channel += 1) {
@@ -368,8 +525,19 @@
           }
           let peak = 0;
           for (const sample of mono) peak = Math.max(peak, Math.abs(sample));
-          correlateMeetRouteWithActiveSpeaker(route, peak);
-          pushTrackProcessorPcm(tap, resampleMono(mono, audioData.sampleRate), route);
+          const samples = resampleMono(mono, audioData.sampleRate);
+          const identityDecision = correlateMeetRouteWithActiveSpeaker(
+            route,
+            peak,
+            pendingRoute.allowIdentityChallenge,
+          );
+          if (identityDecision === "drop") return;
+          if (identityDecision === "hold") {
+            holdMeetRoutePcm(route, tap, samples);
+            return;
+          }
+          if (identityDecision === "rebind") flushMeetRouteChallenge(route);
+          pushTrackProcessorPcm(tap, samples, route);
         } finally {
           audioData.close();
         }
@@ -383,13 +551,12 @@
     return tap.decoder;
   }
 
-  function meetSourceFromEncodedMetadata(metadata) {
+  function meetSourcesFromEncodedMetadata(metadata) {
     const sources = Array.isArray(metadata?.contributingSources) ? metadata.contributingSources : [];
-    const source = sources
+    return [...new Set(sources
       .map((value) => typeof value === "object" ? value?.source : value)
       .map(meetSourceKey)
-      .find((value) => value && value !== "42");
-    return source || "";
+      .filter((value) => value && value !== "42"))];
   }
 
   function observeMeetEncodedFrame(receiver, frame) {
@@ -427,15 +594,25 @@
       audioLevel: metadata.audioLevel ?? null,
     };
     if (!running) return;
-    const source = meetSourceFromEncodedMetadata(metadata);
+    const contributingSources = meetSourcesFromEncodedMetadata(metadata);
+    // Encoded frames with multiple CSRCs already contain a mix. They cannot be
+    // truthfully emitted as one participant's separate channel.
+    if (contributingSources.length !== 1) return;
+    const source = contributingSources[0];
     const route = meetRouteForSource(source);
-    if (!route || route.disabled || route.identity?.isSelf) return;
+    if (!route || !capturePolicy.shouldSendMeetRemoteAudio({
+      isSelf: route.identity?.isSelf,
+    })) return;
     const decoder = ensureMeetAudioDecoder(tap);
     if (!decoder || decoder.state !== "configured") return;
     const payload = primaryOpusPayload(frame.data, metadata);
     const timestamp = tap.nextTimestamp;
     tap.nextTimestamp += 20_000;
-    tap.routesByTimestamp.set(timestamp, route);
+    tap.routesByTimestamp.set(timestamp, {
+      route,
+      generation: route.generation,
+      allowIdentityChallenge: true,
+    });
     try {
       decoder.decode(new EncodedAudioChunk({
         type: "key",
@@ -885,12 +1062,19 @@
         meetSources: [...meetRoutesBySource.values()].map((route) => ({
           csrc: route.source,
           deviceId: route.deviceId || null,
+          protocolRawDeviceId: route.protocolRawDeviceId || null,
+          protocolDeviceId: route.protocolDeviceId || null,
+          activityDeviceId: route.activityDeviceId || null,
+          protocolStale: route.protocolStale,
+          protocolRevision: route.protocolRevision,
+          generation: route.generation,
           channel: route.channel,
           disabled: route.disabled,
           displayName: route.identity?.name || null,
         })),
         meetUsers: [...meetUsers.values()].map((user) => ({
           deviceId: user.deviceId,
+          parentDeviceId: user.parentDeviceId || null,
           displayName: user.displayName || user.fullName || null,
           isCurrentUser: !!user.isCurrentUser,
           status: user.status ?? null,
@@ -1037,23 +1221,23 @@
 
   function meetRouteForAudioFrame(entry, audioData) {
     const sources = entry.receiver?.getContributingSources?.() || [];
-    const participantSource = sources
-      .filter((source) => meetSourceKey(source.source) !== "42")
-      .sort((left, right) => (right.timestamp || 0) - (left.timestamp || 0))[0];
+    const participantSource = capturePolicy.selectMeetContributingSource(sources);
     if (!participantSource) return null;
     const route = meetRouteForSource(participantSource.source);
-    if (!route || route.disabled || route.identity?.isSelf) return null;
+    if (!route || !capturePolicy.shouldSendMeetRemoteAudio({
+      isSelf: route.identity?.isSelf,
+    })) return null;
 
-    // During a virtual-lane hand-off the same source can briefly be visible on
-    // two receivers. AudioData timestamps originate in the decoded stream, so
-    // an exact/non-increasing timestamp is a duplicate rather than new speech.
-    const frameTimestamp = Number(audioData.timestamp);
-    if (Number.isFinite(frameTimestamp)) {
-      const previous = meetLastFrameTimestamp.get(route.source);
-      if (previous !== undefined && frameTimestamp <= previous) return null;
-      meetLastFrameTimestamp.set(route.source, frameTimestamp);
-    }
-    return route;
+    const now = performance.now();
+    const receiverLease = capturePolicy.updateMeetReceiverLease(
+      meetReceiverLeaseBySource.get(route.source),
+      entry.receiver,
+      audioData.timestamp,
+      now,
+    );
+    if (!receiverLease.accepted) return null;
+    meetReceiverLeaseBySource.set(route.source, receiverLease.lease);
+    return { route, allowIdentityChallenge: true };
   }
 
   async function consumeTrackProcessor(entry) {
@@ -1063,8 +1247,9 @@
       try {
         entry.sourceFrames += 1;
         if (!running) continue;
-        const route = entry.virtualMeetLane ? meetRouteForAudioFrame(entry, audioData) : null;
-        if (entry.virtualMeetLane && !route) continue;
+        const meetFrame = entry.virtualMeetLane ? meetRouteForAudioFrame(entry, audioData) : null;
+        if (entry.virtualMeetLane && !meetFrame) continue;
+        const route = meetFrame?.route || null;
         const mono = new Float32Array(audioData.numberOfFrames);
         const plane = new Float32Array(audioData.numberOfFrames);
         for (let channel = 0; channel < audioData.numberOfChannels; channel += 1) {
@@ -1074,7 +1259,23 @@
         if (audioData.numberOfChannels > 1) {
           for (let index = 0; index < mono.length; index += 1) mono[index] /= audioData.numberOfChannels;
         }
-        pushTrackProcessorPcm(entry, resampleMono(mono, audioData.sampleRate), route);
+        let peak = 0;
+        for (const sample of mono) peak = Math.max(peak, Math.abs(sample));
+        const samples = resampleMono(mono, audioData.sampleRate);
+        if (route) {
+          const identityDecision = correlateMeetRouteWithActiveSpeaker(
+            route,
+            peak,
+            meetFrame.allowIdentityChallenge,
+          );
+          if (identityDecision === "drop") continue;
+          if (identityDecision === "hold") {
+            holdMeetRoutePcm(route, entry, samples);
+            continue;
+          }
+          if (identityDecision === "rebind") flushMeetRouteChallenge(route);
+        }
+        pushTrackProcessorPcm(entry, samples, route);
       } finally {
         audioData.close();
       }
@@ -1400,7 +1601,9 @@
     running = true;
     meetAnnouncedChannels.clear();
     sentIdentity.clear();
-    meetLastFrameTimestamp.clear();
+    meetReceiverLeaseBySource.clear();
+    meetSourceIdentityVotes.clear();
+    meetActivityClaims.clear();
     // The page can discover Meet's roster before the local WebSocket is open.
     // Force a fresh snapshot now so the background/UI receives the full count
     // for this capture instead of treating the pre-connection value as sent.
@@ -1443,7 +1646,10 @@
     lastMeetProbeAt = 0;
     lastActiveFingerprint = "";
     observedActive.clear();
-    for (const route of meetRoutesBySource.values()) route.pendingAudio.length = 0;
+    for (const route of meetRoutesBySource.values()) {
+      route.pendingAudio.length = 0;
+      clearMeetRouteChallenge(route);
+    }
     for (const [trackId, entry] of [...remoteTracks.entries()]) {
       // Meet's virtual receiver processors must stay attached from the instant
       // their ontrack event fires. Between recordings they only drain and close
@@ -1458,7 +1664,9 @@
       releaseTrack(trackId, false);
     }
     meetAnnouncedChannels.clear();
-    meetLastFrameTimestamp.clear();
+    meetReceiverLeaseBySource.clear();
+    meetSourceIdentityVotes.clear();
+    meetActivityClaims.clear();
     sentIdentity.clear();
     for (const channel of [...bindings.keys()]) {
       if (channel !== MIC_CHANNEL) bindings.delete(channel);

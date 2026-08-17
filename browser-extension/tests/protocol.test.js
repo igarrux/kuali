@@ -237,6 +237,142 @@ test("Meet microphone capture follows the current device disabled state", () => 
   ]), false);
 });
 
+test("remote Meet audio survives mute metadata while self audio stays isolated", () => {
+  const decide = capturePolicy.shouldSendMeetRemoteAudio;
+  assert.equal(decide({ disabled: false, isSelf: false }), true);
+  assert.equal(decide({ disabled: true, isSelf: false }), true);
+  assert.equal(decide({ disabled: false, isSelf: false }), true);
+  assert.equal(decide({ disabled: false, isSelf: true }), false);
+  assert.equal(decide({ disabled: true, isSelf: true }), false);
+});
+
+test("sustained Meet activity can replace a stale protocol route owner", () => {
+  let vote = null;
+  for (const now of [0, 60, 120, 180, 240, 300]) {
+    vote = capturePolicy.nextMeetIdentityVote(vote, "devices/luis", now);
+  }
+  assert.equal(capturePolicy.meetIdentityVoteReady(vote), true);
+
+  const corrected = capturePolicy.resolveMeetRouteIdentity({
+    protocolRawDeviceId: "raw/vivetix",
+    protocolDeviceId: "devices/vivetix",
+    currentDeviceId: "devices/vivetix",
+    activityDeviceId: "devices/luis",
+    overriddenProtocolRawDeviceId: "raw/vivetix",
+  });
+  assert.deepEqual(corrected, {
+    deviceId: "devices/luis",
+    activityDeviceId: "devices/luis",
+    overriddenProtocolRawDeviceId: "raw/vivetix",
+  });
+
+  assert.deepEqual(capturePolicy.resolveMeetRouteIdentity({
+    ...corrected,
+    protocolRawDeviceId: "raw/pedro",
+    protocolDeviceId: "devices/pedro",
+    currentDeviceId: corrected.deviceId,
+  }), {
+    deviceId: "devices/pedro",
+    activityDeviceId: "",
+    overriddenProtocolRawDeviceId: "",
+  });
+});
+
+test("Meet parent canonicalization does not erase an activity-confirmed owner", () => {
+  assert.deepEqual(capturePolicy.resolveMeetRouteIdentity({
+    protocolRawDeviceId: "devices/presentation",
+    protocolDeviceId: "devices/parent-after-roster-refresh",
+    currentDeviceId: "devices/luis",
+    activityDeviceId: "devices/luis",
+    overriddenProtocolRawDeviceId: "devices/presentation",
+  }), {
+    deviceId: "devices/luis",
+    activityDeviceId: "devices/luis",
+    overriddenProtocolRawDeviceId: "devices/presentation",
+  });
+});
+
+test("an activity-learned Meet owner persists until protocol evidence arrives", () => {
+  assert.deepEqual(capturePolicy.resolveMeetRouteIdentity({
+    currentDeviceId: "devices/luis",
+    activityDeviceId: "devices/luis",
+  }), {
+    deviceId: "devices/luis",
+    activityDeviceId: "devices/luis",
+    overriddenProtocolRawDeviceId: "",
+  });
+  assert.deepEqual(capturePolicy.resolveMeetRouteIdentity({
+    protocolRawDeviceId: "raw/pedro",
+    protocolDeviceId: "devices/pedro",
+    currentDeviceId: "devices/luis",
+    activityDeviceId: "devices/luis",
+  }), {
+    deviceId: "devices/pedro",
+    activityDeviceId: "",
+    overriddenProtocolRawDeviceId: "",
+  });
+});
+
+test("Meet identity votes reset after a gap or a different active participant", () => {
+  const first = capturePolicy.nextMeetIdentityVote(null, "devices/luis", 0);
+  const gap = capturePolicy.nextMeetIdentityVote(first, "devices/luis", 401);
+  assert.equal(gap.samples, 1);
+  const switched = capturePolicy.nextMeetIdentityVote(gap, "devices/gabriel", 420);
+  assert.deepEqual(switched, {
+    deviceId: "devices/gabriel",
+    samples: 1,
+    firstAt: 420,
+    lastAt: 420,
+  });
+  assert.equal(capturePolicy.meetIdentityVoteReady(switched), false);
+});
+
+test("Meet identity votes survive quiet frames but expire after the maximum gap", () => {
+  const vote = capturePolicy.nextMeetIdentityVote(null, "devices/luis", 100);
+  assert.equal(capturePolicy.meetIdentityVoteFresh(vote, 499), true);
+  assert.equal(capturePolicy.meetIdentityVoteFresh(vote, 501), false);
+});
+
+test("Meet source selection ignores loud CSRCs left over from the ten-second window", () => {
+  const selected = capturePolicy.selectMeetContributingSource([
+    { source: 165, timestamp: 1_000, audioLevel: 0.9 },
+    { source: 160, timestamp: 10_000, audioLevel: 0.02 },
+  ]);
+  assert.equal(selected.source, 160);
+
+  assert.equal(capturePolicy.selectMeetContributingSource([
+    { source: 165, timestamp: 10_000, audioLevel: 0.03 },
+    { source: 160, timestamp: 9_990, audioLevel: 0.025 },
+  ]), null);
+  assert.equal(capturePolicy.selectMeetContributingSource([
+    { source: 165, timestamp: 10_000, audioLevel: 0.01 },
+    { source: 160, timestamp: 9_990, audioLevel: 0.04 },
+  ]).source, 160);
+  assert.equal(capturePolicy.selectMeetContributingSource([
+    { source: 165, audioLevel: 0.04 },
+    { source: 160, audioLevel: 0.02 },
+  ]), null);
+});
+
+test("Meet receiver leases suppress overlap but accept a handoff or reclock after a gap", () => {
+  const receiverA = {};
+  const receiverB = {};
+  const first = capturePolicy.updateMeetReceiverLease(null, receiverA, 1_000, 0);
+  assert.equal(first.accepted, true);
+  assert.equal(
+    capturePolicy.updateMeetReceiverLease(first.lease, receiverA, 1_000, 10).accepted,
+    false,
+  );
+  assert.equal(
+    capturePolicy.updateMeetReceiverLease(first.lease, receiverB, 10, 20).accepted,
+    false,
+  );
+  const handoff = capturePolicy.updateMeetReceiverLease(first.lease, receiverB, 10, 251);
+  assert.equal(handoff.accepted, true);
+  const reclock = capturePolicy.updateMeetReceiverLease(handoff.lease, receiverB, 1, 502);
+  assert.equal(reclock.accepted, true);
+});
+
 test("Meet microphone controls prefer data-is-muted over ambiguous labels", () => {
   assert.equal(capturePolicy.meetMicrophoneMuted({
     mutedAttribute: "false",

@@ -90,3 +90,58 @@ test("Meet initial sync roster uses the same participant representation", () => 
   assert.equal(user.displayName, "Alice");
   assert.equal(user.status, 1);
 });
+
+test("Meet collection handlers preserve data-channel order across async work", async () => {
+  let releaseFirst;
+  const firstGate = new Promise((resolve) => { releaseFirst = resolve; });
+  const seen = [];
+  const handle = globalThis.KualiMeetProtocol.orderedAsyncHandler(async (value) => {
+    seen.push(`start:${value}`);
+    if (value === "first") await firstGate;
+    seen.push(`end:${value}`);
+  });
+
+  const first = handle("first");
+  const second = handle("second");
+  await Promise.resolve();
+  assert.deepEqual(seen, ["start:first"]);
+  releaseFirst();
+  await Promise.all([first, second]);
+  assert.deepEqual(seen, ["start:first", "end:first", "start:second", "end:second"]);
+});
+
+test("a rejected Meet collection handler does not block later packets", async () => {
+  const seen = [];
+  const handle = globalThis.KualiMeetProtocol.orderedAsyncHandler(async (value) => {
+    seen.push(value);
+    if (value === "bad") throw new Error("bad packet");
+  });
+  await assert.rejects(handle("bad"), /bad packet/);
+  await handle("next");
+  assert.deepEqual(seen, ["bad", "next"]);
+});
+
+test("Meet output index removes only the stale source owned by a moving device", () => {
+  const byDevice = new Map();
+  const bySource = new Map();
+  const index = (deviceId, streamId) => globalThis.KualiMeetProtocol.indexDeviceOutput(
+    byDevice,
+    bySource,
+    { deviceId, streamId, outputType: 1, disabled: false },
+  );
+
+  index("devices/vivetix", "source/1");
+  index("devices/luis", "source/1");
+  const moved = index("devices/vivetix", "source/3");
+  assert.equal(moved.staleSource, "");
+  assert.equal(bySource.get("source/1").deviceId, "devices/luis");
+  assert.equal(bySource.get("source/3").deviceId, "devices/vivetix");
+  assert.deepEqual(
+    [...byDevice.values()].map(({ deviceId, streamId }) => [deviceId, streamId]).sort(),
+    [["devices/luis", "source/1"], ["devices/vivetix", "source/3"]],
+  );
+
+  index("devices/luis", "source/2");
+  assert.equal(bySource.has("source/1"), false);
+  assert.equal(bySource.get("source/2").deviceId, "devices/luis");
+});
