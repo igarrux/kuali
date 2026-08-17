@@ -234,6 +234,7 @@ permisos `0600` en el archivo de configuración de Kuali.
 | Transcripciones y metadatos | Se guardan localmente en los datos de Kuali |
 | Pesos de Whisper | Se guardan en la carpeta elegida por el usuario |
 | Solicitudes a LLM | El interruptor **Resúmenes y tareas** las desactiva; si está activo, van únicamente al proveedor configurado |
+| CLI local como proveedor | Se ejecuta sin herramientas, con el entorno vacío y encerrada por el núcleo: no ve tu carpeta personal ni puede escribir en el disco |
 | Webhooks | Permanecen desactivados hasta crear y habilitar una suscripción |
 
 Las reglas de grabación y consentimiento cambian según el lugar. Kuali ofrece

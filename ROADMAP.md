@@ -36,6 +36,11 @@ Every roadmap item must preserve these invariants:
 - Validate CUDA acceleration and CPU fallbacks.
 - Document model storage, startup behavior, browser integration, and updates.
 - Add release automation without weakening platform security defaults.
+- Confine local CLI providers the way macOS already does. `kuali-llm`'s
+  `confine` module refuses to launch a CLI it cannot isolate, so Windows needs a
+  restricted token or an AppContainer, and Linux needs Landlock or seccomp,
+  before either can use Claude Code, Codex, or Gemini CLI. Until then those
+  platforms reach an LLM through an API provider.
 
 ### Browser-platform coverage
 

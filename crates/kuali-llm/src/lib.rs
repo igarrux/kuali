@@ -7,6 +7,7 @@
 pub mod api;
 pub mod catalog;
 pub mod cli;
+mod confine;
 pub mod detect;
 pub mod json;
 pub mod models;

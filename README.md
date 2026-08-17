@@ -222,6 +222,7 @@ permissions in Kuali's configuration file.
 | Transcripts and meeting metadata | Stored locally in Kuali's application-data directory |
 | Whisper model weights | Stored in the directory selected by the user |
 | LLM requests | Disabled by the **Summaries and tasks** switch; otherwise sent only to the configured provider |
+| A local CLI as the provider | Runs with no tools, an emptied environment, and a kernel sandbox: it cannot see your home folder or write to disk |
 | Webhooks | Disabled until the user creates and enables a subscription |
 
 Recording and consent requirements vary by location. Kuali provides audible,

@@ -10,6 +10,7 @@ use async_trait::async_trait;
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
+use crate::confine;
 use crate::provider::{CompletionRequest, LlmError, LlmProvider, ProviderInfo, ProviderKind};
 
 /// An executable and the complete search path it needs when launched from a
@@ -22,10 +23,39 @@ pub(crate) struct ResolvedCommand {
 }
 
 impl ResolvedCommand {
+    /// The command with an emptied environment, holding only what the CLI needs
+    /// to authenticate and reach the network. See [`crate::confine`].
     pub(crate) fn process(&self) -> Command {
         let mut command = Command::new(&self.executable);
-        command.env("PATH", &self.search_path);
+        self.prepare(&mut command);
         command
+    }
+
+    /// The same command under a kernel sandbox, or an error when this platform
+    /// has none to offer.
+    fn confined(&self) -> Result<(Command, confine::Profile), LlmError> {
+        let plan = confine::plan(&self.name, &self.executable, &self.search_path).map_err(
+            |message| LlmError::Provider {
+                provider: self.name.clone(),
+                message,
+            },
+        )?;
+
+        let mut command = Command::new(plan.wrapper);
+        command
+            .arg("-f")
+            .arg(plan.profile.path())
+            .arg(&self.executable);
+        self.prepare(&mut command);
+        Ok((command, plan.profile))
+    }
+
+    fn prepare(&self, command: &mut Command) {
+        command.env_clear();
+        for (name, value) in confine::inherited() {
+            command.env(name, value);
+        }
+        command.env("PATH", &self.search_path);
     }
 
     pub(crate) fn label(&self) -> String {
@@ -184,7 +214,8 @@ async fn run(
     // project configuration cannot inherit unrelated user-project context.
     let cwd = std::env::temp_dir();
 
-    let mut command = program.process();
+    // The profile has to outlive the process that is running under it.
+    let (mut command, _profile) = program.confined()?;
     let mut child = command
         .args(args)
         .current_dir(cwd)
@@ -274,7 +305,7 @@ impl LlmProvider for ClaudeCliProvider {
     }
 
     async fn complete(&self, request: &CompletionRequest) -> Result<String, LlmError> {
-        let args: Vec<String> = [
+        let mut args: Vec<String> = [
             "--print",
             "--output-format",
             "json",
@@ -282,18 +313,11 @@ impl LlmProvider for ClaudeCliProvider {
             &self.model,
             "--system-prompt",
             &request.system,
-            // Kuali only needs text. Disabling tools and MCP prevents filesystem,
-            // network, or unrelated configured-server access.
-            "--strict-mcp-config",
-            "--disallowed-tools",
-            "Bash,Edit,Write,Read,Glob,Grep,WebFetch,WebSearch,Task",
-            // Never wait for interactive approval in this unattended process.
-            "--permission-mode",
-            "dontAsk",
         ]
         .iter()
         .map(|s| s.to_string())
         .collect();
+        args.extend(confine::tool_restrictions("claude"));
 
         let command =
             resolve_command("claude").ok_or_else(|| LlmError::Unavailable("claude-cli".into()))?;
@@ -376,13 +400,11 @@ impl LlmProvider for CodexCliProvider {
             // A neutral directory is intentionally not a repository, so bypass
             // the trusted-repository check explicitly.
             "--skip-git-repo-check".to_string(),
-            // Read-only mode prevents filesystem mutation when Kuali only needs text.
-            "--sandbox".to_string(),
-            "read-only".to_string(),
             // Request clean output without Codex's banner and token counter.
             "--output-last-message".to_string(),
             answer_path.display().to_string(),
         ];
+        args.extend(confine::tool_restrictions("codex"));
 
         // Continue without a schema if the file cannot be written; the parser can
         // recover JSON surrounded by prose.
@@ -425,7 +447,9 @@ impl LlmProvider for CodexCliProvider {
 // Gemini
 // ---------------------------------------------------------------------------
 
-/// Gemini CLI. Like Codex, this path has not been verified against the binary.
+/// Gemini CLI. Unlike the others, its flags come from the published reference
+/// rather than a binary Kuali has run, and it offers no way to drop its tools
+/// from the command line — the kernel sandbox is what confines it.
 pub struct GeminiCliProvider {
     model: Option<String>,
 }
@@ -457,7 +481,7 @@ impl LlmProvider for GeminiCliProvider {
     }
 
     async fn complete(&self, request: &CompletionRequest) -> Result<String, LlmError> {
-        let mut args = vec![];
+        let mut args = confine::tool_restrictions("gemini");
         if let Some(model) = &self.model {
             args.push("--model".to_string());
             args.push(model.clone());
@@ -472,6 +496,48 @@ impl LlmProvider for GeminiCliProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Nothing reaches a transcript unconfined. A provider whose executable is
+    /// missing from the confinement table cannot be launched at all, which is
+    /// what keeps a fourth CLI from arriving with the hardening left out.
+    #[tokio::test]
+    async fn a_cli_kuali_cannot_confine_is_refused_before_it_runs() {
+        let shell = if cfg!(windows) { "cmd" } else { "sh" };
+        let command = resolve_command(shell).unwrap();
+        let error = run(&command, &[], "hola").await.unwrap_err();
+        assert!(
+            error.to_string().contains(shell),
+            "se ejecutó una CLI sin confinar: {error}"
+        );
+    }
+
+    /// Confinement is worthless if it also breaks the provider. Needs an
+    /// authenticated `claude` on this machine, so it is not part of the suite.
+    #[tokio::test]
+    #[ignore = "requiere una sesión de Claude Code iniciada"]
+    async fn a_confined_claude_still_answers() {
+        let provider = ClaudeCliProvider::new(None);
+        let answer = provider
+            .complete(&CompletionRequest {
+                system: "Responde solo con la palabra que se te pida.".into(),
+                prompt: "Di exactamente: listo".into(),
+                json_schema: None,
+                max_tokens: 64,
+            })
+            .await
+            .unwrap();
+        assert!(answer.to_lowercase().contains("listo"), "{answer}");
+    }
+
+    #[test]
+    fn every_cli_provider_asks_its_binary_to_refuse_tools() {
+        for program in ["claude", "codex", "gemini"] {
+            assert!(
+                !confine::tool_restrictions(program).is_empty(),
+                "`{program}` se lanzaría sin restricciones"
+            );
+        }
+    }
 
     #[test]
     fn a_binary_that_cannot_exist_is_not_found() {
