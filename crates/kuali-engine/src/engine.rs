@@ -65,6 +65,14 @@ pub enum EngineError {
     WebMeetings(String),
     #[error("summaries and tasks are disabled in Settings")]
     SummariesDisabled,
+    #[error("the meeting index is unavailable, so past meetings cannot be searched")]
+    MemoryUnavailable,
+    #[error("questions about past meetings are turned off in Settings")]
+    QuestionsDisabled,
+    #[error("the model that answers questions has not finished downloading")]
+    QuestionModelMissing,
+    #[error(transparent)]
+    Memory(Box<kuali_memory::MemoryError>),
 }
 
 // `#[from]` would generate `From<Box<_>>`; these implementations let `?` accept
@@ -85,6 +93,7 @@ boxed_from! {
     kuali_llm::LlmError => Llm,
     kuali_stt::ModelError => Model,
     kuali_core::paths::ConfigError => Config,
+    kuali_memory::MemoryError => Memory,
 }
 
 struct ActiveMeeting {
@@ -158,6 +167,11 @@ struct Inner {
     /// request that was queued before the user pressed Cancel.
     model_download_cancellation: watch::Sender<u64>,
     discord: AsyncMutex<Option<DiscordHandle>>,
+    /// Searchable index of finished meetings, behind a blocking lock because
+    /// SQLite is blocking. `None` when the index could not be opened: asking
+    /// then reports a clear failure while recording, transcribing and
+    /// summarizing carry on untouched.
+    memory: Mutex<Option<kuali_memory::Memory>>,
 }
 
 impl Inner {
@@ -180,6 +194,78 @@ impl Inner {
 #[derive(Clone)]
 pub struct Engine {
     inner: Arc<Inner>,
+}
+
+/// Opens the meeting index, degrading to `None` instead of failing startup.
+///
+/// The index is derived from `meetings/` and can always be rebuilt, so losing it
+/// costs a re-sync. Refusing to start Kuali because questions are unavailable
+/// would trade recording, transcription and summaries for one feature.
+fn open_memory() -> Option<kuali_memory::Memory> {
+    match kuali_memory::Memory::open() {
+        Ok(memory) => Some(memory),
+        Err(error) => {
+            tracing::error!(
+                %error,
+                "no pude abrir el índice de reuniones; las preguntas quedarán desactivadas"
+            );
+            None
+        }
+    }
+}
+
+/// Adds a finished meeting to the index.
+///
+/// Deliberately not awaited and never fatal: the meeting is already saved, and
+/// an index that missed one meeting is repaired by the next
+/// [`Engine::sync_memory`]. Delivery of the summary must not wait on search.
+fn remember(inner: &Arc<Inner>, meeting: &Meeting) {
+    let inner = Arc::clone(inner);
+    let meeting = meeting.clone();
+    tokio::task::spawn_blocking(move || {
+        let config = inner.config.read().clone();
+        // The model is loaded for this one meeting and dropped at the end of the
+        // closure. An hour-long call is about a second of work, which is not
+        // worth keeping 130 MB resident between meetings.
+        let mut embedder = match config.llm.meeting_questions {
+            true => kuali_memory::embed::Embedder::load(&crate::questions::models_dir_for(
+                &config.whisper,
+            ))
+            .map_err(|error| {
+                tracing::warn!(%error, "no pude cargar el modelo para indexar la reunión");
+            })
+            .ok(),
+            false => None,
+        };
+
+        let mut guard = inner.memory.lock();
+        let Some(memory) = guard.as_mut() else {
+            return;
+        };
+        if let Err(error) = memory.index_with(&meeting, embedder.as_mut()) {
+            tracing::warn!(
+                meeting_id = %meeting.meta.id,
+                %error,
+                "no pude indexar la reunión para búsquedas"
+            );
+        }
+    });
+}
+
+/// Removes meetings from the index as they leave the library.
+///
+/// Synchronous and inline, unlike indexing: a deleted meeting must not survive
+/// in an answer, so this finishes before the deletion is reported as done.
+fn forget_meetings(inner: &Arc<Inner>, ids: impl IntoIterator<Item = String>) {
+    let mut guard = inner.memory.lock();
+    let Some(memory) = guard.as_mut() else {
+        return;
+    };
+    for id in ids {
+        if let Err(error) = memory.forget(&id) {
+            tracing::warn!(meeting_id = %id, %error, "no pude quitar la reunión del índice");
+        }
+    }
 }
 
 fn configured_model_target_changed(previous: &KualiConfig, next: &KualiConfig) -> bool {
@@ -227,6 +313,7 @@ impl Engine {
             model_download: AsyncMutex::new(()),
             model_download_cancellation,
             discord: AsyncMutex::new(None),
+            memory: Mutex::new(open_memory()),
         });
 
         let engine = Self { inner };
@@ -677,7 +764,9 @@ impl Engine {
         {
             return Err(EngineError::ActiveMeetingDeletion);
         }
-        Ok(kuali_store::delete(id)?)
+        kuali_store::delete(id)?;
+        forget_meetings(&self.inner, [id.to_string()]);
+        Ok(())
     }
 
     /// Deletes multiple meetings as one operation after validating that every
@@ -708,6 +797,7 @@ impl Engine {
         for id in &ids {
             kuali_store::delete(id)?;
         }
+        forget_meetings(&self.inner, ids.iter().map(|id| (*id).clone()));
         Ok(ids.len())
     }
 
@@ -764,6 +854,208 @@ impl Engine {
         Ok(())
     }
 
+    /// Answers a question from past meetings, restricted to what `audience`
+    /// may read.
+    ///
+    /// The audience is a parameter rather than something derived here, so the
+    /// caller that knows who is asking is the one that says so. Discord passes
+    /// the account and server it received the command from; the desktop
+    /// application passes [`kuali_memory::Audience::Everything`], because it is
+    /// running on the machine that recorded the meetings for the person who
+    /// owns them.
+    pub async fn ask(
+        &self,
+        audience: kuali_memory::Audience,
+        question: &str,
+        asker: kuali_memory::Asker,
+    ) -> Result<kuali_memory::Answer, EngineError> {
+        ask_memory(&self.inner, audience, question, asker).await
+    }
+
+    /// Who Kuali believes is using the desktop application.
+    ///
+    /// Browser meetings answer this by themselves: the page marks the tile that
+    /// owns the local microphone, so the name comes from the meeting rather
+    /// than from a preference. Names typed into Settings come after it, which
+    /// is what covers Discord-only libraries and lets someone correct a display
+    /// name their platform got wrong.
+    ///
+    /// Never marked verified: the desktop application authenticates nobody, and
+    /// a wrong guess should make the model hedge rather than assert.
+    pub fn local_asker(&self) -> kuali_memory::Asker {
+        let config = self.inner.config.read().clone();
+        // The followed account is who this installation belongs to, so the
+        // names its meetings recorded are this person's names. Without it a
+        // Discord-only library would know nothing about who is asking, even
+        // though Kuali has been told exactly who to follow.
+        let follow = config.discord.follow_user_id;
+
+        let mut names = {
+            let guard = self.inner.memory.lock();
+            match guard.as_ref() {
+                Some(memory) => {
+                    let mut found = follow
+                        .and_then(|id| memory.names_for_speaker(id).ok())
+                        .unwrap_or_default();
+                    found.extend(memory.known_self_names().unwrap_or_default());
+                    found
+                }
+                None => Vec::new(),
+            }
+        };
+        names.extend(config.application.display_names.clone());
+        // A name seen in two places is still one name.
+        let mut seen = HashSet::new();
+        names.retain(|name| seen.insert(name.to_lowercase()));
+        kuali_memory::Asker::named(names, false)
+    }
+
+    /// What still stands between the user and asking a question.
+    ///
+    /// `pending_passages` is a real count, which is what lets the interface
+    /// promise a time rather than a vague "this may take a while".
+    pub fn questions_status(&self) -> crate::questions::QuestionsStatus {
+        let config = self.inner.config.read().clone();
+        let models_dir = crate::questions::models_dir_for(&config.whisper);
+        let model_ready = kuali_memory::embed::is_downloaded(&models_dir);
+
+        let (pending, embedded) = {
+            let guard = self.inner.memory.lock();
+            match guard.as_ref() {
+                Some(memory) => (
+                    memory.pending_embeddings().unwrap_or(0),
+                    memory.embedded_passages().unwrap_or(0),
+                ),
+                None => (0, 0),
+            }
+        };
+
+        crate::questions::QuestionsStatus {
+            enabled: config.llm.meeting_questions,
+            model_ready,
+            pending_passages: pending,
+            embedded_passages: embedded,
+            ready: config.llm.meeting_questions && model_ready && pending == 0,
+        }
+    }
+
+    /// Downloads the embedding model if needed, then embeds every stored
+    /// passage, reporting progress as it goes.
+    ///
+    /// Safe to call again after an interruption: the download skips files
+    /// already present and the indexing only touches passages that still lack a
+    /// vector, so a cancelled run resumes instead of restarting.
+    pub async fn prepare_questions(&self) -> Result<(), EngineError> {
+        let config = self.inner.config.read().clone();
+        let models_dir = crate::questions::models_dir_for(&config.whisper);
+
+        let inner = Arc::clone(&self.inner);
+        let result = crate::questions::download_model(&models_dir, |stage, done, total| {
+            inner.emit(KualiEvent::QuestionSetupProgress { stage, done, total });
+        })
+        .await;
+        if let Err(message) = result {
+            self.inner.emit(KualiEvent::QuestionSetupFinished {
+                error: Some(message.clone()),
+            });
+            return Err(EngineError::ModelStorage(message));
+        }
+
+        let inner = Arc::clone(&self.inner);
+        let indexing = tokio::task::spawn_blocking(move || {
+            // The index has to be current before its passages are embedded,
+            // otherwise a meeting recorded while the feature was off would be
+            // missing rather than merely unvectorized.
+            {
+                let mut guard = inner.memory.lock();
+                if let Some(memory) = guard.as_mut() {
+                    let _ = memory.sync_from_store();
+                }
+            }
+
+            let mut embedder = kuali_memory::embed::Embedder::load(&models_dir)?;
+            let mut guard = inner.memory.lock();
+            let Some(memory) = guard.as_mut() else {
+                return Err(kuali_memory::MemoryError::Embedding {
+                    message: "el índice de reuniones no está disponible".into(),
+                });
+            };
+            memory.embed_pending(&mut embedder, |done, total| {
+                inner.emit(KualiEvent::QuestionSetupProgress {
+                    stage: kuali_core::QuestionSetupStage::Indexing,
+                    done: done as u64,
+                    total: Some(total as u64),
+                });
+                true
+            })?;
+            Ok(())
+        })
+        .await
+        .map_err(|error| EngineError::ModelStorage(error.to_string()))?;
+
+        match indexing {
+            Ok(()) => {
+                self.inner
+                    .emit(KualiEvent::QuestionSetupFinished { error: None });
+                Ok(())
+            }
+            Err(error) => {
+                let message = error.to_string();
+                self.inner.emit(KualiEvent::QuestionSetupFinished {
+                    error: Some(message),
+                });
+                Err(error.into())
+            }
+        }
+    }
+
+    /// Throws away the vectors and the downloaded weights, returning the bytes
+    /// freed. Passages and meetings are untouched, so turning the feature back
+    /// on re-embeds rather than re-transcribes.
+    pub fn discard_question_data(&self) -> Result<u64, EngineError> {
+        let config = self.inner.config.read().clone();
+        {
+            let mut guard = self.inner.memory.lock();
+            if let Some(memory) = guard.as_mut() {
+                memory.forget_embeddings()?;
+            }
+        }
+        crate::questions::delete_model(&crate::questions::models_dir_for(&config.whisper))
+            .map_err(|error| EngineError::ModelStorage(error.to_string()))
+    }
+
+    /// Brings the index in line with the stored library, in the background.
+    ///
+    /// Runs at startup so meetings recorded before this feature existed — or
+    /// while the index was missing — become searchable without the user doing
+    /// anything.
+    ///
+    /// Uses a plain thread rather than a runtime task on purpose: startup calls
+    /// it from the interface's setup hook, which runs on the main thread before
+    /// any reactor exists. A background job that only works from inside an async
+    /// context is a trap for whoever calls it next.
+    pub fn sync_memory(&self) {
+        let inner = Arc::clone(&self.inner);
+        std::thread::spawn(move || {
+            let mut guard = inner.memory.lock();
+            let Some(memory) = guard.as_mut() else {
+                return;
+            };
+            match memory.sync_from_store() {
+                Ok(report) => tracing::info!(
+                    indexed = report.indexed,
+                    unchanged = report.unchanged,
+                    removed = report.removed,
+                    unreadable = report.unreadable,
+                    "índice de reuniones sincronizado"
+                ),
+                Err(error) => {
+                    tracing::warn!(%error, "no pude sincronizar el índice de reuniones")
+                }
+            }
+        });
+    }
+
     /// Requests another LLM summary after changing providers or receiving a weak result.
     pub async fn resummarize(&self, meeting_id: &str) -> Result<MeetingSummary, EngineError> {
         let config = self.inner.config.read().clone();
@@ -775,6 +1067,8 @@ impl Engine {
         let result = summarize_and_sync(&self.inner, &mut meeting, &config, 0)
             .await
             .map_err(Into::into);
+        // A regenerated summary replaces what questions were answering from.
+        remember(&self.inner, &meeting);
         finish_post_processing(&self.inner);
         result
     }
@@ -897,6 +1191,16 @@ async fn handle_voice_event(inner: &Arc<Inner>, source: VoiceSource, event: Voic
             reply,
         } => {
             let _ = reply.send(latest_meeting_for_discord(inner, guild_id, channel_id));
+        }
+        VoiceEvent::QuestionAsked {
+            user_id,
+            guild_id,
+            question,
+            asker_name,
+            reply,
+        } => {
+            let result = answer_for_discord(inner, user_id, guild_id, &question, asker_name).await;
+            let _ = reply.send(result);
         }
         VoiceEvent::FollowRequested { user_id, reply } => {
             let result = configure_discord_follow(inner, user_id).await;
@@ -1073,6 +1377,16 @@ async fn handle_session_event(inner: &Arc<Inner>, session: VoiceSessionKey, even
         } => {
             let _ = reply.send(latest_meeting_for_discord(inner, guild_id, channel_id));
         }
+        VoiceEvent::QuestionAsked {
+            user_id,
+            guild_id,
+            question,
+            asker_name,
+            reply,
+        } => {
+            let result = answer_for_discord(inner, user_id, guild_id, &question, asker_name).await;
+            let _ = reply.send(result);
+        }
         VoiceEvent::FollowRequested { user_id, reply } => {
             let result = configure_discord_follow(inner, user_id).await;
             let _ = reply.send(result);
@@ -1128,6 +1442,128 @@ fn meeting_for_discord(
 /// A slash command names no meeting, so the channel it was typed in decides
 /// which history can be reached at all. Nothing outside that channel is
 /// considered, even inside the same server.
+async fn ask_memory(
+    inner: &Arc<Inner>,
+    audience: kuali_memory::Audience,
+    question: &str,
+    asker: kuali_memory::Asker,
+) -> Result<kuali_memory::Answer, EngineError> {
+    let config = inner.config.read().clone();
+    // Answering means sending transcript excerpts to the configured provider,
+    // which is exactly what this setting governs. Someone who turned it off did
+    // not carve out an exception for questions.
+    if !config.llm.summarize_on_leave {
+        return Err(EngineError::SummariesDisabled);
+    }
+    // Questions are all-or-nothing on purpose. Falling back to word matching
+    // when the embedding model is absent would produce a feature that answers
+    // well sometimes and misses obvious things other times, and the misses are
+    // what people remember.
+    if !config.llm.meeting_questions {
+        return Err(EngineError::QuestionsDisabled);
+    }
+    let models_dir = crate::questions::models_dir_for(&config.whisper);
+    if !kuali_memory::embed::is_downloaded(&models_dir) {
+        return Err(EngineError::QuestionModelMissing);
+    }
+
+    let passages = {
+        let inner = Arc::clone(inner);
+        let question = question.to_string();
+        // SQLite is blocking, and the lock has to be released before the
+        // provider is called: one person's question must not hold the index
+        // while a model thinks.
+        tokio::task::spawn_blocking(move || {
+            let mut embedder = kuali_memory::embed::Embedder::load(&models_dir)?;
+            let guard = inner.memory.lock();
+            match guard.as_ref() {
+                Some(memory) => memory
+                    .evidence_with(&audience, &question, Some(&mut embedder))
+                    .map(Some),
+                None => Ok(None),
+            }
+        })
+        .await
+        .map_err(|error| EngineError::ModelStorage(error.to_string()))??
+    };
+
+    let Some(passages) = passages else {
+        return Err(EngineError::MemoryUnavailable);
+    };
+    if passages.is_empty() {
+        // Nothing this person can reach mentions it. That is an answer, and it
+        // costs no provider call to give.
+        return Ok(kuali_memory::Answer::NothingFound);
+    }
+
+    let provider = kuali_llm::select_provider(&config.llm).await?;
+    Ok(kuali_memory::answer(
+        provider.as_ref(),
+        question,
+        &passages,
+        &config.llm.output_language,
+        &asker,
+    )
+    .await?)
+}
+
+/// Answers a Discord question, scoped to the meetings that account attended in
+/// that server.
+///
+/// The audience is built here, from the identity Discord verified, and never
+/// from anything inside the question text.
+async fn answer_for_discord(
+    inner: &Arc<Inner>,
+    user_id: DiscordUserId,
+    guild_id: u64,
+    question: &str,
+    asker_name: Option<String>,
+) -> Result<Option<kuali_core::MeetingAnswer>, String> {
+    let audience = kuali_memory::Audience::DiscordParticipant { user_id, guild_id };
+    // Discord authenticated this account, so the name is verified. The names
+    // typed into Settings come along as aliases, because the same person may
+    // appear differently in a browser meeting.
+    let mut names: Vec<String> = asker_name.into_iter().collect();
+    names.extend(inner.config.read().application.display_names.clone());
+    let asker = kuali_memory::Asker::named(names, true);
+
+    match ask_memory(inner, audience, question, asker).await {
+        Ok(kuali_memory::Answer::NothingFound) => Ok(None),
+        Ok(kuali_memory::Answer::Answered { text, citations }) => {
+            Ok(Some(kuali_core::MeetingAnswer {
+                text,
+                citations: citations
+                    .into_iter()
+                    .map(|citation| kuali_core::AnswerCitation {
+                        meeting_id: citation.meeting_id,
+                        title: citation.meeting_title,
+                        channel_name: citation.channel_name,
+                        started_at: citation.started_at,
+                        start_ms: citation.start_ms,
+                    })
+                    .collect(),
+            }))
+        }
+        Err(error) => {
+            // The bot shows this to whoever asked, so it stays about what they
+            // can do rather than about engine internals.
+            tracing::warn!(%error, "no pude responder una pregunta desde Discord");
+            Err(match error {
+                EngineError::SummariesDisabled => {
+                    "Las funciones de IA están desactivadas en Ajustes de Kuali.".to_string()
+                }
+                EngineError::MemoryUnavailable => {
+                    "El índice de reuniones no está disponible ahora mismo.".to_string()
+                }
+                EngineError::QuestionsDisabled | EngineError::QuestionModelMissing => {
+                    "Las preguntas sobre reuniones pasadas no están activadas en Kuali.".to_string()
+                }
+                other => other.to_string(),
+            })
+        }
+    }
+}
+
 fn latest_meeting_for_discord(
     inner: &Arc<Inner>,
     guild_id: u64,
@@ -1424,6 +1860,10 @@ async fn finish_meeting(inner: &Arc<Inner>, session: VoiceSessionKey) {
                 summary_status,
             )
             .await;
+            // Indexed once the meeting is completely settled, so a question
+            // sees the summary when there is one and the transcript when
+            // summaries are off or the provider failed.
+            remember(&inner, &active.meeting);
             finish_post_processing(&inner);
         }
     };
@@ -2753,6 +3193,7 @@ mod tests {
             avatar_url: None,
             color: color_for(7).into(),
             is_bot: false,
+            is_self: false,
         });
         meeting.push_utterance(Utterance {
             id: "u1".into(),

@@ -11,9 +11,11 @@ kuali-discord.workspace = true
 kuali-meet.workspace = true
 kuali-llm.workspace = true
 kuali-stt.workspace = true
+kuali-memory.workspace = true
 kuali-store.workspace = true
 
 chrono.workspace = true
+futures.workspace = true
 base64.workspace = true
 hmac.workspace = true
 parking_lot.workspace = true

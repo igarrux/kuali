@@ -35,6 +35,16 @@ pub struct ApplicationConfig {
     /// Install signed updates whenever no recording or summary is in progress.
     /// Kuali checks the release feed at startup regardless of this preference.
     pub automatic_updates: bool,
+    /// Names this person answers to in meetings, so a question phrased in the
+    /// first person can be resolved.
+    ///
+    /// Declared rather than derived because there is nothing to derive it from
+    /// outside Discord: a Google Meet or Teams roster carries whatever display
+    /// name that platform shows, with no link back to any account Kuali knows.
+    /// Several names are allowed because the same person is "Juan Sebastián" in
+    /// one platform and "juansebas" in another.
+    #[serde(default)]
+    pub display_names: Vec<String>,
 }
 
 impl Default for ApplicationConfig {
@@ -42,6 +52,7 @@ impl Default for ApplicationConfig {
         Self {
             language: "auto".into(),
             automatic_updates: true,
+            display_names: Vec::new(),
         }
     }
 }
@@ -498,6 +509,14 @@ pub struct LlmConfig {
     /// Allow meeting transcripts to be processed by the configured LLM.
     /// When disabled, automatic and manual summaries are both blocked.
     pub summarize_on_leave: bool,
+    /// Whether questions about past meetings are available at all.
+    ///
+    /// Off until the person turns it on, because answering well requires a
+    /// 128 MB embedding model that nobody should download without asking. It is
+    /// also the gate itself: a question is refused while this is off rather than
+    /// answered with weaker search. A feature that sometimes finds the answer
+    /// and sometimes misses it teaches people not to trust it.
+    pub meeting_questions: bool,
 }
 
 impl Default for LlmConfig {
@@ -508,6 +527,7 @@ impl Default for LlmConfig {
             providers: BTreeMap::new(),
             output_language: "auto".to_string(),
             summarize_on_leave: true,
+            meeting_questions: false,
         }
     }
 }

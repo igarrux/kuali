@@ -52,6 +52,16 @@ pub enum ModelState {
 
 /// Event sent from the engine to the interface. The JSON `type` field identifies
 /// the variant for direct frontend dispatch.
+/// Which part of getting questions ready is running.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum QuestionSetupStage {
+    /// Fetching the embedding model. `done` and `total` are bytes.
+    Downloading,
+    /// Embedding stored meetings. `done` and `total` are passages.
+    Indexing,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(
     tag = "type",
@@ -117,6 +127,20 @@ pub enum KualiEvent {
     },
     /// Server names and icons changed, so the library can refresh them.
     GuildsUpdated,
+    /// Progress while getting questions about past meetings ready.
+    ///
+    /// `total` is absent only while a download reports no content length. The
+    /// interface derives the remaining time from the observed rate rather than
+    /// from a guess baked in here, so a slow machine reports its own truth.
+    QuestionSetupProgress {
+        stage: QuestionSetupStage,
+        done: u64,
+        total: Option<u64>,
+    },
+    /// Preparation ended. `error` is absent when questions are now ready.
+    QuestionSetupFinished {
+        error: Option<String>,
+    },
     SummaryStarted {
         meeting_id: String,
     },

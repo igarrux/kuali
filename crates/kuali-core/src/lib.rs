@@ -18,11 +18,11 @@ pub use config::{
     ProviderSettings, RecordingConfig, WebMeetingsConfig, WebhookScope, WebhookSubscription,
     WhisperConfig, WhisperModel, CONSENT_MESSAGE,
 };
-pub use event::{EngineStatus, KualiEvent, ModelState};
+pub use event::{EngineStatus, KualiEvent, ModelState, QuestionSetupStage};
 pub use meeting::{
     browser_identifier, color_for, format_timestamp, is_browser_identifier, sanitize_folder,
     sanitize_tags, ActionItem, DiscordSummaryDelivery, DiscordUserId, Meeting, MeetingMeta,
     MeetingNote, MeetingSummary, Speaker, SpeakerId, Utterance, BROWSER_ID_TAG, MAX_FOLDER_CHARS,
     MAX_TAGS_PER_MEETING, MAX_TAG_CHARS,
 };
-pub use source::{CallInfo, GuildInfo, VoiceEvent, VoiceSessionId};
+pub use source::{AnswerCitation, CallInfo, GuildInfo, MeetingAnswer, VoiceEvent, VoiceSessionId};

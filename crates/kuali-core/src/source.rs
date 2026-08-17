@@ -41,6 +41,30 @@ pub struct GuildInfo {
     pub icon: Option<String>,
 }
 
+/// Answer to a question about past meetings, in the shape a source needs to
+/// render it.
+///
+/// It lives here rather than in the index so `kuali-discord` never has to know
+/// how retrieval works — only what an answer looks like.
+#[derive(Debug, Clone, PartialEq)]
+pub struct MeetingAnswer {
+    pub text: String,
+    /// Meetings the answer rests on, newest first. Empty when the model
+    /// answered without pointing at anything specific.
+    pub citations: Vec<AnswerCitation>,
+}
+
+/// Where a claim came from, with enough detail for the reader to go and check.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AnswerCitation {
+    pub meeting_id: String,
+    pub title: String,
+    pub channel_name: String,
+    pub started_at: chrono::DateTime<chrono::Utc>,
+    /// Position in the transcript, when the cited passage had one.
+    pub start_ms: Option<u64>,
+}
+
 #[derive(Debug)]
 pub enum VoiceEvent {
     /// Every server the bot belongs to, reported once the cache is ready. It
@@ -99,6 +123,24 @@ pub enum VoiceEvent {
         guild_id: u64,
         channel_id: u64,
         reply: oneshot::Sender<Result<Option<Meeting>, String>>,
+    },
+    /// Someone asked Kuali about past meetings through a slash command.
+    ///
+    /// The account and the server travel with the question because they are
+    /// what decides which meetings may be searched at all. The engine resolves
+    /// them into an audience; nothing downstream can widen it.
+    ///
+    /// `Ok(None)` means no meeting this person took part in discusses the
+    /// question. That is an answer, not a failure, and it is reported
+    /// separately so the caller can phrase it in the asker's language.
+    QuestionAsked {
+        user_id: DiscordUserId,
+        guild_id: u64,
+        question: String,
+        /// Display name Discord reports for this account, so an answer can
+        /// resolve "what did I promise?" instead of guessing a participant.
+        asker_name: Option<String>,
+        reply: oneshot::Sender<Result<Option<MeetingAnswer>, String>>,
     },
     /// The bot resolved the configured @username. The engine persists its exact
     /// ID and updates following immediately.
