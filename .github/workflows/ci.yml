@@ -45,6 +45,52 @@ jobs:
       - name: Test workspace
         run: cargo test --workspace
 
+  # Everything above runs on Linux, which never compiles the code that only
+  # exists on macOS — the Seatbelt confinement, the Metal paths — and never
+  # packages anything. Kuali ships for macOS, so both are checked here.
+  macos:
+    name: macOS workspace and bundle
+    # Apple Silicon runner, which is what Kuali ships for. Free on a public
+    # repository, so this costs wall-clock time and nothing else.
+    runs-on: macos-15
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Install Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+
+      - name: Install Rust 1.89
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: 1.89
+          targets: aarch64-apple-darwin
+          components: clippy
+
+      - name: Cache Rust artifacts
+        uses: Swatinem/rust-cache@v2
+
+      - name: Lint workspace
+        run: cargo clippy --workspace --all-targets -- -D warnings
+
+      - name: Test workspace
+        run: cargo test --workspace
+
+      # Building is not releasing. A tag remains the only thing that publishes,
+      # so this produces the disk image and throws it away: what it proves is
+      # that packaging still works, on the commit that broke it rather than
+      # weeks later when someone cuts a release.
+      #
+      # Updater artifacts are switched off because signing them needs the
+      # release key, which a pull request from a fork cannot reach. Every real
+      # release signs them, so nothing here goes unchecked.
+      - name: Build the bundle without publishing it
+        uses: tauri-apps/tauri-action@v0
+        with:
+          args: --target aarch64-apple-darwin --config tauri.ci.conf.json
+
   interface:
     name: Desktop interface
     runs-on: ubuntu-24.04
