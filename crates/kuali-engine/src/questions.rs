@@ -1,8 +1,8 @@
 //! Getting questions about past meetings ready to use.
 //!
-//! Two things have to be true before Kuali will answer one: the embedding model
-//! is on disk, and every stored passage has a vector. This module does both, in
-//! that order, reporting progress the whole way.
+//! Before Kuali answers, the embedding model must be on disk, the derived index
+//! must match every finished meeting, and every stored passage must have a
+//! vector. This module prepares those pieces in order and reports progress.
 //!
 //! Neither step is done behind the user's back. The model is 128 MB, and
 //! embedding an existing library takes minutes on a large one, so both are
@@ -41,11 +41,21 @@ pub struct QuestionsStatus {
     pub enabled: bool,
     /// Whether both model files are present.
     pub model_ready: bool,
+    /// Whether the derived SQLite memory opened and its counters are readable.
+    pub index_available: bool,
+    /// Whether every finished meeting in the authoritative store has a row in
+    /// the derived index. This catches a failed write that creates no pending
+    /// passage at all.
+    pub index_current: bool,
     /// Passages still waiting for a vector.
     pub pending_passages: usize,
     /// Passages that already have one, so the interface can show how far along
     /// an interrupted run got.
     pub embedded_passages: usize,
+    /// A finished meeting or startup synchronization has not yet reached a
+    /// stable index snapshot. While true, answering would risk omitting it even
+    /// if every older passage already has a vector.
+    pub updating: bool,
     /// Whether a question can actually be answered right now.
     pub ready: bool,
 }
