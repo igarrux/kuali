@@ -97,6 +97,16 @@ pub enum KualiEvent {
     MeetingEnded {
         meeting_id: String,
     },
+    /// The derived search index for one meeting finished an automatic or
+    /// user-requested indexing attempt. Interfaces should query its current
+    /// status rather than treating delivery as proof of success.
+    MeetingIndexChanged {
+        meeting_id: String,
+    },
+    /// Global question readiness may have changed even when no individual row
+    /// changed (for example, startup verification completed on an already
+    /// current library).
+    QuestionsStatusChanged,
     SpeakerJoined {
         meeting_id: String,
         speaker: Speaker,
@@ -204,5 +214,19 @@ mod tests {
 
         assert_eq!(json["type"], "modelRecoveryStarted");
         assert_eq!(json["model"], "large-v3");
+    }
+
+    #[test]
+    fn meeting_index_events_cross_the_frontend_boundary_in_camel_case() {
+        let json = serde_json::to_value(KualiEvent::MeetingIndexChanged {
+            meeting_id: "meeting-7".into(),
+        })
+        .unwrap();
+
+        assert_eq!(json["type"], "meetingIndexChanged");
+        assert_eq!(json["meetingId"], "meeting-7");
+
+        let ready = serde_json::to_value(KualiEvent::QuestionsStatusChanged).unwrap();
+        assert_eq!(ready["type"], "questionsStatusChanged");
     }
 }

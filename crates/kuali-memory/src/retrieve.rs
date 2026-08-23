@@ -11,6 +11,8 @@
 //! audience is not ranked lower — it does not exist.
 
 use chrono::{DateTime, Utc};
+#[cfg(test)]
+use rusqlite::params;
 use rusqlite::types::Value;
 use rusqlite::{params_from_iter, Row};
 
@@ -55,6 +57,11 @@ const NEIGHBOUR_DECAY: f32 = 0.55;
 /// fraction of the best direct hit. It is low enough to sit below real matches
 /// and high enough to survive the final cut when direct hits are scarce.
 const UNMATCHED_NEIGHBOUR_SHARE: f32 = 0.25;
+
+/// A conversation can keep a small working set of meetings alive across vague
+/// follow-ups without turning the entire chat into a second index.
+const CONVERSATION_MEETINGS: usize = 3;
+const CONVERSATION_PASSAGES_PER_MEETING: usize = 3;
 
 impl Memory {
     /// Passages this audience may read, ranked by how well they answer the
@@ -310,6 +317,152 @@ impl Memory {
         Ok(passages)
     }
 
+    /// Useful passages from meetings cited by recent conversation turns.
+    ///
+    /// Caller-provided IDs are only hints. Every one is selected through the
+    /// audience's `visible` CTE here, so a forged or stale citation cannot widen
+    /// access. Distilled conclusions lead; transcript is a fallback for a
+    /// meeting that has not been summarized yet.
+    pub(crate) fn conversation_context(
+        &self,
+        audience: &Audience,
+        meeting_ids: &[String],
+        retrieval_query: &str,
+    ) -> Result<Vec<Passage>> {
+        let mut unique_ids = Vec::new();
+        for meeting_id in meeting_ids {
+            let meeting_id = meeting_id.trim();
+            if !meeting_id.is_empty() && !unique_ids.iter().any(|kept| kept == meeting_id) {
+                unique_ids.push(meeting_id.to_string());
+            }
+            if unique_ids.len() == CONVERSATION_MEETINGS {
+                break;
+            }
+        }
+
+        let mut passages = Vec::new();
+        for meeting_id in unique_ids {
+            passages.extend(self.conversation_context_of(
+                audience,
+                &meeting_id,
+                retrieval_query,
+            )?);
+        }
+        Ok(passages)
+    }
+
+    fn conversation_context_of(
+        &self,
+        audience: &Audience,
+        meeting_id: &str,
+        retrieval_query: &str,
+    ) -> Result<Vec<Passage>> {
+        // Relevance comes first inside the already-anchored meeting. This is
+        // what prevents a fourth action item assigned to the asker from being
+        // dropped merely because three unrelated tasks were inserted first.
+        let mut passages = match fts_query(retrieval_query) {
+            Some(query) => self.authorized_context_matching(audience, meeting_id, &query, 2)?,
+            None => Vec::new(),
+        };
+        let fallback = self.authorized_context_query(
+            audience,
+            "AND c.kind IN ('task', 'decision', 'overview', 'key_point', 'note', 'question')
+             ORDER BY CASE c.kind
+                          WHEN 'task' THEN 0
+                          WHEN 'decision' THEN 1
+                          WHEN 'overview' THEN 2
+                          WHEN 'key_point' THEN 3
+                          WHEN 'note' THEN 4
+                          ELSE 5
+                      END",
+            meeting_id,
+            CONVERSATION_PASSAGES_PER_MEETING,
+        )?;
+        for passage in fallback {
+            if passages
+                .iter()
+                .any(|known| known.meeting_id == passage.meeting_id && known.text == passage.text)
+            {
+                continue;
+            }
+            passages.push(passage);
+            if passages.len() == CONVERSATION_PASSAGES_PER_MEETING {
+                break;
+            }
+        }
+        if passages.is_empty() {
+            passages = self.authorized_context_query(
+                audience,
+                "AND c.kind = 'transcript' ORDER BY c.start_ms",
+                meeting_id,
+                1,
+            )?;
+        }
+        Ok(passages)
+    }
+
+    fn authorized_context_matching(
+        &self,
+        audience: &Audience,
+        meeting_id: &str,
+        query: &str,
+        limit: usize,
+    ) -> Result<Vec<Passage>> {
+        let (visible, mut values) = audience.visible_meetings();
+        let sql = format!(
+            "WITH visible AS ({visible})
+             SELECT c.meeting_id, m.title, m.channel_name, m.started_at,
+                    c.kind, c.start_ms, c.speakers, c.text, bm25(chunk_fts) AS rank
+             FROM chunk_fts
+             JOIN chunk c ON c.id = chunk_fts.rowid
+             JOIN meeting m ON m.id = c.meeting_id
+             WHERE chunk_fts MATCH ?
+               AND c.meeting_id = ?
+               AND c.meeting_id IN (SELECT id FROM visible)
+               AND c.kind IN ('task', 'decision', 'overview', 'key_point', 'note', 'question')
+             ORDER BY rank
+             LIMIT ?"
+        );
+        values.push(Value::Text(query.to_string()));
+        values.push(Value::Text(meeting_id.to_string()));
+        values.push(Value::Integer(limit as i64));
+
+        let mut statement = self.conn.prepare(&sql)?;
+        let passages = statement
+            .query_map(params_from_iter(values), |row| read_passage(row, 1.0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(passages)
+    }
+
+    fn authorized_context_query(
+        &self,
+        audience: &Audience,
+        tail: &str,
+        meeting_id: &str,
+        limit: usize,
+    ) -> Result<Vec<Passage>> {
+        let (visible, mut values) = audience.visible_meetings();
+        let sql = format!(
+            "WITH visible AS ({visible})
+             SELECT c.meeting_id, m.title, m.channel_name, m.started_at,
+                    c.kind, c.start_ms, c.speakers, c.text, 0.0 AS rank
+             FROM chunk c
+             JOIN meeting m ON m.id = c.meeting_id
+             WHERE c.meeting_id = ?
+               AND c.meeting_id IN (SELECT id FROM visible)
+               {tail}
+             LIMIT ?"
+        );
+        values.push(Value::Text(meeting_id.to_string()));
+        values.push(Value::Integer(limit as i64));
+
+        let mut statement = self.conn.prepare(&sql)?;
+        let passages = statement
+            .query_map(params_from_iter(values), |row| read_passage(row, 1.0))?
+            .collect::<std::result::Result<Vec<_>, _>>()?;
+        Ok(passages)
+    }
+
     fn context_query(&self, tail: &str, meeting_id: &str, limit: usize) -> Result<Vec<Passage>> {
         let sql = format!(
             "SELECT c.meeting_id, m.title, m.channel_name, m.started_at,
@@ -468,6 +621,39 @@ fn fts_query(question: &str) -> Option<String> {
 mod tests {
     use super::*;
 
+    fn insert_meeting(memory: &Memory, id: &str, guild_id: u64, attendee: u64) {
+        memory
+            .conn
+            .execute(
+                "INSERT INTO meeting (
+                    id, guild_id, guild_name, channel_id, channel_name, title,
+                    started_at, folder, discord_attributable, self_name, content_hash
+                 ) VALUES (?1, ?2, 'Servidor', '10', 'General', ?3,
+                           '2026-08-19T10:00:00Z', NULL, 1, NULL, ?4)",
+                params![id, guild_id.to_string(), format!("Reunión {id}"), id],
+            )
+            .unwrap();
+        memory
+            .conn
+            .execute(
+                "INSERT INTO attendance (meeting_id, speaker_id, display_name)
+                 VALUES (?1, ?2, 'Participante')",
+                params![id, attendee.to_string()],
+            )
+            .unwrap();
+    }
+
+    fn insert_chunk(memory: &Memory, meeting_id: &str, kind: &str, text: &str) {
+        memory
+            .conn
+            .execute(
+                "INSERT INTO chunk (meeting_id, kind, start_ms, end_ms, speakers, text)
+                 VALUES (?1, ?2, 1000, 2000, 'Garrux', ?3)",
+                params![meeting_id, kind, text],
+            )
+            .unwrap();
+    }
+
     #[test]
     fn a_question_becomes_a_quoted_or_query_without_its_filler() {
         let query = fts_query("¿Qué decidimos sobre el despliegue de Kafka?").unwrap();
@@ -498,5 +684,108 @@ mod tests {
     fn repeated_words_are_asked_for_once() {
         let query = fts_query("kafka kafka KAFKA despliegue").unwrap();
         assert_eq!(query, "\"kafka\" OR \"despliegue\"");
+    }
+
+    #[test]
+    fn conversation_anchors_recover_tasks_but_never_bypass_the_audience() {
+        let memory = Memory::in_memory().unwrap();
+        insert_meeting(&memory, "visible", 7, 42);
+        insert_meeting(&memory, "hidden", 7, 99);
+        insert_chunk(
+            &memory,
+            "visible",
+            "task",
+            "Garrux · corregir la invalidación de caché · viernes",
+        );
+        insert_chunk(
+            &memory,
+            "visible",
+            "overview",
+            "Revisión del flujo de autenticación",
+        );
+        insert_chunk(
+            &memory,
+            "hidden",
+            "task",
+            "Secreto que el usuario 42 nunca debería recibir",
+        );
+
+        let passages = memory
+            .evidence_with_conversation(
+                &Audience::DiscordParticipant {
+                    user_id: 42,
+                    guild_id: 7,
+                },
+                "esa reunión",
+                &["hidden".into(), "visible".into()],
+                None,
+            )
+            .unwrap();
+
+        assert!(passages.iter().any(|passage| {
+            passage.meeting_id == "visible"
+                && passage.kind == ChunkKind::Task
+                && passage.text.contains("Garrux")
+        }));
+        assert!(passages
+            .iter()
+            .all(|passage| passage.meeting_id != "hidden"));
+    }
+
+    #[test]
+    fn a_relevant_fourth_task_survives_the_three_passage_anchor_limit() {
+        let memory = Memory::in_memory().unwrap();
+        insert_meeting(&memory, "tasks", 7, 42);
+        for text in [
+            "Pedro · revisar los estilos",
+            "Ana · actualizar la documentación",
+            "Omar · preparar el despliegue",
+            "Garrux · corregir la ruta de verificación en Laravel",
+        ] {
+            insert_chunk(&memory, "tasks", "task", text);
+        }
+
+        let passages = memory
+            .conversation_context(
+                &Audience::Everything,
+                &["tasks".into()],
+                "¿qué tarea me quedó? Garrux",
+            )
+            .unwrap();
+
+        assert_eq!(passages.len(), CONVERSATION_PASSAGES_PER_MEETING);
+        assert!(passages.iter().any(|passage| {
+            passage.kind == ChunkKind::Task
+                && passage.text.contains("Garrux")
+                && passage.text.contains("Laravel")
+        }));
+    }
+
+    #[test]
+    fn an_anchored_unsummarized_meeting_falls_back_to_its_transcript() {
+        let memory = Memory::in_memory().unwrap();
+        insert_meeting(&memory, "plain", 7, 42);
+        insert_chunk(
+            &memory,
+            "plain",
+            "transcript",
+            "[00:01] Garrux: quedé en revisar el despliegue",
+        );
+
+        let passages = memory
+            .evidence_with_conversation(
+                &Audience::DiscordParticipant {
+                    user_id: 42,
+                    guild_id: 7,
+                },
+                "¿y esa?",
+                &["plain".into()],
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(passages.len(), 1);
+        assert_eq!(passages[0].kind, ChunkKind::Transcript);
+        assert!(passages[0].text.contains("revisar el despliegue"));
     }
 }

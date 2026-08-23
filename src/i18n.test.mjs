@@ -57,6 +57,39 @@ test("summaries and tasks have an explicit privacy switch", () => {
   assert.match(app, /btn-resummarize"\)\.hidden = live \|\| !summariesEnabled\(\)/);
 });
 
+test("saved meetings expose an accessible index status and retry action", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+
+  assert.match(html, /id="meeting-index-status"[\s\S]*?role="status"/);
+  assert.match(html, /aria-live="polite"/);
+  assert.match(html, /aria-atomic="true"/);
+  assert.match(html, /id="btn-reindex-meeting"/);
+  assert.match(app, /invoke\("meeting_index_status", \{ id: meetingId \}\)/);
+  assert.match(app, /invoke\("reindex_meeting", \{ id: meetingId \}\)/);
+  assert.match(app, /case "meetingIndexChanged"/);
+  assert.match(app, /case "meetingIndexChanged":\s+void refreshQuestionsStatus\(\)/);
+  assert.match(app, /meetingIndexRequestIsCurrent\(meetingId, request\)/);
+  assert.match(app, /button\.setAttribute\("aria-busy", "true"\)/);
+  assert.match(app, /if \(!meeting \|\| isLiveMeeting\(meeting\.meta\.id\)\)/);
+});
+
+test("meeting index states are translated without technical passage counts", () => {
+  setLanguagePreference("en", { notify: false });
+  assert.equal(t("Indexada"), "Indexed");
+  assert.equal(t("Indexación pendiente"), "Indexing pending");
+  assert.equal(t("No indexada"), "Not indexed");
+  assert.equal(t("Índice no disponible"), "Index unavailable");
+
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const formatter = app.slice(
+    app.indexOf("function meetingIndexMessage("),
+    app.indexOf("function renderMeetingIndex("),
+  );
+  assert.doesNotMatch(formatter, /passages|pendingPassages|fragmentos?|passages?/);
+  setLanguagePreference("es", { notify: false });
+});
+
 test("signed updates are checked at startup and deferred during active work", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
@@ -395,4 +428,122 @@ test("asking is reachable from the top bar, not the sidebar", () => {
   assert.match(topbar, /id="nav-ask"/);
   assert.match(topbar, /#i-sparkles/);
   assert.doesNotMatch(sidebarNav, /nav-ask/);
+});
+
+test("Ask keeps a bounded conversation context and offers an accessible reset", () => {
+  const markup = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const reset = markup.slice(
+    markup.indexOf('id="btn-new-ask-conversation"') - 160,
+    markup.indexOf('id="btn-new-ask-conversation"') + 320,
+  );
+
+  assert.match(reset, /<button/);
+  assert.match(reset, /aria-controls="ask-thread"/);
+  assert.match(reset, /\shidden/);
+  assert.match(reset, /#i-refresh/);
+  assert.match(reset, /Nueva conversación/);
+  assert.match(app, /askHistory: \[\]/);
+  assert.match(app, /const ASK_HISTORY_LIMIT = 6/);
+  assert.match(app, /invoke\("ask_meetings", \{\s*question,\s*history: askHistoryPayload\(\)/);
+  assert.match(app, /state\.askHistory\.slice\(-ASK_HISTORY_LIMIT\)/);
+  assert.match(app, /new Set\([\s\S]*?citation\?\.meetingId/);
+  assert.match(app, /state\.askHistory\.splice\(0, state\.askHistory\.length - ASK_HISTORY_LIMIT\)/);
+
+  const resetHandler = app.slice(
+    app.indexOf("function resetAskConversation("),
+    app.indexOf("function appendAskTurn("),
+  );
+  assert.match(resetHandler, /state\.askHistory = \[\]/);
+  assert.match(resetHandler, /\$\("ask-thread"\)\.replaceChildren\(\)/);
+  assert.match(resetHandler, /\$\("ask-suggestions"\)\.hidden = !state\.questions\?\.ready/);
+  assert.match(resetHandler, /field\.focus\(\)/);
+  assert.match(app, /btn-new-ask-conversation"\)\.addEventListener\("click", resetAskConversation\)/);
+
+  const submit = app.indexOf("async function submitQuestion");
+  const failure = app.slice(
+    app.indexOf("} catch (error) {", submit),
+    app.indexOf("} finally {", submit),
+  );
+  assert.doesNotMatch(failure, /rememberAskTurn/);
+});
+
+test("the new Ask conversation control is translated", () => {
+  setLanguagePreference("en", { notify: false });
+  assert.equal(t("Nueva conversación"), "New conversation");
+  setLanguagePreference("es", { notify: false });
+});
+
+test("summary completion reloads automatic tags and folder only for the open meeting", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const refresh = app.slice(
+    app.indexOf("async function refreshMeetingAfterSummary("),
+    app.indexOf("function renderLibraryGrouping("),
+  );
+  const event = app.slice(
+    app.indexOf('case "summaryReady"'),
+    app.indexOf('case "meetingIndexChanged"'),
+  );
+
+  assert.match(
+    refresh,
+    /await Promise\.all\(\[refreshMeetings\(\), refreshFolders\(\), refreshTagCatalog\(\)\]\)/,
+  );
+  assert.equal((refresh.match(/state\.viewing !== opened/g) ?? []).length, 2);
+  assert.equal((refresh.match(/meetingMetadataRevision\(meetingId\) !== metadataRevision/g) ?? []).length, 2);
+  assert.equal((refresh.match(/meetingMetadataEditActive\(meetingId\)/g) ?? []).length, 2);
+  assert.match(refresh, /saved = await invoke\("load_meeting", \{ id: meetingId \}\)/);
+  assert.match(refresh, /state\.viewing = saved;\s*renderMeeting\(\)/);
+  assert.match(event, /meeting\.summary = event\.summary/);
+  assert.match(event, /void refreshMeetingAfterSummary\(event\.meetingId\)/);
+
+  assert.match(app, /beginMeetingMetadataEdit\(ids\)[\s\S]*?set_meeting_folder/);
+  assert.match(app, /beginMeetingMetadataEdit\(ids\)[\s\S]*?set_meeting_tags/);
+  assert.match(app, /finally \{\s*finishMeetingMetadataEdit\(ids\)/);
+});
+
+test("Ask readiness fails closed and explains index health without a false setup cause", () => {
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const refresh = app.slice(
+    app.indexOf("async function refreshQuestionsStatus("),
+    app.indexOf("function renderQuestionGate("),
+  );
+  const gate = app.slice(
+    app.indexOf("function renderQuestionGate("),
+    app.indexOf("function humanDuration("),
+  );
+  const events = app.slice(
+    app.indexOf("function handleEvent("),
+    app.indexOf("function upsertUtterance("),
+  );
+
+  for (const condition of [
+    "status.ready === true",
+    "status.enabled === true",
+    "status.modelReady === true",
+    "status.indexAvailable === true",
+    "status.indexCurrent === true",
+    "status.pendingPassages === 0",
+    "status.updating === false",
+  ]) {
+    assert.match(refresh, new RegExp(condition.replaceAll(".", "\\.")));
+  }
+  assert.match(refresh, /request !== state\.questionStatusRequest/);
+  assert.match(gate, /gate\.setAttribute\("aria-busy", String\(busy\)\)/);
+  assert.match(gate, /title\.setAttribute\("aria-live", "polite"\)/);
+  assert.match(gate, /if \(status\.indexAvailable !== true\)/);
+  assert.match(gate, /if \(status\.indexCurrent !== true\)/);
+  assert.match(gate, /action\.hidden = true;\s*action\.disabled = true/);
+  assert.match(gate, /Hay reuniones sin indexar/);
+  assert.match(gate, /Actualizando la memoria de reuniones/);
+  assert.match(events, /case "questionsStatusChanged":\s+void refreshQuestionsStatus\(\)/);
+});
+
+test("question index health messages are translated", () => {
+  setLanguagePreference("en", { notify: false });
+  assert.equal(t("Actualizando la memoria de reuniones"), "Updating meeting memory");
+  assert.equal(t("El índice de reuniones no está disponible"), "The meeting index is unavailable");
+  assert.equal(t("Hay reuniones sin indexar"), "Some meetings are not indexed");
+  assert.equal(t("Terminar indexación"), "Finish indexing");
+  setLanguagePreference("es", { notify: false });
 });

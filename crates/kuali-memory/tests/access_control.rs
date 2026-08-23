@@ -493,6 +493,42 @@ fn the_pending_count_is_a_real_count_of_work_left() {
 }
 
 #[test]
+#[ignore = "needs the embedding model on disk"]
+fn the_next_successful_index_retries_passages_left_by_an_earlier_model_failure() {
+    let mut model = embedder().expect("set KUALI_EMBED_MODELS_DIR");
+    let mut memory = Memory::in_memory().unwrap();
+
+    // The first meeting reached SQLite while its model was unavailable.
+    memory
+        .index(&meeting(
+            "failed-before",
+            GUILD_WORK,
+            &[(ANA, "Ana")],
+            "la reunión quedó pendiente de vector",
+        ))
+        .unwrap();
+    assert_eq!(memory.pending_embeddings().unwrap(), 1);
+
+    // A later successful load must repair the earlier gap as well as embed the
+    // new meeting, otherwise one pending passage disables the all-or-nothing
+    // RAG indefinitely.
+    memory
+        .index_with(
+            &meeting(
+                "working-now",
+                GUILD_WORK,
+                &[(ANA, "Ana")],
+                "el modelo volvió a estar disponible",
+            ),
+            Some(&mut model),
+        )
+        .unwrap();
+
+    assert_eq!(memory.pending_embeddings().unwrap(), 0);
+    assert_eq!(memory.embedded_passages().unwrap(), 2);
+}
+
+#[test]
 fn a_discord_account_resolves_into_the_names_its_meetings_recorded() {
     let mut memory = Memory::in_memory().unwrap();
     memory

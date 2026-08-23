@@ -6,9 +6,8 @@ mod factory_reset;
 
 use kuali_engine::Engine;
 use tauri::{
-    menu::{Menu, MenuItem, PredefinedMenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    Emitter, Listener, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    Emitter, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
 };
 use tauri_plugin_autostart::MacosLauncher;
 
@@ -108,30 +107,13 @@ fn toggle_tray_panel(app: &tauri::AppHandle, rect: tauri::Rect) {
     let _ = app.emit(PANEL_SHOWN_CHANNEL, ());
 }
 
-fn tray_follow_copy(enabled: bool, language: &str) -> (&'static str, &'static str) {
-    match (enabled, language == "en") {
-        (true, true) => ("🟢 Discord · Following enabled", "Pause Discord following"),
-        (false, true) => ("🟠 Discord · Following paused", "Enable Discord following"),
-        (true, false) => (
-            "🟢 Discord · Seguimiento activo",
-            "Pausar seguimiento de Discord",
-        ),
-        (false, false) => (
-            "🟠 Discord · Seguimiento pausado",
-            "Activar seguimiento de Discord",
-        ),
-    }
-}
-
-fn sync_tray_follow_items<R: tauri::Runtime>(
-    status_item: &MenuItem<R>,
-    action_item: &MenuItem<R>,
-    enabled: bool,
-    language: &str,
-) {
-    let (status, action) = tray_follow_copy(enabled, language);
-    let _ = status_item.set_text(status);
-    let _ = action_item.set_text(action);
+/// Tauri reports both press and release events. Toggling only on release keeps
+/// one physical click equal to one panel transition for either left or right.
+fn should_toggle_tray_panel(button: MouseButton, button_state: MouseButtonState) -> bool {
+    matches!(
+        (button, button_state),
+        (MouseButton::Left | MouseButton::Right, MouseButtonState::Up)
+    )
 }
 
 /// The tray panel counts as a visible window for the operating system, so the
@@ -178,54 +160,6 @@ fn main() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(engine.clone())
         .setup(move |app| {
-            let tray_config = engine.config();
-            let (follow_status, follow_action) = tray_follow_copy(
-                tray_config.discord.follow_automatically,
-                &tray_config.application.language,
-            );
-            let open_item = MenuItem::with_id(app, "open", "Abrir Kuali", true, None::<&str>)?;
-            let tasks_item = MenuItem::with_id(app, "tasks", "Ver tareas", true, None::<&str>)?;
-            let primary_separator = PredefinedMenuItem::separator(app)?;
-            let follow_status_item =
-                MenuItem::with_id(app, "follow-status", follow_status, false, None::<&str>)?;
-            let follow_item =
-                MenuItem::with_id(app, "toggle-follow", follow_action, true, None::<&str>)?;
-            let secondary_separator = PredefinedMenuItem::separator(app)?;
-            let version_item = MenuItem::with_id(
-                app,
-                "version",
-                format!("Kuali {}", app.package_info().version),
-                false,
-                None::<&str>,
-            )?;
-            let quit_item = MenuItem::with_id(app, "quit", "Salir de Kuali", true, None::<&str>)?;
-            let menu = Menu::with_items(
-                app,
-                &[
-                    &open_item,
-                    &tasks_item,
-                    &primary_separator,
-                    &follow_status_item,
-                    &follow_item,
-                    &secondary_separator,
-                    &version_item,
-                    &quit_item,
-                ],
-            )?;
-
-            let status_item_for_config = follow_status_item.clone();
-            let action_item_for_config = follow_item.clone();
-            let engine_for_config = engine.clone();
-            app.listen(CONFIG_CHANGED_CHANNEL, move |_| {
-                let config = engine_for_config.config();
-                sync_tray_follow_items(
-                    &status_item_for_config,
-                    &action_item_for_config,
-                    config.discord.follow_automatically,
-                    &config.application.language,
-                );
-            });
-
             // Built hidden and positioned on demand: a menu-bar panel has no
             // meaningful default position.
             let panel =
@@ -234,6 +168,10 @@ fn main() {
                     .inner_size(PANEL_WIDTH, PANEL_HEIGHT)
                     .resizable(false)
                     .decorations(false)
+                    // CSS clips the card to a continuous rounded silhouette;
+                    // the native window must be transparent for its corners to
+                    // reveal the desktop instead of an opaque rectangle.
+                    .transparent(true)
                     .always_on_top(true)
                     .skip_taskbar(true)
                     .visible(false)
@@ -255,50 +193,18 @@ fn main() {
                         .clone(),
                 )
                 .icon_as_template(true)
-                .menu(&menu)
-                // Left click opens Kuali's own panel; the native menu stays on
-                // the right button for the operating system's conventions.
-                .show_menu_on_left_click(false)
                 .on_tray_icon_event(|tray, event| {
                     if let TrayIconEvent::Click {
-                        button: MouseButton::Left,
-                        button_state: MouseButtonState::Up,
+                        button,
+                        button_state,
                         rect,
                         ..
                     } = event
                     {
-                        toggle_tray_panel(tray.app_handle(), rect);
-                    }
-                })
-                .on_menu_event(move |app, event| match event.id.as_ref() {
-                    "open" => show_main_window(app, "home"),
-                    "tasks" => show_main_window(app, "tasks"),
-                    "toggle-follow" => {
-                        let engine = app.state::<Engine>().inner().clone();
-                        let discord = engine.config().discord;
-                        if discord.follow_user_id.is_none()
-                            && discord
-                                .follow_username
-                                .as_deref()
-                                .is_none_or(|username| username.trim().is_empty())
-                        {
-                            show_main_window(app, "guide");
-                            return;
+                        if should_toggle_tray_panel(button, button_state) {
+                            toggle_tray_panel(tray.app_handle(), rect);
                         }
-                        let app = app.clone();
-                        tauri::async_runtime::spawn(async move {
-                            let mut config = engine.config();
-                            config.discord.follow_automatically =
-                                !config.discord.follow_automatically;
-                            if engine.update_config(config).await.is_ok() {
-                                // The window may have been hidden for hours. Notify it so
-                                // its controls reflect changes made from the menu bar.
-                                let _ = app.emit(CONFIG_CHANGED_CHANNEL, ());
-                            }
-                        });
                     }
-                    "quit" => app.exit(0),
-                    _ => {}
                 })
                 .build(app)?;
 
@@ -373,6 +279,8 @@ fn main() {
             commands::list_meetings,
             commands::search_meetings,
             commands::load_meeting,
+            commands::meeting_index_status,
+            commands::reindex_meeting,
             commands::ask_meetings,
             commands::questions_status,
             commands::prepare_questions,
@@ -442,7 +350,8 @@ fn main() {
 
 #[cfg(test)]
 mod tests {
-    use super::{panel_origin, should_restore_main_window, tray_follow_copy};
+    use super::{panel_origin, should_restore_main_window, should_toggle_tray_panel};
+    use tauri::tray::{MouseButton, MouseButtonState};
 
     #[test]
     fn dock_reopen_restores_only_when_every_window_is_hidden() {
@@ -467,17 +376,26 @@ mod tests {
     }
 
     #[test]
-    fn tray_following_copy_always_exposes_state_and_next_action() {
-        assert_eq!(
-            tray_follow_copy(true, "es"),
-            (
-                "🟢 Discord · Seguimiento activo",
-                "Pausar seguimiento de Discord"
-            )
-        );
-        assert_eq!(
-            tray_follow_copy(false, "en"),
-            ("🟠 Discord · Following paused", "Enable Discord following")
-        );
+    fn tray_panel_toggles_only_when_left_or_right_is_released() {
+        assert!(should_toggle_tray_panel(
+            MouseButton::Left,
+            MouseButtonState::Up
+        ));
+        assert!(should_toggle_tray_panel(
+            MouseButton::Right,
+            MouseButtonState::Up
+        ));
+        assert!(!should_toggle_tray_panel(
+            MouseButton::Left,
+            MouseButtonState::Down
+        ));
+        assert!(!should_toggle_tray_panel(
+            MouseButton::Right,
+            MouseButtonState::Down
+        ));
+        assert!(!should_toggle_tray_panel(
+            MouseButton::Middle,
+            MouseButtonState::Up
+        ));
     }
 }

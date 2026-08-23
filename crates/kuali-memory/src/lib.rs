@@ -32,9 +32,12 @@ pub mod embed;
 mod index;
 mod retrieve;
 
-pub use ask::{answer, Answer, Asker, Citation};
+pub use ask::{
+    answer, answer_with_history, conversation_query, user_prompt, user_prompt_with_history, Answer,
+    Asker, Citation, ConversationTurn,
+};
 pub use chunk::{ChunkKind, DraftChunk};
-pub use index::SyncReport;
+pub use index::{MeetingIndexStats, SyncReport};
 pub use retrieve::Passage;
 
 use std::path::{Path, PathBuf};
@@ -245,6 +248,30 @@ impl Memory {
             CREATE INDEX IF NOT EXISTS link_by_key ON link(kind, key);
             "#,
         )?;
+
+        // `CREATE TABLE IF NOT EXISTS` preserves an older table exactly as it
+        // is; it does not add columns introduced by a newer Kuali. `self_name`
+        // was added after the first memory schema shipped, so those existing
+        // indexes otherwise open successfully and then reject every meeting at
+        // `write_meeting` with "no column named self_name". The index is
+        // derived, but an additive migration is cheaper and preserves all
+        // existing vectors while the normal store sync catches up.
+        let has_self_name = {
+            let mut statement = self.conn.prepare("PRAGMA table_info(meeting)")?;
+            let mut rows = statement.query([])?;
+            let mut found = false;
+            while let Some(row) = rows.next()? {
+                if row.get::<_, String>(1)? == "self_name" {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        };
+        if !has_self_name {
+            self.conn
+                .execute("ALTER TABLE meeting ADD COLUMN self_name TEXT", [])?;
+        }
         Ok(())
     }
 }
@@ -277,6 +304,8 @@ fn normalize_key(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use chrono::Utc;
+    use kuali_core::{Meeting, MeetingMeta, Speaker};
 
     #[test]
     fn opening_the_index_twice_leaves_the_same_schema() {
@@ -287,6 +316,93 @@ mod tests {
         Memory::open_at(&path).expect("first open creates the schema");
         Memory::open_at(&path).expect("second open finds it already there");
 
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn an_index_from_before_self_names_is_upgraded_in_place() {
+        let dir = std::env::temp_dir().join(format!("kuali-memory-legacy-{}", uuid_like()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("memory.sqlite3");
+
+        let legacy = Connection::open(&path).unwrap();
+        legacy
+            .execute_batch(
+                r#"
+                CREATE TABLE meeting (
+                    id                   TEXT PRIMARY KEY,
+                    guild_id             TEXT NOT NULL,
+                    guild_name           TEXT NOT NULL,
+                    channel_id           TEXT NOT NULL,
+                    channel_name         TEXT NOT NULL,
+                    title                TEXT NOT NULL,
+                    started_at           TEXT NOT NULL,
+                    folder               TEXT,
+                    discord_attributable INTEGER NOT NULL,
+                    content_hash         TEXT NOT NULL
+                );
+                INSERT INTO meeting (
+                    id, guild_id, guild_name, channel_id, channel_name,
+                    title, started_at, folder, discord_attributable, content_hash
+                ) VALUES (
+                    'old', '1', 'Servidor', '2', 'General',
+                    'Reunión anterior', '2026-08-01T00:00:00Z', NULL, 1, 'legacy'
+                );
+                "#,
+            )
+            .unwrap();
+        drop(legacy);
+
+        let mut memory = Memory::open_at(&path).expect("the legacy index is migrated");
+        // Running the migration again must not attempt to add the column twice.
+        memory.migrate().expect("the migration is idempotent");
+
+        let mut meeting = Meeting::new(MeetingMeta {
+            id: "new".into(),
+            display_title: Some("Reunión nueva".into()),
+            guild_id: 1,
+            guild_name: "Servidor".into(),
+            channel_id: 2,
+            channel_name: "General".into(),
+            started_at: Utc::now(),
+            ended_at: Some(Utc::now()),
+            tags: Vec::new(),
+            folder: None,
+        });
+        meeting.upsert_speaker(Speaker {
+            user_id: 7,
+            source_id: None,
+            audio_kind: None,
+            display_name: "Ana".into(),
+            username: "ana".into(),
+            avatar_url: None,
+            color: "#fff".into(),
+            is_bot: false,
+            is_self: true,
+        });
+
+        memory
+            .index(&meeting)
+            .expect("new meetings can be indexed after the upgrade");
+        let self_name: String = memory
+            .conn
+            .query_row(
+                "SELECT self_name FROM meeting WHERE id = 'new'",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        assert_eq!(self_name, "Ana");
+        let stored_meetings: i64 = memory
+            .conn
+            .query_row("SELECT COUNT(*) FROM meeting", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(
+            stored_meetings, 2,
+            "the existing indexed meeting survives the migration"
+        );
+
+        drop(memory);
         std::fs::remove_dir_all(&dir).ok();
     }
 
