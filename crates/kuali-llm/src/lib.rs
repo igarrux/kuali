@@ -26,4 +26,7 @@ pub use provider::{
     CompletionRequest, LlmError, LlmFailureKind, LlmProvider, ProviderInfo, ProviderKind,
     ProviderStatus,
 };
-pub use summarize::{language_rule, parse_summary, summarize, system_prompt, user_prompt};
+pub use summarize::{
+    analyze, language_rule, parse_analysis, parse_summary, summarize, system_prompt, user_prompt,
+    MeetingAnalysis, MeetingOrganization, OrganizationContext,
+};

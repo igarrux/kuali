@@ -1642,6 +1642,88 @@ p > .icon,
   color: color-mix(in srgb, var(--muted) 75%, transparent);
 }
 
+/* Search-memory health belongs beside the meeting facts. The full label carries
+ * the meaning; the dot only makes each state quicker to scan. */
+.meeting-index {
+  max-width: 100%;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.meeting-index-status {
+  min-width: 0;
+  min-height: 30px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 5px 10px;
+  background: var(--surface-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-full);
+  color: var(--muted-strong);
+  font-size: var(--text-xs);
+  line-height: 1.35;
+  white-space: nowrap;
+}
+
+.meeting-index-status i {
+  width: 7px;
+  height: 7px;
+  flex: none;
+  background: var(--muted);
+  border-radius: 50%;
+}
+
+.meeting-index-status[data-state="indexed"] {
+  border-color: color-mix(in srgb, var(--ok) 28%, var(--line));
+}
+
+.meeting-index-status[data-state="indexed"] i {
+  background: var(--ok);
+}
+
+.meeting-index-status[data-state="pending"],
+.meeting-index-status[data-state="notIndexed"] {
+  border-color: color-mix(in srgb, var(--warning) 28%, var(--line));
+}
+
+.meeting-index-status[data-state="pending"] i,
+.meeting-index-status[data-state="notIndexed"] i {
+  background: var(--warning);
+}
+
+.meeting-index-status[data-state="loading"] i,
+.meeting-index-status[data-state="reindexing"] i {
+  background: var(--violet);
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+.meeting-index-status[data-state="error"] {
+  border-color: color-mix(in srgb, var(--danger) 30%, var(--line));
+}
+
+.meeting-index-status[data-state="error"] i {
+  background: var(--danger);
+}
+
+.meeting-index-status[data-state="error"] #meeting-index-message {
+  overflow-wrap: anywhere;
+  white-space: normal;
+}
+
+.meeting-index-action {
+  min-height: 30px;
+  flex: none;
+}
+
+.meeting-index-action .icon {
+  width: 14px;
+  height: 14px;
+}
+
 .meeting-actions {
   display: flex;
   align-items: center;
@@ -4273,10 +4355,11 @@ select {
    * stretching its parent. */
   flex: 1;
   min-height: 0;
-  width: min(1080px, 100%);
+  width: min(900px, 100%);
   overflow-y: auto;
   margin: 0 auto;
   padding-bottom: var(--space-4);
+  scroll-padding-block: var(--space-4);
 }
 
 .ask-thread:empty {
@@ -4285,36 +4368,36 @@ select {
 
 .ask-turn + .ask-turn {
   margin-top: var(--space-5);
-  padding-top: var(--space-5);
-  border-top: 1px solid var(--line);
 }
 
-/* The question reads as something the person said, so it is quieter and
- * narrower than the answer it introduces. */
+/* Questions and answers keep a chat rhythm without turning every response
+ * into a full-width card. Text stays left-aligned inside both bubbles. */
 .ask-turn-question {
-  max-width: 62ch;
-  margin: 0 0 var(--space-3);
-  color: var(--muted);
+  width: fit-content;
+  max-width: min(62ch, 76%);
+  margin: 0 0 var(--space-2) auto;
+  padding: 9px 13px;
+  background: var(--accent-soft);
+  border: 1px solid color-mix(in srgb, var(--accent) 24%, var(--line));
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-sm) var(--radius-lg);
+  color: var(--text);
   font-size: var(--text-sm);
   line-height: 1.5;
+  overflow-wrap: anywhere;
 }
 
 .ask-turn-question::before {
-  content: "";
-  display: inline-block;
-  width: 3px;
-  height: 1em;
-  margin-right: var(--space-2);
-  background: var(--accent);
-  border-radius: var(--radius-full);
-  vertical-align: -2px;
+  content: none;
 }
 
 .ask-turn-answer {
-  padding: var(--space-4);
+  width: fit-content;
+  max-width: min(78ch, 88%);
+  padding: 13px 15px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-sm) var(--radius-lg) var(--radius-lg) var(--radius-lg);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--bg) 22%, transparent);
 }
 
 .ask-turn-answer.pending {
@@ -4372,7 +4455,7 @@ select {
 }
 
 .ask-suggestions {
-  width: min(1080px, 100%);
+  width: min(900px, 100%);
   margin: 0 auto var(--space-3);
 }
 
@@ -4416,7 +4499,7 @@ select {
   display: flex;
   align-items: flex-end;
   gap: var(--space-2);
-  width: min(1080px, 100%);
+  width: min(900px, 100%);
   margin: 0 auto;
   padding: var(--space-2) var(--space-2) var(--space-2) var(--space-3);
   background: var(--surface);
@@ -4447,15 +4530,15 @@ select {
 }
 
 .ask-scope {
-  width: min(1080px, 100%);
+  width: min(900px, 100%);
   margin: var(--space-2) auto 0;
   color: var(--muted);
   font-size: var(--text-xs);
 }
 
 .ask-citations {
-  margin-top: var(--space-4);
-  padding-top: var(--space-3);
+  margin-top: var(--space-3);
+  padding-top: var(--space-2);
   border-top: 1px solid var(--line);
 }
 
@@ -4478,15 +4561,19 @@ select {
 }
 
 .ask-citation {
-  width: 100%;
-  padding: 6px var(--space-2);
+  width: fit-content;
+  max-width: 100%;
+  min-height: 30px;
+  padding: 5px var(--space-2);
   background: none;
   border: 1px solid transparent;
   border-radius: var(--radius-md);
-  color: var(--accent);
+  color: var(--accent-strong);
   font: inherit;
   font-size: var(--text-sm);
+  line-height: 1.4;
   text-align: left;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 
@@ -4494,6 +4581,17 @@ select {
 .ask-citation:focus-visible {
   background: var(--accent-soft);
   border-color: color-mix(in srgb, var(--accent) 20%, var(--line));
+}
+
+.ask-new-conversation {
+  min-height: 36px;
+  flex: none;
+  color: var(--muted-strong);
+}
+
+.ask-new-conversation .icon {
+  width: 15px;
+  height: 15px;
 }
 
 
@@ -5485,6 +5583,9 @@ kbd { padding: 2px 5px; background: var(--surface-3); border: 1px solid var(--li
 
 @media (max-width: 720px) {
   .tasks-pane, .ask-pane, .guide-pane { padding: 22px; }
+  .ask-new-conversation { align-self: flex-start; }
+  .ask-turn-question { max-width: 88%; }
+  .ask-turn-answer { max-width: 96%; }
   .task-grouping { margin-left: 0; }
   .page-head { align-items: flex-start; flex-direction: column; gap: 12px; }
   .guide-card { padding: 16px; }

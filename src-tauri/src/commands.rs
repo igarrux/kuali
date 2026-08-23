@@ -183,6 +183,26 @@ pub fn load_meeting(engine: State<'_, Engine>, id: String) -> Result<Meeting, St
     engine.load_meeting(&id).map_err(fail)
 }
 
+/// Derived search-index state for one meeting. This never modifies
+/// `meeting.json`; absence from the SQLite index is reported as `notIndexed`.
+#[tauri::command]
+pub fn meeting_index_status(
+    engine: State<'_, Engine>,
+    id: String,
+) -> kuali_engine::engine::MeetingIndexStatus {
+    engine.meeting_index_status(&id)
+}
+
+/// Rebuilds one meeting's textual index from the store and attempts its vectors
+/// when questions and the embedding model are available.
+#[tauri::command]
+pub async fn reindex_meeting(
+    engine: State<'_, Engine>,
+    id: String,
+) -> Result<kuali_engine::engine::MeetingIndexStatus, String> {
+    engine.reindex_meeting(&id).await.map_err(fail)
+}
+
 /// Answer to a question about past meetings, shaped for the interface.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -238,12 +258,15 @@ pub fn discard_question_data(engine: State<'_, Engine>) -> Result<u64, String> {
 pub async fn ask_meetings(
     engine: State<'_, Engine>,
     question: String,
+    history: Option<Vec<kuali_memory::ConversationTurn>>,
 ) -> Result<MeetingAnswerView, String> {
+    let history = history.unwrap_or_default();
     let answer = engine
-        .ask(
+        .ask_with_history(
             kuali_memory::Audience::Everything,
             question.trim(),
             engine.local_asker(),
+            &history,
         )
         .await
         .map_err(fail)?;
@@ -347,11 +370,12 @@ pub fn quit_app(app: tauri::AppHandle) {
 /// Replaces a meeting's tags and answers with the sanitized result so the
 /// interface shows exactly what was written.
 #[tauri::command]
-pub async fn set_meeting_tags(id: String, tags: Vec<String>) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || kuali_store::set_tags(&id, tags))
-        .await
-        .map_err(fail)?
-        .map_err(fail)
+pub async fn set_meeting_tags(
+    engine: State<'_, Engine>,
+    id: String,
+    tags: Vec<String>,
+) -> Result<Vec<String>, String> {
+    engine.set_meeting_tags(&id, tags).map_err(fail)
 }
 
 /// Servers Kuali knows about, with their Discord icons.
@@ -370,36 +394,34 @@ pub async fn list_folders() -> Result<Vec<String>, String> {
 }
 
 #[tauri::command]
-pub async fn create_folder(name: String) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || kuali_store::create_folder(&name))
-        .await
-        .map_err(fail)?
-        .map_err(fail)
+pub async fn create_folder(engine: State<'_, Engine>, name: String) -> Result<Vec<String>, String> {
+    engine.create_folder(&name).map_err(fail)
 }
 
 #[tauri::command]
-pub async fn rename_folder(from: String, to: String) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || kuali_store::rename_folder(&from, &to))
-        .await
-        .map_err(fail)?
-        .map_err(fail)
+pub async fn rename_folder(
+    engine: State<'_, Engine>,
+    from: String,
+    to: String,
+) -> Result<Vec<String>, String> {
+    engine.rename_folder(&from, &to).map_err(fail)
 }
 
 /// Removes the folder without touching the meetings it held.
 #[tauri::command]
-pub async fn delete_folder(name: String) -> Result<Vec<String>, String> {
-    tauri::async_runtime::spawn_blocking(move || kuali_store::delete_folder(&name))
-        .await
-        .map_err(fail)?
-        .map_err(fail)
+pub async fn delete_folder(engine: State<'_, Engine>, name: String) -> Result<Vec<String>, String> {
+    engine.delete_folder(&name).map_err(fail)
 }
 
 /// Moves meetings into a folder, or out of every folder when `folder` is null.
 #[tauri::command]
-pub async fn set_meeting_folder(ids: Vec<String>, folder: Option<String>) -> Result<(), String> {
-    tauri::async_runtime::spawn_blocking(move || kuali_store::set_folder(&ids, folder.as_deref()))
-        .await
-        .map_err(fail)?
+pub async fn set_meeting_folder(
+    engine: State<'_, Engine>,
+    ids: Vec<String>,
+    folder: Option<String>,
+) -> Result<(), String> {
+    engine
+        .set_meeting_folder(&ids, folder.as_deref())
         .map_err(fail)
 }
 
@@ -439,7 +461,7 @@ pub async fn delete_channel_meetings(
 }
 
 #[tauri::command]
-pub fn set_task_done(
+pub async fn set_task_done(
     engine: State<'_, Engine>,
     meeting_id: String,
     task_id: String,
@@ -447,6 +469,7 @@ pub fn set_task_done(
 ) -> Result<(), String> {
     engine
         .set_task_done(&meeting_id, &task_id, done)
+        .await
         .map_err(fail)
 }
 

@@ -350,6 +350,16 @@
               <h2>Preguntar</h2>
               <p>Pregunta en lenguaje natural sobre todo lo que Kuali ha escuchado.</p>
             </div>
+            <button
+              type="button"
+              class="subtle compact ask-new-conversation"
+              id="btn-new-ask-conversation"
+              aria-controls="ask-thread"
+              hidden
+            >
+              <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+              <span>Nueva conversación</span>
+            </button>
           </div>
 
           <section class="ask-gate" id="ask-gate" hidden>
@@ -723,6 +733,27 @@
             <div class="meeting-head-copy">
               <h2 id="meeting-title"></h2>
               <p class="meeting-meta" id="meeting-meta" data-i18n-skip></p>
+              <div class="meeting-index" id="meeting-index" data-i18n-skip hidden>
+                <span
+                  class="meeting-index-status"
+                  id="meeting-index-status"
+                  role="status"
+                  aria-live="polite"
+                  aria-atomic="true"
+                >
+                  <i aria-hidden="true"></i>
+                  <span id="meeting-index-message">Consultando el índice…</span>
+                </span>
+                <button
+                  type="button"
+                  class="ghost compact meeting-index-action"
+                  id="btn-reindex-meeting"
+                  aria-describedby="meeting-index-message"
+                >
+                  <svg class="icon" aria-hidden="true"><use href="#i-refresh"/></svg>
+                  <span id="meeting-index-action-label">Reindexar</span>
+                </button>
+              </div>
               <div class="meeting-tags" id="meeting-tags" hidden>
                 <button type="button" class="folder-pill" id="btn-meeting-folder">
                   <svg class="icon" aria-hidden="true"><use href="#i-folder"/></svg>
