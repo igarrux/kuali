@@ -222,7 +222,15 @@ fn summary_chunks(meeting: &Meeting) -> Vec<DraftChunk> {
     for task in &summary.action_items {
         // Joining owner, task, and deadline keeps them in one retrievable unit:
         // "what is Ana supposed to deliver on Friday" needs all three to match.
+        // Status belongs in the same unit too; otherwise the RAG cannot tell a
+        // pending commitment from one the user already completed.
+        let status = if task.done {
+            "status: completed / completada"
+        } else {
+            "status: pending / pendiente"
+        };
         let text = [
+            Some(status),
             task.assignee.as_deref(),
             Some(task.text.as_str()),
             task.due.as_deref(),
@@ -409,12 +417,38 @@ mod tests {
             .find(|draft| draft.kind == ChunkKind::Task)
             .expect("the task should be indexed");
 
-        assert_eq!(task.text, "Ana · Preparar la demostración · el viernes");
+        assert_eq!(
+            task.text,
+            "status: pending / pendiente · Ana · Preparar la demostración · el viernes"
+        );
         assert_eq!(task.speakers, "Ana");
         assert_eq!(task.start_ms, Some(1_000));
 
         assert!(drafts.iter().any(|draft| draft.kind == ChunkKind::Decision));
         assert!(drafts.iter().any(|draft| draft.kind == ChunkKind::Overview));
+    }
+
+    #[test]
+    fn a_completed_task_carries_its_status_in_the_search_passage() {
+        let mut meeting = meeting_with(vec![(10, 0, 1_000, "hola")]);
+        meeting.summary = Some(MeetingSummary {
+            action_items: vec![ActionItem {
+                id: "t1".into(),
+                text: "Publicar la versión".into(),
+                assignee: Some("Garrux".into()),
+                due: None,
+                source_ms: None,
+                done: true,
+            }],
+            ..Default::default()
+        });
+
+        let task = chunks(&meeting)
+            .into_iter()
+            .find(|draft| draft.kind == ChunkKind::Task)
+            .unwrap();
+        assert!(task.text.starts_with("status: completed / completada"));
+        assert!(task.text.contains("Garrux · Publicar la versión"));
     }
 
     #[test]
