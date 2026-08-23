@@ -15,6 +15,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Memoria de reuniones": "Meeting memory",
   "Pregunta en lenguaje natural sobre todo lo que Kuali ha escuchado.":
     "Ask in plain language about everything Kuali has listened to.",
+  "Nueva conversación": "New conversation",
   "Tu pregunta": "Your question",
   "Busca en toda tu biblioteca local.": "Searches your entire local library.",
   "Pregunta sobre tus reuniones…": "Ask about your meetings\u2026",
@@ -37,6 +38,36 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
     "Separate several with commas. On Discord Kuali already knows who you are; this is what makes it work on Meet, Teams and Zoom, where there is no account to check.",
   "Activa las preguntas sobre reuniones": "Turn on questions about meetings",
   "Termina de preparar las preguntas": "Finish preparing questions",
+  "Actualizando la memoria de reuniones": "Updating meeting memory",
+  "Kuali está incorporando reuniones nuevas antes de responder.":
+    "Kuali is adding new meetings before answering.",
+  "Las preguntas volverán automáticamente cuando termine.":
+    "Questions will return automatically when it finishes.",
+  "El índice de reuniones no está disponible": "The meeting index is unavailable",
+  "Tus reuniones siguen guardadas, pero Kuali no puede consultar el buscador local.":
+    "Your meetings are still saved, but Kuali cannot access local search right now.",
+  "Reinicia Kuali para volver a abrir el índice.":
+    "Restart Kuali to reopen the index.",
+  "Hay reuniones sin indexar": "Some meetings are not indexed",
+  "Comprobando el índice de reuniones": "Checking the meeting index",
+  "Kuali pausó las preguntas para no responder con una biblioteca incompleta.":
+    "Kuali paused questions so it does not answer from an incomplete library.",
+  "Kuali está verificando que toda la biblioteca esté disponible antes de responder.":
+    "Kuali is checking that the entire library is available before answering.",
+  "Abre las reuniones marcadas «No indexada» y usa «Reindexar».":
+    "Open meetings marked “Not indexed” and use “Reindex”.",
+  "Falta el modelo de búsqueda": "The search model is missing",
+  "Descarga el modelo local para buscar por significado en tus reuniones.":
+    "Download the local model to search your meetings by meaning.",
+  "La descarga ocurre una sola vez y se guarda en tu equipo.":
+    "The download happens once and stays on your computer.",
+  "Descargar modelo": "Download model",
+  "Terminar indexación": "Finish indexing",
+  "El buscador todavía no está listo": "Search is not ready yet",
+  "Kuali no puede confirmar que toda la biblioteca esté lista para responder.":
+    "Kuali cannot confirm that the entire library is ready for questions.",
+  "Las preguntas seguirán bloqueadas para evitar respuestas incompletas.":
+    "Questions will remain blocked to prevent incomplete answers.",
   "Para responder bien, Kuali necesita un modelo que entiende el significado de lo que se dijo, no solo las palabras exactas. Así encuentra «cortafuegos» cuando preguntas por «firewall».":
     "To answer well, Kuali needs a model that understands what was meant, not only the exact words. That is how it finds \u201ccortafuegos\u201d when you ask about \u201cfirewall\u201d.",
   "de descarga, una sola vez": "to download, once",
@@ -179,6 +210,17 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Todo hecho": "All done",
   "Más acciones": "More actions",
   Exportar: "Export",
+  "Consultando el índice…": "Checking the index…",
+  Indexada: "Indexed",
+  "Indexación pendiente": "Indexing pending",
+  "No indexada": "Not indexed",
+  "Índice no disponible": "Index unavailable",
+  Reindexar: "Reindex",
+  "Indexando…": "Indexing…",
+  "Indexando esta reunión…": "Indexing this meeting…",
+  "No se pudo comprobar el índice. Puedes reintentar.":
+    "The index could not be checked. You can try again.",
+  "No se pudo reindexar: {error}": "Could not reindex: {error}",
   "Guardar como Markdown": "Save as Markdown",
   "Guardar como JSON": "Save as JSON",
   "Estado de las tareas": "Task status",

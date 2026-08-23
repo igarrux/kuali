@@ -373,6 +373,8 @@ fn main() {
             commands::list_meetings,
             commands::search_meetings,
             commands::load_meeting,
+            commands::meeting_index_status,
+            commands::reindex_meeting,
             commands::ask_meetings,
             commands::questions_status,
             commands::prepare_questions,

@@ -90,8 +90,12 @@ const state = {
   libraryQuery: "",
   /** Prevents a second question while one is still being answered. */
   asking: false,
+  /** The visible Ask conversation. Kept only for this app session. */
+  askHistory: [],
   /** Readiness of the meeting-questions feature, or null before it is known. */
   questions: null,
+  /** Invalidates slower readiness responses after a newer engine event. */
+  questionStatusRequest: 0,
   /** True while the model is downloading or the library is being embedded. */
   preparingQuestions: false,
   /** When the current preparation began, used to measure the real rate. */
@@ -107,6 +111,9 @@ const state = {
   libraryOrder: readLibraryOrder(),
   /** Meetings waiting for the folder dialog to answer. */
   folderTargetIds: [],
+  /** Manual tag/folder edits invalidate summary-time metadata reloads. */
+  meetingMetadataRevisions: new Map(),
+  meetingMetadataEditCounts: new Map(),
   /** "move" files the targets; "manage" only creates, renames, and deletes. */
   folderDialogMode: "move",
   folderReturnFocus: null,
@@ -165,12 +172,23 @@ const state = {
   /** Meetings already in the library whose audio or summary is still running,
    *  keyed by ID with the stage being processed. */
   processingMeetings: new Map(),
+  /** Search-memory state for the saved meeting currently open. `request`
+   *  invalidates responses that arrive after navigation to another meeting. */
+  meetingIndex: {
+    meetingId: null,
+    result: null,
+    loading: false,
+    reindexing: false,
+    error: null,
+    request: 0,
+  },
   /** Ephemeral drafts keyed by turn ID; never included in summaries. */
   liveDrafts: new Map(),
   elapsedTimer: null,
 };
 
 const UPDATE_CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000;
+const ASK_HISTORY_LIMIT = 6;
 
 function isLiveMeeting(id) {
   return Boolean(id) && state.liveMeetings.has(id);
@@ -686,13 +704,27 @@ async function showAsk() {
 /// passages left to embed, would answer from part of the library and look like
 /// the meeting was never recorded.
 async function refreshQuestionsStatus() {
+  const request = ++state.questionStatusRequest;
+  let status;
   try {
-    state.questions = await invoke("questions_status");
+    status = await invoke("questions_status");
   } catch {
     return;
   }
-  const status = state.questions;
-  const ready = status.ready && !state.preparingQuestions;
+  if (request !== state.questionStatusRequest) return;
+  state.questions = status;
+  // Every independent health signal must agree. Missing fields therefore fail
+  // closed instead of accidentally enabling answers against a partial index.
+  const ready = Boolean(
+    status.ready === true
+      && status.enabled === true
+      && status.modelReady === true
+      && status.indexAvailable === true
+      && status.indexCurrent === true
+      && status.pendingPassages === 0
+      && status.updating === false
+      && !state.preparingQuestions,
+  );
   $("ask-gate").hidden = ready;
   $("ask-form").hidden = !ready;
   $("ask-status").hidden = !ready;
@@ -706,30 +738,98 @@ function renderQuestionGate() {
   const status = state.questions;
   if (!status) return;
 
-  const pending = status.pendingPassages;
-  $("ask-gate-work").textContent = pending
-    ? t("Indexar {n} fragmentos de tus reuniones actuales", { n: pending })
-    : t("Sin reuniones que indexar");
-
-  // Before anything is measured this is a conservative guess, and it says so.
-  // Once indexing starts the label is replaced by the observed rate.
+  const gate = $("ask-gate");
+  const title = $("ask-gate-title");
+  const copy = $("ask-gate-copy");
+  const work = $("ask-gate-work");
   const note = $("ask-gate-note");
-  if (pending) {
+  const action = $("btn-enable-questions");
+  const downloadFact = $("ask-gate-size").closest("li");
+  const pending = Number.isFinite(status.pendingPassages) ? status.pendingPassages : 0;
+  const semanticCopy =
+    "Para responder bien, Kuali necesita un modelo que entiende el significado de lo que se dijo, no solo las palabras exactas. Así encuentra «cortafuegos» cuando preguntas por «firewall».";
+  const busy = Boolean(state.preparingQuestions || status.updating);
+
+  title.setAttribute("aria-live", "polite");
+  gate.setAttribute("aria-busy", String(busy));
+  downloadFact.hidden = true;
+  action.hidden = true;
+  action.disabled = true;
+  note.textContent = "";
+
+  if (busy) {
+    title.textContent = t("Actualizando la memoria de reuniones");
+    copy.textContent = t("Kuali está incorporando reuniones nuevas antes de responder.");
+    work.textContent = t("Las preguntas volverán automáticamente cuando termine.");
+    if (status.updating && !state.preparingQuestions) $("ask-progress").hidden = true;
+    return;
+  }
+
+  if (status.indexAvailable !== true) {
+    title.textContent = t("El índice de reuniones no está disponible");
+    copy.textContent = t(
+      "Tus reuniones siguen guardadas, pero Kuali no puede consultar el buscador local.",
+    );
+    work.textContent = t("Reinicia Kuali para volver a abrir el índice.");
+    return;
+  }
+
+  if (status.indexCurrent !== true) {
+    title.textContent = status.indexCurrent === false
+      ? t("Hay reuniones sin indexar")
+      : t("Comprobando el índice de reuniones");
+    copy.textContent = status.indexCurrent === false
+      ? t("Kuali pausó las preguntas para no responder con una biblioteca incompleta.")
+      : t("Kuali está verificando que toda la biblioteca esté disponible antes de responder.");
+    work.textContent = status.indexCurrent === false
+      ? t("Abre las reuniones marcadas «No indexada» y usa «Reindexar».")
+      : t("Las preguntas volverán automáticamente cuando termine.");
+    return;
+  }
+
+  if (!status.enabled) {
+    title.textContent = t("Activa las preguntas sobre reuniones");
+    copy.textContent = t(semanticCopy);
+    work.textContent = pending
+      ? t("Indexar {n} fragmentos de tus reuniones actuales", { n: pending })
+      : t("Sin reuniones que indexar");
+    downloadFact.hidden = Boolean(status.modelReady);
+    action.hidden = false;
+    action.disabled = false;
+    action.textContent = status.modelReady
+      ? t("Indexar y activar")
+      : t("Descargar y activar");
+    return;
+  }
+
+  if (!status.modelReady) {
+    title.textContent = t("Falta el modelo de búsqueda");
+    copy.textContent = t("Descarga el modelo local para buscar por significado en tus reuniones.");
+    work.textContent = t("La descarga ocurre una sola vez y se guarda en tu equipo.");
+    downloadFact.hidden = false;
+    action.hidden = false;
+    action.disabled = false;
+    action.textContent = t("Descargar modelo");
+    return;
+  }
+
+  if (pending > 0) {
+    title.textContent = t("Termina de preparar las preguntas");
+    copy.textContent = t(semanticCopy);
+    work.textContent = t("Indexar {n} fragmentos de tus reuniones actuales", { n: pending });
     note.textContent = t(
       "La indexación tarda aproximadamente {time}. Puedes seguir usando Kuali mientras ocurre.",
       { time: humanDuration(Math.ceil((pending * 25) / 1000)) },
     );
-  } else {
-    note.textContent = "";
+    action.hidden = false;
+    action.disabled = false;
+    action.textContent = t("Terminar indexación");
+    return;
   }
 
-  $("ask-gate-title").textContent = status.modelReady
-    ? t("Termina de preparar las preguntas")
-    : t("Activa las preguntas sobre reuniones");
-  $("btn-enable-questions").textContent = status.modelReady
-    ? t("Indexar y activar")
-    : t("Descargar y activar");
-  $("btn-enable-questions").disabled = Boolean(state.preparingQuestions);
+  title.textContent = t("El buscador todavía no está listo");
+  copy.textContent = t("Kuali no puede confirmar que toda la biblioteca esté lista para responder.");
+  work.textContent = t("Las preguntas seguirán bloqueadas para evitar respuestas incompletas.");
 }
 
 function humanDuration(seconds) {
@@ -821,21 +921,72 @@ async function submitQuestion(event) {
   $("ask-suggestions").hidden = true;
 
   const turn = appendAskTurn(question);
+  updateAskConversationControl();
   try {
-    const answer = await invoke("ask_meetings", { question });
-    if (answer.found) {
-      fillAskTurn(turn, answer.text, answer.citations);
-    } else {
-      fillAskTurn(turn, t("No encontré nada sobre eso en tus reuniones."), []);
-    }
+    const answer = await invoke("ask_meetings", {
+      question,
+      history: askHistoryPayload(),
+    });
+    const text = answer.found
+      ? String(answer.text ?? "")
+      : t("No encontré nada sobre eso en tus reuniones.");
+    const citations = answer.found && Array.isArray(answer.citations)
+      ? answer.citations
+      : [];
+    fillAskTurn(turn, text, citations);
+    rememberAskTurn(question, text, citations);
   } catch (error) {
     fillAskTurn(turn, String(error), [], { markdown: false });
     turn.classList.add("failed");
   } finally {
     state.asking = false;
     $("btn-ask").disabled = false;
+    updateAskConversationControl();
     field.focus();
   }
+}
+
+/** A fresh copy prevents a later UI mutation from changing an in-flight call. */
+function askHistoryPayload() {
+  return state.askHistory.slice(-ASK_HISTORY_LIMIT).map(({ question, answer, meetingIds }) => ({
+    question,
+    answer,
+    meetingIds: [...meetingIds],
+  }));
+}
+
+function rememberAskTurn(question, answer, citations) {
+  const meetingIds = [...new Set(
+    citations
+      .map((citation) => citation?.meetingId)
+      .filter((meetingId) => typeof meetingId === "string" && meetingId.length > 0),
+  )];
+  state.askHistory.push({ question, answer, meetingIds });
+  if (state.askHistory.length > ASK_HISTORY_LIMIT) {
+    state.askHistory.splice(0, state.askHistory.length - ASK_HISTORY_LIMIT);
+  }
+  updateAskConversationControl();
+}
+
+function updateAskConversationControl() {
+  const button = $("btn-new-ask-conversation");
+  const hasConversation = state.askHistory.length > 0
+    || $("ask-thread").childElementCount > 0;
+  button.hidden = !hasConversation;
+  button.disabled = state.asking;
+}
+
+function resetAskConversation() {
+  if (state.asking) return;
+  state.askHistory = [];
+  $("ask-thread").replaceChildren();
+  $("ask-thread").scrollTop = 0;
+  $("ask-suggestions").hidden = !state.questions?.ready;
+  const field = $("ask-question");
+  field.value = "";
+  resizeAskField();
+  updateAskConversationControl();
+  field.focus();
 }
 
 /// Adds the question with a placeholder answer, and returns the turn so the
@@ -854,7 +1005,8 @@ function appendAskTurn(question) {
 
   turn.append(asked, answer);
   $("ask-thread").append(turn);
-  turn.scrollIntoView({ behavior: "smooth", block: "start" });
+  const reduceMotion = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+  turn.scrollIntoView({ behavior: reduceMotion ? "auto" : "smooth", block: "nearest" });
   return turn;
 }
 
@@ -1110,6 +1262,33 @@ async function refreshMeetings() {
     if (request === state.libraryRequest) list.removeAttribute("aria-busy");
   }
   renderMeetingList();
+}
+
+/** Refreshes the saved object after summary-time metadata (tags/folder) lands.
+ * The event already paints its summary immediately; this second read only
+ * replaces it while the same meeting is still open. */
+async function refreshMeetingAfterSummary(meetingId) {
+  const opened = state.viewing?.meta.id === meetingId ? state.viewing : null;
+  const metadataRevision = meetingMetadataRevision(meetingId);
+  await Promise.all([refreshMeetings(), refreshFolders(), refreshTagCatalog()]);
+  if (!opened
+      || state.viewing !== opened
+      || state.viewing.meta.id !== meetingId
+      || meetingMetadataEditActive(meetingId)
+      || meetingMetadataRevision(meetingId) !== metadataRevision) return;
+
+  let saved;
+  try {
+    saved = await invoke("load_meeting", { id: meetingId });
+  } catch {
+    return;
+  }
+  if (state.viewing !== opened
+      || state.viewing.meta.id !== meetingId
+      || meetingMetadataEditActive(meetingId)
+      || meetingMetadataRevision(meetingId) !== metadataRevision) return;
+  state.viewing = saved;
+  renderMeeting();
 }
 
 function renderLibraryGrouping() {
@@ -2295,10 +2474,12 @@ async function openMeeting(id) {
     toast(String(e), "reunión", true);
     return;
   }
+  prepareMeetingIndex(state.viewing.meta.id, isLiveMeeting(state.viewing.meta.id));
   showPane("meeting");
   renderMeetingList();
   history.replaceState(null, "", `#meeting=${encodeURIComponent(id)}`);
   renderMeeting();
+  if (!isLiveMeeting(state.viewing.meta.id)) void refreshMeetingIndex(state.viewing.meta.id);
   renderStatus();
   scrollTranscriptToEnd();
 }
@@ -2329,6 +2510,130 @@ function toggleMeetingMenu(triggerId, menuId) {
   menu.hidden = !opening;
   $(triggerId).setAttribute("aria-expanded", String(opening));
   if (opening) menu.querySelector("[role='menuitem']:not([hidden])")?.focus();
+}
+
+const MEETING_INDEX_STATES = new Set(["indexed", "pending", "notIndexed", "unavailable"]);
+
+function prepareMeetingIndex(meetingId, live = false) {
+  state.meetingIndex.request += 1;
+  state.meetingIndex.meetingId = meetingId;
+  state.meetingIndex.result = null;
+  state.meetingIndex.loading = !live;
+  state.meetingIndex.reindexing = false;
+  state.meetingIndex.error = null;
+}
+
+function meetingIndexRequestIsCurrent(meetingId, request) {
+  return state.meetingIndex.request === request
+    && state.meetingIndex.meetingId === meetingId
+    && state.viewing?.meta.id === meetingId
+    && !isLiveMeeting(meetingId);
+}
+
+function normalizeMeetingIndex(result) {
+  const indexState = MEETING_INDEX_STATES.has(result?.state) ? result.state : "unavailable";
+  return {
+    state: indexState,
+    passages: Math.max(0, Number(result?.passages) || 0),
+    pendingPassages: Math.max(0, Number(result?.pendingPassages) || 0),
+  };
+}
+
+function meetingIndexMessage(result) {
+  if (result.state === "indexed") return t("Indexada");
+  if (result.state === "pending") return t("Indexación pendiente");
+  if (result.state === "notIndexed") return t("No indexada");
+  return t("Índice no disponible");
+}
+
+function renderMeetingIndex() {
+  const meeting = state.viewing;
+  const control = $("meeting-index");
+  if (!meeting || isLiveMeeting(meeting.meta.id)) {
+    control.hidden = true;
+    return;
+  }
+
+  control.hidden = false;
+  const current = state.meetingIndex.meetingId === meeting.meta.id
+    ? state.meetingIndex
+    : null;
+  const status = $("meeting-index-status");
+  const message = $("meeting-index-message");
+  const button = $("btn-reindex-meeting");
+  const actionLabel = $("meeting-index-action-label");
+
+  if (current?.reindexing) {
+    status.dataset.state = "reindexing";
+    message.textContent = t("Indexando esta reunión…");
+  } else if (current?.error) {
+    status.dataset.state = "error";
+    message.textContent = t(current.error.key, current.error.variables);
+  } else if (current?.result) {
+    status.dataset.state = current.result.state;
+    message.textContent = meetingIndexMessage(current.result);
+  } else {
+    status.dataset.state = "loading";
+    message.textContent = t("Consultando el índice…");
+  }
+
+  button.disabled = Boolean(current?.reindexing);
+  button.classList.toggle("is-loading", Boolean(current?.reindexing));
+  if (current?.reindexing) button.setAttribute("aria-busy", "true");
+  else button.removeAttribute("aria-busy");
+  actionLabel.textContent = current?.reindexing ? t("Indexando…") : t("Reindexar");
+}
+
+async function refreshMeetingIndex(meetingId, { announceLoading = false } = {}) {
+  if (state.viewing?.meta.id !== meetingId || isLiveMeeting(meetingId)) return;
+  if (state.meetingIndex.meetingId !== meetingId) prepareMeetingIndex(meetingId);
+  const request = ++state.meetingIndex.request;
+  state.meetingIndex.loading = true;
+  state.meetingIndex.reindexing = false;
+  state.meetingIndex.error = null;
+  if (announceLoading) state.meetingIndex.result = null;
+  renderMeetingIndex();
+
+  try {
+    const result = normalizeMeetingIndex(await invoke("meeting_index_status", { id: meetingId }));
+    if (!meetingIndexRequestIsCurrent(meetingId, request)) return;
+    state.meetingIndex.result = result;
+    state.meetingIndex.loading = false;
+  } catch {
+    if (!meetingIndexRequestIsCurrent(meetingId, request)) return;
+    state.meetingIndex.error = {
+      key: "No se pudo comprobar el índice. Puedes reintentar.",
+      variables: {},
+    };
+    state.meetingIndex.loading = false;
+  }
+  renderMeetingIndex();
+}
+
+async function reindexCurrentMeeting() {
+  const meetingId = state.viewing?.meta.id;
+  if (!meetingId || isLiveMeeting(meetingId) || state.meetingIndex.reindexing) return;
+  if (state.meetingIndex.meetingId !== meetingId) prepareMeetingIndex(meetingId);
+  const request = ++state.meetingIndex.request;
+  state.meetingIndex.loading = false;
+  state.meetingIndex.reindexing = true;
+  state.meetingIndex.error = null;
+  renderMeetingIndex();
+
+  try {
+    const result = normalizeMeetingIndex(await invoke("reindex_meeting", { id: meetingId }));
+    if (!meetingIndexRequestIsCurrent(meetingId, request)) return;
+    state.meetingIndex.result = result;
+    state.meetingIndex.reindexing = false;
+  } catch (error) {
+    if (!meetingIndexRequestIsCurrent(meetingId, request)) return;
+    state.meetingIndex.error = {
+      key: "No se pudo reindexar: {error}",
+      variables: { error: String(error) },
+    };
+    state.meetingIndex.reindexing = false;
+  }
+  renderMeetingIndex();
 }
 
 function renderMeeting() {
@@ -2370,6 +2675,7 @@ function renderMeeting() {
     fact.append(icon(name), document.createTextNode(text));
     return fact;
   }));
+  renderMeetingIndex();
 
   renderSpeakers();
   renderTranscript();
@@ -2441,6 +2747,37 @@ function currentFolderOfTargets() {
   return folders.size === 1 ? [...folders][0] : null;
 }
 
+function meetingMetadataRevision(meetingId) {
+  return state.meetingMetadataRevisions.get(meetingId) ?? 0;
+}
+
+function bumpMeetingMetadataRevision(meetingIds) {
+  for (const meetingId of meetingIds) {
+    state.meetingMetadataRevisions.set(meetingId, meetingMetadataRevision(meetingId) + 1);
+  }
+}
+
+function beginMeetingMetadataEdit(meetingIds) {
+  bumpMeetingMetadataRevision(meetingIds);
+  for (const meetingId of meetingIds) {
+    const count = state.meetingMetadataEditCounts.get(meetingId) ?? 0;
+    state.meetingMetadataEditCounts.set(meetingId, count + 1);
+  }
+}
+
+function finishMeetingMetadataEdit(meetingIds) {
+  bumpMeetingMetadataRevision(meetingIds);
+  for (const meetingId of meetingIds) {
+    const count = state.meetingMetadataEditCounts.get(meetingId) ?? 0;
+    if (count <= 1) state.meetingMetadataEditCounts.delete(meetingId);
+    else state.meetingMetadataEditCounts.set(meetingId, count - 1);
+  }
+}
+
+function meetingMetadataEditActive(meetingId) {
+  return (state.meetingMetadataEditCounts.get(meetingId) ?? 0) > 0;
+}
+
 function renderFolderOptions() {
   const current = currentFolderOfTargets();
   const options = state.folders.map((folder) => {
@@ -2510,11 +2847,17 @@ function startFolderRename(row, folder) {
     const next = input.value.trim();
     input.disabled = true;
     if (next && next !== folder) {
+      const ids = state.meetings
+        .filter((meeting) => meeting.folder?.toLowerCase() === folder.toLowerCase())
+        .map((meeting) => meeting.id);
+      beginMeetingMetadataEdit(ids);
       try {
         state.folders = await invoke("rename_folder", { from: folder, to: next });
         await refreshMeetings();
       } catch (error) {
         toast(String(error), t("carpetas"), true);
+      } finally {
+        finishMeetingMetadataEdit(ids);
       }
     }
     renderFolderOptions();
@@ -2539,18 +2882,25 @@ async function removeFolder(folder) {
     action: t("Eliminar carpeta"),
   });
   if (!accepted) return;
+  const ids = state.meetings
+    .filter((meeting) => meeting.folder?.toLowerCase() === folder.toLowerCase())
+    .map((meeting) => meeting.id);
+  beginMeetingMetadataEdit(ids);
   try {
     state.folders = await invoke("delete_folder", { name: folder });
     await refreshMeetings();
     renderFolderOptions();
   } catch (error) {
     toast(String(error), t("carpetas"), true);
+  } finally {
+    finishMeetingMetadataEdit(ids);
   }
 }
 
 async function moveTargetsTo(folder) {
   const ids = state.folderTargetIds;
   if (ids.length === 0) return;
+  beginMeetingMetadataEdit(ids);
   try {
     await invoke("set_meeting_folder", { ids, folder });
     await refreshFolders();
@@ -2567,6 +2917,8 @@ async function moveTargetsTo(folder) {
     );
   } catch (error) {
     toast(String(error), t("carpetas"), true);
+  } finally {
+    finishMeetingMetadataEdit(ids);
   }
   if (!$("folder-modal").hidden) closeFolderDialog();
   else state.folderTargetIds = [];
@@ -2619,6 +2971,8 @@ function renderMeetingTags() {
 async function saveMeetingTags(tags) {
   const meeting = state.viewing;
   if (!meeting) return;
+  const ids = [meeting.meta.id];
+  beginMeetingMetadataEdit(ids);
   try {
     const saved = await invoke("set_meeting_tags", { id: meeting.meta.id, tags });
     meeting.meta.tags = saved;
@@ -2630,6 +2984,8 @@ async function saveMeetingTags(tags) {
     renderMeetingList();
   } catch (error) {
     toast(String(error), t("etiquetas"), true);
+  } finally {
+    finishMeetingMetadataEdit(ids);
   }
 }
 
@@ -4559,9 +4915,16 @@ function handleEvent(event) {
             .then((saved) => {
               if (state.viewing?.meta.id !== event.meetingId) return;
               state.viewing = saved;
+              prepareMeetingIndex(event.meetingId);
               renderMeeting();
+              void refreshMeetingIndex(event.meetingId);
             })
-            .catch(() => renderMeeting());
+            .catch(() => {
+              if (state.viewing?.meta.id !== event.meetingId) return;
+              prepareMeetingIndex(event.meetingId);
+              renderMeeting();
+              void refreshMeetingIndex(event.meetingId);
+            });
         }
         state.tasksLoaded = false;
         renderUpdateState();
@@ -4647,8 +5010,21 @@ function handleEvent(event) {
         if (state.viewing?.meta.id === event.meetingId) renderMeeting();
       }
       state.tasksLoaded = false;
-      refreshMeetings();
+      void refreshMeetingAfterSummary(event.meetingId);
       toast(t("Resumen listo"), "Kuali");
+      break;
+
+    case "meetingIndexChanged":
+      void refreshQuestionsStatus();
+      if (state.viewing?.meta.id === event.meetingId
+          && !isLiveMeeting(event.meetingId)
+          && !state.meetingIndex.reindexing) {
+        void refreshMeetingIndex(event.meetingId);
+      }
+      break;
+
+    case "questionsStatusChanged":
+      void refreshQuestionsStatus();
       break;
 
     case "error":
@@ -6191,6 +6567,7 @@ function wireUp() {
   $("nav-tasks").addEventListener("click", showTasks);
   $("nav-ask").addEventListener("click", showAsk);
   $("btn-enable-questions").addEventListener("click", enableQuestions);
+  $("btn-new-ask-conversation").addEventListener("click", resetAskConversation);
   $("ask-form").addEventListener("submit", submitQuestion);
   // Enter sends the question; Shift+Enter keeps a line break, which is what a
   // multi-line field is expected to do.
@@ -6625,6 +7002,8 @@ function wireUp() {
       btn.textContent = t("Rehacer resumen");
     }
   });
+
+  $("btn-reindex-meeting").addEventListener("click", reindexCurrentMeeting);
 
   document.addEventListener("keydown", (e) => {
     if (e.key === "Escape" && (meetingDragActive() || orderDragActive())) {
