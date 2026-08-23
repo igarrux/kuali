@@ -1,13 +1,43 @@
 //! Converts a transcript into a concise summary and actionable follow-up for
 //! someone who missed the meeting.
 
-use kuali_core::{ActionItem, Meeting, MeetingNote, MeetingSummary};
-use serde::Deserialize;
+use kuali_core::{
+    sanitize_folder, sanitize_tags, ActionItem, Meeting, MeetingNote, MeetingSummary,
+};
+use serde::{Deserialize, Serialize};
 
 use crate::json::{extract_json_object, non_empty};
 use crate::provider::{CompletionRequest, LlmError, LlmProvider};
 
 const MAX_TITLE_CHARS: usize = 60;
+const MAX_ANALYSIS_TAGS: usize = 3;
+
+/// Labels already used by the library. Supplying them lets the model organize
+/// new meetings consistently instead of inventing near-duplicates each time.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OrganizationContext {
+    pub folders: Vec<String>,
+    pub tags: Vec<String>,
+}
+
+/// Organization proposed as part of the same model pass that writes a summary.
+/// folder always refers to an existing folder; new_folder is a deliberately
+/// conservative proposal that the caller may create.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingOrganization {
+    pub tags: Vec<String>,
+    pub folder: Option<String>,
+    pub new_folder: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MeetingAnalysis {
+    pub summary: MeetingSummary,
+    pub organization: MeetingOrganization,
+}
 
 /// Output contract. Optional fields intentionally use an empty string instead of
 /// `null` because several structured-output modes reject nullable types, while
@@ -47,10 +77,19 @@ pub fn output_schema() -> serde_json::Value {
                     "additionalProperties": false
                 }
             },
-            "openQuestions": { "type": "array", "items": { "type": "string" } }
+            "openQuestions": { "type": "array", "items": { "type": "string" } },
+            "tags": {
+                "type": "array",
+                "minItems": 0,
+                "maxItems": MAX_ANALYSIS_TAGS,
+                "items": { "type": "string" }
+            },
+            "folder": { "type": "string" },
+            "newFolder": { "type": "string" }
         },
         "required": [
-            "title", "overview", "keyPoints", "decisions", "actionItems", "notes", "openQuestions"
+            "title", "overview", "keyPoints", "decisions", "actionItems", "notes", "openQuestions",
+            "tags", "folder", "newFolder"
         ],
         "additionalProperties": false
     })
@@ -74,6 +113,10 @@ About the material you work with:
 - When someone says they are writing something down —"me lo apunto", "tomo nota", "anoto eso", "I'll write that down", in any language—, record that note under that person in "notes". The note is what that person would want to read later (the fact, the figure, the reference, the instruction), not the sentence they used to say they would note it down. A note is not a task: writing down a version number is a note; committing to update it is a task. If nobody asked to note anything, return an empty list.
 - Meetings wander. Tell apart what was decided from what was only mentioned in passing.
 - The title has to make the conversation recognisable tomorrow: between 4 and 9 words and 60 characters at most, centred on the main subject, with no date, no platform and not the word "meeting".
+- Add between 1 and 3 short topical labels in "tags". Prefer a label from Existing tags whenever it applies, copying it exactly; create a new label only when the existing catalogue has no good match.
+- "folder" files the meeting into one of Existing folders. Copy that folder exactly or use an empty string when none fits.
+- "newFolder" is only for a stable, reusable category such as a project, product, client, or workstream. It must exactly match one of the labels proposed in "tags". Never create a folder from the meeting title, date, platform, a person's name, or a generic activity such as meeting, call, follow-up, planning, review, or stand-up. Do not make one folder per meeting. If there is any doubt, use an empty string.
+- Reuse an existing folder instead of proposing a synonymous new one. Never fill both "folder" and "newFolder".
 
 {language_rule}
 
@@ -99,7 +142,10 @@ Return a JSON object only, with no text around it and without wrapping it in a c
       "timestamp": "the timestamp of the line where it was asked to be noted, in the same format as the transcript"
     }}
   ],
-  "openQuestions": ["what was left unresolved"]
+  "openQuestions": ["what was left unresolved"],
+  "tags": ["one to three short topical labels; copy matching Existing tags exactly"],
+  "folder": "exact value from Existing folders, or an empty string",
+  "newFolder": "stable reusable category matching one proposed tag exactly, or an empty string"
 }}"#
     )
 }
@@ -125,6 +171,10 @@ pub fn language_rule(language: &str) -> String {
 }
 
 pub fn user_prompt(meeting: &Meeting) -> String {
+    user_prompt_with_context(meeting, &OrganizationContext::default())
+}
+
+fn user_prompt_with_context(meeting: &Meeting, context: &OrganizationContext) -> String {
     let participants = meeting
         .speakers
         .iter()
@@ -134,7 +184,7 @@ pub fn user_prompt(meeting: &Meeting) -> String {
         .join(", ");
 
     format!(
-        "Meeting: {}\nDate: {}\nDuration: {}\nParticipants: {}\n\n--- TRANSCRIPT ---\n{}",
+        "Meeting: {}\nDate: {}\nDuration: {}\nParticipants: {}\nExisting folders: {}\nExisting tags: {}\n\n--- TRANSCRIPT ---\n{}",
         meeting.meta.source_title(),
         meeting.meta.started_at.format("%Y-%m-%d %H:%M UTC"),
         kuali_core::format_timestamp(meeting.duration_ms()),
@@ -143,8 +193,43 @@ pub fn user_prompt(meeting: &Meeting) -> String {
         } else {
             &participants
         },
+        format_catalog(clean_folder_catalog(context.folders.iter().cloned())),
+        format_catalog(clean_tag_catalog(context.tags.iter().cloned())),
         meeting.transcript_text()
     )
+}
+
+fn format_catalog(values: impl IntoIterator<Item = String>) -> String {
+    let values = values.into_iter().collect::<Vec<_>>();
+    if values.is_empty() {
+        "(none)".to_string()
+    } else {
+        serde_json::to_string(&values).expect("a string catalogue always serializes")
+    }
+}
+
+/// Requests the summary and organization together in one provider completion.
+pub async fn analyze(
+    provider: &dyn LlmProvider,
+    meeting: &Meeting,
+    language: &str,
+    context: &OrganizationContext,
+) -> Result<MeetingAnalysis, LlmError> {
+    let request = CompletionRequest::new(
+        system_prompt(language),
+        user_prompt_with_context(meeting, context),
+    )
+    .with_schema(output_schema());
+
+    let raw = provider.complete(&request).await?;
+    let info = provider.info();
+    let mut analysis = parse_analysis(&raw, &format!("{} · {}", info.label, info.model))?;
+    if analysis.summary.title.trim().is_empty() {
+        analysis.summary.title = meeting.fallback_title();
+    }
+    canonicalize_assignees(&mut analysis.summary, meeting);
+    canonicalize_organization(&mut analysis.organization, context);
+    Ok(analysis)
 }
 
 /// Requests a summary and returns validated output.
@@ -153,17 +238,11 @@ pub async fn summarize(
     meeting: &Meeting,
     language: &str,
 ) -> Result<MeetingSummary, LlmError> {
-    let request = CompletionRequest::new(system_prompt(language), user_prompt(meeting))
-        .with_schema(output_schema());
-
-    let raw = provider.complete(&request).await?;
-    let info = provider.info();
-    let mut summary = parse_summary(&raw, &format!("{} · {}", info.label, info.model))?;
-    if summary.title.trim().is_empty() {
-        summary.title = meeting.fallback_title();
-    }
-    canonicalize_assignees(&mut summary, meeting);
-    Ok(summary)
+    Ok(
+        analyze(provider, meeting, language, &OrganizationContext::default())
+            .await?
+            .summary,
+    )
 }
 
 /// Models may return a handle or drop a diacritic despite exact-name prompting.
@@ -229,6 +308,12 @@ struct RawSummary {
     notes: Vec<RawNote>,
     #[serde(default, alias = "open_questions")]
     open_questions: Vec<String>,
+    #[serde(default)]
+    tags: Vec<String>,
+    #[serde(default)]
+    folder: String,
+    #[serde(default, alias = "new_folder")]
+    new_folder: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -256,6 +341,10 @@ struct RawActionItem {
 }
 
 pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, LlmError> {
+    Ok(parse_analysis(raw, generated_by)?.summary)
+}
+
+pub fn parse_analysis(raw: &str, generated_by: &str) -> Result<MeetingAnalysis, LlmError> {
     let json = extract_json_object(raw).ok_or_else(|| LlmError::BadJson {
         provider: generated_by.to_string(),
         message: format!(
@@ -268,6 +357,8 @@ pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, Ll
         provider: generated_by.to_string(),
         message: e.to_string(),
     })?;
+
+    let organization = parse_organization(parsed.tags, &parsed.folder, &parsed.new_folder);
 
     let action_items = parsed
         .action_items
@@ -317,7 +408,111 @@ pub fn parse_summary(raw: &str, generated_by: &str) -> Result<MeetingSummary, Ll
             message: "the response contained no usable summary sections".into(),
         });
     }
-    Ok(summary)
+    Ok(MeetingAnalysis {
+        summary,
+        organization,
+    })
+}
+
+fn parse_organization(tags: Vec<String>, folder: &str, new_folder: &str) -> MeetingOrganization {
+    let tags = clean_tag_catalog(tags)
+        .into_iter()
+        .take(MAX_ANALYSIS_TAGS)
+        .collect::<Vec<_>>();
+    let folder = sanitize_folder(folder);
+    let new_folder = sanitize_folder(new_folder).and_then(|candidate| {
+        tags.iter()
+            .find(|tag| equivalent_label(tag, &candidate))
+            .cloned()
+    });
+
+    MeetingOrganization {
+        tags,
+        folder,
+        new_folder,
+    }
+}
+
+fn canonicalize_organization(
+    organization: &mut MeetingOrganization,
+    context: &OrganizationContext,
+) {
+    let existing_tags = clean_tag_catalog(context.tags.iter().cloned());
+    let existing_folders = clean_folder_catalog(context.folders.iter().cloned());
+
+    organization.tags = clean_tag_catalog(std::mem::take(&mut organization.tags))
+        .into_iter()
+        .map(|tag| canonical_label(&tag, &existing_tags).unwrap_or(tag))
+        .take(MAX_ANALYSIS_TAGS)
+        .collect();
+
+    organization.folder = organization
+        .folder
+        .take()
+        .and_then(|folder| canonical_label(&folder, &existing_folders));
+
+    if organization.folder.is_some() {
+        organization.new_folder = None;
+        return;
+    }
+
+    let Some(candidate) = organization.new_folder.take() else {
+        return;
+    };
+    if let Some(existing) = canonical_label(&candidate, &existing_folders) {
+        organization.folder = Some(existing);
+        return;
+    }
+    organization.new_folder = organization
+        .tags
+        .iter()
+        .find(|tag| equivalent_label(tag, &candidate))
+        .cloned();
+}
+
+fn clean_tag_catalog(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut clean: Vec<String> = Vec::new();
+    for value in values {
+        let Some(value) = sanitize_tags([value]).into_iter().next() else {
+            continue;
+        };
+        if clean
+            .iter()
+            .any(|existing| equivalent_label(existing, &value))
+        {
+            continue;
+        }
+        clean.push(value);
+    }
+    clean
+}
+
+fn clean_folder_catalog(values: impl IntoIterator<Item = String>) -> Vec<String> {
+    let mut clean: Vec<String> = Vec::new();
+    for value in values {
+        let Some(value) = sanitize_folder(&value) else {
+            continue;
+        };
+        if clean
+            .iter()
+            .any(|existing| equivalent_label(existing, &value))
+        {
+            continue;
+        }
+        clean.push(value);
+    }
+    clean
+}
+
+fn canonical_label(value: &str, catalog: &[String]) -> Option<String> {
+    catalog
+        .iter()
+        .find(|candidate| equivalent_label(candidate, value))
+        .cloned()
+}
+
+fn equivalent_label(left: &str, right: &str) -> bool {
+    left.trim().to_lowercase() == right.trim().to_lowercase()
 }
 
 fn clean_title(value: &str) -> String {
@@ -388,6 +583,67 @@ pub fn parse_timestamp(value: &str) -> Option<u64> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::{Arc, Mutex};
+
+    use async_trait::async_trait;
+
+    use crate::provider::{ProviderInfo, ProviderKind};
+
+    fn test_meeting() -> Meeting {
+        serde_json::from_value(serde_json::json!({
+            "meta": {
+                "id": "meeting-1",
+                "guildId": 1,
+                "guildName": "Servidor",
+                "channelId": 2,
+                "channelName": "producto",
+                "startedAt": "2026-08-06T12:00:00Z",
+                "endedAt": "2026-08-06T12:30:00Z"
+            },
+            "speakers": [{
+                "userId": 3,
+                "displayName": "Ángela",
+                "username": "angela.dev",
+                "avatarUrl": null,
+                "color": "#fff",
+                "isBot": false
+            }],
+            "utterances": [],
+            "summary": null
+        }))
+        .unwrap()
+    }
+
+    struct RecordingProvider {
+        response: String,
+        requests: Arc<Mutex<Vec<CompletionRequest>>>,
+    }
+
+    #[async_trait]
+    impl LlmProvider for RecordingProvider {
+        fn id(&self) -> &'static str {
+            "recording"
+        }
+
+        fn info(&self) -> ProviderInfo {
+            ProviderInfo {
+                id: self.id().to_string(),
+                label: "Recording".to_string(),
+                model: "test".to_string(),
+                kind: ProviderKind::LocalCli,
+                structured_output: true,
+            }
+        }
+
+        async fn is_available(&self) -> bool {
+            true
+        }
+
+        async fn complete(&self, request: &CompletionRequest) -> Result<String, LlmError> {
+            self.requests.lock().unwrap().push(request.clone());
+            Ok(self.response.clone())
+        }
+    }
 
     #[test]
     fn timestamps_parse_in_every_shape_the_model_might_use() {
@@ -396,6 +652,148 @@ mod tests {
         assert_eq!(parse_timestamp("01:02:03"), Some(3_723_000));
         assert_eq!(parse_timestamp(""), None);
         assert_eq!(parse_timestamp("pronto"), None);
+    }
+
+    #[test]
+    fn output_schema_requires_organization_without_weakening_summary_fields() {
+        let schema = output_schema();
+        let required = schema["required"].as_array().unwrap();
+        for field in [
+            "title",
+            "overview",
+            "keyPoints",
+            "decisions",
+            "actionItems",
+            "notes",
+            "openQuestions",
+            "tags",
+            "folder",
+            "newFolder",
+        ] {
+            assert!(
+                required.iter().any(|value| value == field),
+                "{field} must remain required"
+            );
+        }
+        assert_eq!(schema["properties"]["tags"]["minItems"], 0);
+        assert_eq!(schema["properties"]["tags"]["maxItems"], MAX_ANALYSIS_TAGS);
+        assert_eq!(schema["additionalProperties"], false);
+    }
+
+    #[test]
+    fn organization_prompt_forbids_one_folder_per_meeting() {
+        let prompt = system_prompt("auto");
+        assert!(prompt.contains("Do not make one folder per meeting"));
+        assert!(prompt.contains("project, product, client, or workstream"));
+        assert!(prompt.contains("must exactly match one of the labels"));
+        assert!(prompt.contains("If there is any doubt, use an empty string"));
+    }
+
+    #[test]
+    fn user_prompt_includes_existing_catalogues_and_marks_empty_ones() {
+        let meeting = test_meeting();
+        let empty = user_prompt(&meeting);
+        assert!(empty.contains("Existing folders: (none)"));
+        assert!(empty.contains("Existing tags: (none)"));
+
+        let prompt = user_prompt_with_context(
+            &meeting,
+            &OrganizationContext {
+                folders: vec![" Producto ".into(), "Clientes".into()],
+                tags: vec![" Backend ".into(), "UX".into()],
+            },
+        );
+        assert!(prompt.contains(r#"Existing folders: ["Producto","Clientes"]"#));
+        assert!(prompt.contains(r#"Existing tags: ["Backend","UX"]"#));
+    }
+
+    #[test]
+    fn parse_analysis_sanitizes_deduplicates_and_bounds_organization() {
+        let raw = r#"{
+            "overview": "Resumen útil",
+            "tags": ["  Proyecto   Aurora ", "producto", "PRODUCTO", "diseño", "DISEÑO", "extra"],
+            "folder": "",
+            "newFolder": "proyecto aurora"
+        }"#;
+
+        let analysis = parse_analysis(raw, "test").unwrap();
+        assert_eq!(
+            analysis.organization.tags,
+            vec!["Proyecto Aurora", "producto", "diseño"]
+        );
+        assert_eq!(analysis.organization.folder, None);
+        assert_eq!(
+            analysis.organization.new_folder.as_deref(),
+            Some("Proyecto Aurora")
+        );
+        assert_eq!(analysis.summary.overview, "Resumen útil");
+    }
+
+    #[test]
+    fn a_new_folder_is_dropped_unless_it_matches_a_proposed_tag() {
+        let raw =
+            r#"{"overview":"x","tags":["Backend"],"folder":"","newFolder":"Proyecto secreto"}"#;
+        let analysis = parse_analysis(raw, "test").unwrap();
+        assert_eq!(analysis.organization.tags, vec!["Backend"]);
+        assert_eq!(analysis.organization.new_folder, None);
+    }
+
+    #[test]
+    fn an_unclassifiable_meeting_keeps_its_summary_with_empty_organization() {
+        let raw = r#"{
+            "overview": "La transcripción no alcanza para inferir un tema.",
+            "tags": [],
+            "folder": "",
+            "newFolder": ""
+        }"#;
+        let analysis = parse_analysis(raw, "test").unwrap();
+        assert!(analysis.organization.tags.is_empty());
+        assert_eq!(analysis.organization.folder, None);
+        assert_eq!(analysis.organization.new_folder, None);
+        assert!(!analysis.summary.overview.is_empty());
+    }
+
+    #[tokio::test]
+    async fn analyze_uses_one_call_and_canonicalizes_existing_labels() {
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let provider = RecordingProvider {
+            response: r#"{
+                "title": "Estado del producto",
+                "overview": "Se revisó el avance.",
+                "keyPoints": [],
+                "decisions": [],
+                "actionItems": [],
+                "notes": [],
+                "openQuestions": [],
+                "tags": ["backend", "Investigación", "ux", "ignorada"],
+                "folder": "producto",
+                "newFolder": ""
+            }"#
+            .into(),
+            requests: Arc::clone(&requests),
+        };
+        let context = OrganizationContext {
+            folders: vec!["Producto".into(), "Clientes".into()],
+            tags: vec!["Backend".into(), "UX".into()],
+        };
+
+        let analysis = analyze(&provider, &test_meeting(), "auto", &context)
+            .await
+            .unwrap();
+
+        assert_eq!(analysis.organization.folder.as_deref(), Some("Producto"));
+        assert_eq!(
+            analysis.organization.tags,
+            vec!["Backend", "Investigación", "UX"]
+        );
+        assert_eq!(analysis.organization.new_folder, None);
+
+        let requests = requests.lock().unwrap();
+        assert_eq!(requests.len(), 1, "summary and organization share one call");
+        assert!(requests[0]
+            .prompt
+            .contains(r#"Existing folders: ["Producto","Clientes"]"#));
+        assert!(requests[0].json_schema.is_some());
     }
 
     #[test]
