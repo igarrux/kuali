@@ -6,6 +6,10 @@
   const MEET_IDENTITY_VOTE_MIN_MS = 250;
   const MEET_CURRENT_SOURCE_WINDOW_MS = 50;
   const MEET_RECEIVER_LEASE_MS = 250;
+  const MEET_REMOTE_AUDIO_LEVEL = 0.01;
+  const MEET_REMOTE_AUDIO_ACTIVITY_GAP_MS = 750;
+  const MEET_REMOTE_AUDIO_STALL_MS = 4_000;
+  const MEET_REMOTE_AUDIO_RECOVERY_COOLDOWN_MS = 8_000;
 
   /**
    * A direct DOM/MediaStream identity belongs to that track. The microphone is
@@ -184,6 +188,161 @@
     return !isSelf;
   }
 
+  /**
+   * Track whether an encoded Meet lane is making audible PCM progress. Meet's
+   * RTP activity can remain healthy while a retained WebCodecs decoder or its
+   * timestamp routing stops producing usable PCM, so transport counters alone
+   * are not a capture-health signal.
+   */
+  function nextMeetRemoteAudioHealth(previous, {
+    now = 0,
+    source = "",
+    audioLevel = 0,
+    encodedFrames = 0,
+    decodedFrames = 0,
+    pcmFrames = 0,
+    recovering = false,
+  } = {}) {
+    const timestamp = Number(now);
+    const currentSource = String(source || "");
+    const sameSource = previous?.source === currentSource;
+    const state = sameSource ? previous : {
+      source: currentSource,
+      audibleSince: null,
+      lastAudibleAt: null,
+      lastDecodedAt: null,
+      lastPcmAt: null,
+      lastRecoveryAt: null,
+      encodedFrames: 0,
+      decodedFrames: 0,
+      pcmFrames: 0,
+      stalled: false,
+    };
+    const nextEncodedFrames = Number(encodedFrames) || 0;
+    const nextDecodedFrames = Number(decodedFrames) || 0;
+    const nextPcmFrames = Number(pcmFrames) || 0;
+    const encodedAdvanced = nextEncodedFrames > state.encodedFrames;
+    const decodedAdvanced = nextDecodedFrames > state.decodedFrames;
+    const pcmAdvanced = nextPcmFrames > state.pcmFrames;
+    const level = Number(audioLevel);
+    const audible = !!currentSource
+      && Number.isFinite(level)
+      && level >= MEET_REMOTE_AUDIO_LEVEL;
+
+    let audibleSince = state.audibleSince;
+    let lastAudibleAt = state.lastAudibleAt;
+    if (audible && encodedAdvanced) {
+      const continuing = Number.isFinite(lastAudibleAt)
+        && timestamp >= lastAudibleAt
+        && timestamp - lastAudibleAt <= MEET_REMOTE_AUDIO_ACTIVITY_GAP_MS;
+      if (!continuing) audibleSince = timestamp;
+      lastAudibleAt = timestamp;
+    } else if (
+      !Number.isFinite(lastAudibleAt)
+      || timestamp < lastAudibleAt
+      || timestamp - lastAudibleAt > MEET_REMOTE_AUDIO_ACTIVITY_GAP_MS
+    ) {
+      audibleSince = null;
+    }
+
+    let lastDecodedAt = state.lastDecodedAt;
+    if (decodedAdvanced) lastDecodedAt = timestamp;
+    let lastPcmAt = state.lastPcmAt;
+    if (pcmAdvanced) lastPcmAt = timestamp;
+    let lastRecoveryAt = state.lastRecoveryAt;
+    if (recovering) {
+      lastRecoveryAt = timestamp;
+      audibleSince = audible ? timestamp : null;
+    }
+
+    const audibleLongEnough = audible
+      && Number.isFinite(audibleSince)
+      && timestamp >= audibleSince
+      && timestamp - audibleSince >= MEET_REMOTE_AUDIO_STALL_MS;
+    const pcmStale = !Number.isFinite(lastPcmAt)
+      || timestamp < lastPcmAt
+      || timestamp - lastPcmAt >= MEET_REMOTE_AUDIO_STALL_MS;
+    const recoveryReady = !Number.isFinite(lastRecoveryAt)
+      || timestamp < lastRecoveryAt
+      || timestamp - lastRecoveryAt >= MEET_REMOTE_AUDIO_RECOVERY_COOLDOWN_MS;
+
+    return {
+      source: currentSource,
+      audibleSince,
+      lastAudibleAt,
+      lastDecodedAt,
+      lastPcmAt,
+      lastRecoveryAt,
+      encodedFrames: nextEncodedFrames,
+      decodedFrames: nextDecodedFrames,
+      pcmFrames: nextPcmFrames,
+      stalled: !recovering && audibleLongEnough && pcmStale && recoveryReady,
+    };
+  }
+
+  /**
+   * Return the Opus payload expected by WebCodecs. RTP payload types are
+   * negotiated per receiver, so neither RED's outer PT nor Opus's primary PT
+   * may be hard-coded. A null result means the packet is known to be unsafe for
+   * an Opus decoder.
+   */
+  function meetPrimaryOpusPayload(data, metadata = {}, codecs = []) {
+    const bytes = data instanceof Uint8Array
+      ? data
+      : (ArrayBuffer.isView(data)
+        ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
+        : new Uint8Array(data));
+    const codecByPayloadType = new Map();
+    for (const codec of codecs || []) {
+      const payloadType = Number(codec?.payloadType);
+      const mimeType = String(codec?.mimeType || "").trim().toLocaleLowerCase();
+      if (Number.isInteger(payloadType) && mimeType) codecByPayloadType.set(payloadType, mimeType);
+    }
+    const metadataPayloadType = Number(metadata?.payloadType);
+    const metadataMimeType = String(metadata?.mimeType || "").trim().toLocaleLowerCase();
+    const outerMimeType = metadataMimeType
+      || codecByPayloadType.get(metadataPayloadType)
+      || "";
+    if (!outerMimeType) {
+      // Older encoded-transform implementations exposed no RTP codec metadata,
+      // so keep the raw-Opus fallback only when no negotiation table exists.
+      // With a populated table an unknown PT usually means renegotiation; the
+      // caller must refresh getParameters() instead of feeding RED to Opus.
+      if (!codecByPayloadType.size) return bytes;
+      if (!Number.isInteger(metadataPayloadType)) {
+        const negotiatedMimeTypes = new Set(codecByPayloadType.values());
+        if (negotiatedMimeTypes.size === 1 && negotiatedMimeTypes.has("audio/opus")) return bytes;
+      }
+      return null;
+    }
+    if (outerMimeType === "audio/opus") return bytes;
+    if (outerMimeType !== "audio/red") return null;
+
+    let offset = 0;
+    let redundantLength = 0;
+    let primaryPayloadType = null;
+    while (offset < bytes.length) {
+      const header = bytes[offset];
+      const follows = (header & 0x80) !== 0;
+      const payloadType = header & 0x7f;
+      if (!follows) {
+        primaryPayloadType = payloadType;
+        offset += 1;
+        break;
+      }
+      if (offset + 4 > bytes.length) return null;
+      redundantLength += ((bytes[offset + 2] & 0x03) << 8) | bytes[offset + 3];
+      offset += 4;
+    }
+    const payloadOffset = offset + redundantLength;
+    if (primaryPayloadType === null || payloadOffset >= bytes.length) return null;
+    const negotiatedPrimary = codecByPayloadType.get(primaryPayloadType) || "";
+    const hasNegotiatedOpus = [...codecByPayloadType.values()].includes("audio/opus");
+    if ((negotiatedPrimary && negotiatedPrimary !== "audio/opus")
+      || (!negotiatedPrimary && hasNegotiatedOpus)) return null;
+    return bytes.subarray(payloadOffset);
+  }
+
   /** Keep only a contiguous run of audio/activity agreement for one device. */
   function nextMeetIdentityVote(previous, deviceId, now) {
     const continuing = previous?.deviceId === deviceId
@@ -335,6 +494,8 @@
     mergeMeetRoster,
     localMeetAudioDisabled,
     shouldSendMeetRemoteAudio,
+    nextMeetRemoteAudioHealth,
+    meetPrimaryOpusPayload,
     nextMeetIdentityVote,
     meetIdentityVoteReady,
     meetIdentityVoteFresh,

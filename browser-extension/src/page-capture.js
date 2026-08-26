@@ -11,6 +11,11 @@
   const FROM_PAGE = "kuali.capture.v1";
   const TO_PAGE = "kuali.control.v1";
   const TARGET_RATE = 16000;
+  const MEET_NATIVE_PCM_STALL_MS = 1_500;
+  const MEET_NATIVE_PCM_ACTIVITY_GAP_MS = 750;
+  const MEET_PCM_SOURCE_LEASE_MS = 250;
+  const MEET_ENCODED_FALLBACK_MAX_FRAMES = 125;
+  const MEET_ENCODED_ARBITRATION_HOLD_FRAMES = 3;
   const capturePolicy = globalThis.KualiCapturePolicy;
   if (!capturePolicy) throw new Error("Kuali capture policy was not loaded");
   const meetProtocol = globalThis.KualiMeetProtocol;
@@ -29,6 +34,11 @@
   let localIdentity = null;
   let scanTimer = null;
   let activityTimer = null;
+  let captureLifecycle = Promise.resolve();
+  let captureAbortController = null;
+  let captureIntent = 0;
+  let captureDesired = false;
+  let pendingMicrophoneRequest = null;
   let nextChannel = 1;
   const knownTracks = new Map();
   const remoteTracks = new Map();
@@ -56,7 +66,8 @@
   const meetSourceIdentityVotes = new Map();
   const meetActivityClaims = new Map();
   const meetAnnouncedChannels = new Set();
-  const meetReceiverLeaseBySource = new Map();
+  const meetPcmLeaseBySource = new Map();
+  let meetPcmArbitrationByReceiver = new WeakMap();
   const observedMeetDataChannels = new WeakSet();
   const meetEncodedTaps = new Set();
   const meetEncodedTapByReceiver = new WeakMap();
@@ -82,6 +93,123 @@
   function meetSourceKey(value) {
     if (value === null || value === undefined || value === "") return "";
     return String(value);
+  }
+
+  function meetPcmArbitrationState(receiver, sourceValue, now = performance.now()) {
+    if (!receiver) return null;
+    const source = meetSourceKey(sourceValue);
+    if (!source) return null;
+    let bySource = meetPcmArbitrationByReceiver.get(receiver);
+    if (!bySource) {
+      bySource = new Map();
+      meetPcmArbitrationByReceiver.set(receiver, bySource);
+    }
+    let state = bySource.get(source);
+    if (!state) {
+      state = {
+        source,
+        owner: "native",
+        createdAt: now,
+        audibleSince: null,
+        lastEncodedAt: null,
+        lastAudibleAt: null,
+        lastNativePcmAt: null,
+        nativeCandidate: false,
+        switches: 0,
+      };
+      bySource.set(source, state);
+    }
+    return state;
+  }
+
+  function clearMeetEncodedFallbackFrames(tap, source) {
+    tap?.fallbackFramesBySource?.delete(source);
+    tap?.pcmBuffers?.delete(source);
+  }
+
+  function preferMeetNativePcm(entry, route) {
+    if (!entry?.receiver || !route) return;
+    const now = performance.now();
+    const state = meetPcmArbitrationState(entry.receiver, route.source, now);
+    if (!state) return;
+    const recovered = state.owner === "encoded";
+    if (recovered) state.switches += 1;
+    state.owner = "native";
+    state.lastNativePcmAt = now;
+    if (recovered) entry.pcmBuffers?.delete(route.source);
+    clearMeetEncodedFallbackFrames(meetEncodedTapByReceiver.get(entry.receiver), route.source);
+  }
+
+  function meetEncodedPcmDecision(tap, source, audioLevel, now) {
+    const state = meetPcmArbitrationState(tap.receiver, source, now);
+    if (!state) return "encoded";
+    const known = tap.track?.id ? knownTracks.get(tap.track.id) : null;
+    const entry = tap.track?.id ? remoteTracks.get(tap.track.id) : null;
+    const nativeCandidate = (
+      entry?.track === tap.track
+      && entry.receiver === tap.receiver
+      && entry.captureMethod === "track-processor"
+    ) || (
+      known?.track === tap.track
+      && known.receiver === tap.receiver
+      && typeof MediaStreamTrackProcessor === "function"
+      && typeof AudioData === "function"
+    );
+    state.nativeCandidate = nativeCandidate;
+    if (!nativeCandidate) {
+      if (state.owner !== "encoded") state.switches += 1;
+      state.owner = "encoded";
+      return "encoded";
+    }
+    const level = Number(audioLevel);
+    const audible = Number.isFinite(level) && level >= 0.01;
+    const continuing = audible
+      && Number.isFinite(state.lastAudibleAt)
+      && now >= state.lastAudibleAt
+      && now - state.lastAudibleAt <= MEET_NATIVE_PCM_ACTIVITY_GAP_MS;
+    if (audible) {
+      if (!continuing) state.audibleSince = now;
+      state.lastAudibleAt = now;
+    } else if (
+      !Number.isFinite(state.lastAudibleAt)
+      || now < state.lastAudibleAt
+      || now - state.lastAudibleAt > MEET_NATIVE_PCM_ACTIVITY_GAP_MS
+    ) {
+      state.audibleSince = null;
+    }
+    state.lastEncodedAt = now;
+    if (state.owner === "encoded") return "encoded";
+
+    const progressAt = Math.max(
+      Number.isFinite(state.lastNativePcmAt) ? state.lastNativePcmAt : Number.NEGATIVE_INFINITY,
+      Number.isFinite(state.audibleSince) ? state.audibleSince : state.createdAt,
+    );
+    if (audible && now >= progressAt && now - progressAt >= MEET_NATIVE_PCM_STALL_MS) {
+      state.owner = "encoded";
+      state.switches += 1;
+      entry?.pcmBuffers?.delete(source);
+      return "encoded";
+    }
+    return "native";
+  }
+
+  function meetEncodedPcmCanPublish(tap, source) {
+    return meetPcmArbitrationByReceiver.get(tap.receiver)?.get(source)?.owner === "encoded";
+  }
+
+  function claimMeetPcmSource(entry, route, path, now = performance.now()) {
+    if (!route) return true;
+    const source = route.source;
+    const owner = entry.receiver || entry.track || entry;
+    const previous = meetPcmLeaseBySource.get(source);
+    if (previous) {
+      const sameOwner = previous.owner === owner && previous.path === path;
+      const fresh = now >= previous.seenAt && now - previous.seenAt <= MEET_PCM_SOURCE_LEASE_MS;
+      const nativePreemptsEncoded = path === "native" && previous.path === "encoded";
+      if (!sameOwner && fresh && !nativePreemptsEncoded) return false;
+    }
+    meetPcmLeaseBySource.set(source, { owner, path, seenAt: now });
+    return true;
   }
 
   function rememberMeetIdentity(identity) {
@@ -131,9 +259,13 @@
   }
 
   function resetMeetSourcePcm(source) {
-    for (const tap of meetEncodedTaps) tap.pcmBuffers.delete(source);
+    for (const tap of meetEncodedTaps) {
+      tap.pcmBuffers.delete(source);
+      tap.fallbackFramesBySource?.delete(source);
+      meetPcmArbitrationByReceiver.get(tap.receiver)?.delete(source);
+    }
     for (const entry of remoteTracks.values()) entry.pcmBuffers?.delete(source);
-    meetReceiverLeaseBySource.delete(source);
+    meetPcmLeaseBySource.delete(source);
   }
 
   function clearMeetRouteChallenge(route) {
@@ -467,53 +599,105 @@
     });
   }
 
-  function primaryOpusPayload(data, metadata) {
-    const bytes = new Uint8Array(data);
-    const mimeType = clean(metadata?.mimeType).toLocaleLowerCase();
-    if (mimeType !== "audio/red" && metadata?.payloadType !== 63) return bytes;
-    let offset = 0;
-    let redundantLength = 0;
-    let primaryPayloadType = null;
-    while (offset < bytes.length) {
-      const header = bytes[offset];
-      const follows = (header & 0x80) !== 0;
-      const payloadType = header & 0x7f;
-      if (!follows) {
-        primaryPayloadType = payloadType;
-        offset += 1;
-        break;
-      }
-      if (offset + 4 > bytes.length) return bytes;
-      redundantLength += ((bytes[offset + 2] & 0x03) << 8) | bytes[offset + 3];
-      offset += 4;
+  function refreshMeetEncodedTapCodecs(tap, force = false) {
+    const now = performance.now();
+    if (!force
+      && Number.isFinite(tap.codecsRefreshedAt)
+      && now - tap.codecsRefreshedAt < 5_000) return tap.codecs;
+    tap.codecsRefreshedAt = now;
+    try {
+      tap.codecs = (tap.receiver?.getParameters?.().codecs || []).map((codec) => ({
+        payloadType: codec.payloadType,
+        mimeType: codec.mimeType,
+        clockRate: codec.clockRate,
+        channels: codec.channels ?? null,
+      }));
+    } catch (error) {
+      tap.codecErrors += 1;
+      tap.lastCodecError = String(error?.message || error);
     }
-    const payloadOffset = offset + redundantLength;
-    if (primaryPayloadType !== 111 || payloadOffset >= bytes.length) return bytes;
-    return bytes.subarray(payloadOffset);
+    return tap.codecs;
+  }
+
+  function resetMeetEncodedDecoder(tap, reason = null) {
+    tap.decoderResetScheduled = false;
+    tap.decoderResetToken += 1;
+    tap.decoderEpoch += 1;
+    const decoder = tap.decoder;
+    tap.decoder = null;
+    try { decoder?.close(); } catch (_) {}
+    tap.routesByTimestamp.clear();
+    tap.pcmBuffers.clear();
+    tap.nextTimestamp = 0;
+    if (reason) {
+      tap.decoderResets += 1;
+      tap.lastDecoderResetReason = reason;
+      tap.lastDecoderResetAt = Date.now();
+      refreshMeetEncodedTapCodecs(tap, true);
+    }
+  }
+
+  function scheduleMeetEncodedDecoderReset(tap, reason) {
+    if (tap.closed || tap.decoderResetScheduled) return;
+    tap.decoderResetScheduled = true;
+    const token = ++tap.decoderResetToken;
+    queueMicrotask(() => {
+      if (!tap.closed && tap.decoderResetScheduled && tap.decoderResetToken === token) {
+        resetMeetEncodedDecoder(tap, reason);
+      }
+    });
   }
 
   function closeMeetEncodedTap(tap) {
     if (tap.closed) return;
     tap.closed = true;
-    try { tap.decoder?.close(); } catch (_) {}
-    tap.decoder = null;
-    tap.routesByTimestamp.clear();
-    tap.pcmBuffers.clear();
+    tap.released = true;
+    resetMeetEncodedDecoder(tap);
+    tap.fallbackFramesBySource.clear();
+    meetPcmArbitrationByReceiver.delete(tap.receiver);
     meetEncodedTaps.delete(tap);
+    if (meetEncodedTapByReceiver.get(tap.receiver) === tap) {
+      meetEncodedTapByReceiver.delete(tap.receiver);
+    }
+  }
+
+  function closeMeetEncodedReceiverTap(receiver) {
+    if (!receiver) return;
+    const tap = meetEncodedTapByReceiver.get(receiver);
+    if (tap) closeMeetEncodedTap(tap);
   }
 
   function ensureMeetAudioDecoder(tap) {
-    if (tap.decoder || typeof AudioDecoder !== "function" || typeof EncodedAudioChunk !== "function") {
-      return tap.decoder;
+    if (tap.closed || typeof AudioDecoder !== "function" || typeof EncodedAudioChunk !== "function") {
+      return null;
     }
-    tap.decoder = new AudioDecoder({
+    if (tap.decoder?.state === "configured") return tap.decoder;
+    if (tap.decoder) resetMeetEncodedDecoder(tap, `decoder-state:${tap.decoder.state || "unknown"}`);
+    const decoderEpoch = ++tap.decoderEpoch;
+    const decoder = new AudioDecoder({
       output(audioData) {
         try {
+          if (tap.closed || decoderEpoch !== tap.decoderEpoch) return;
           tap.decodedFrames += 1;
+          tap.lastDecodedAt = Date.now();
           const pendingRoute = tap.routesByTimestamp.get(audioData.timestamp) || null;
           tap.routesByTimestamp.delete(audioData.timestamp);
           const route = pendingRoute?.route || null;
-          if (!running || !route || route.generation !== pendingRoute.generation) return;
+          if (!running) return;
+          if (!route) {
+            tap.missingRouteDrops += 1;
+            scheduleMeetEncodedDecoderReset(tap, "route-timestamp-miss");
+            return;
+          }
+          if (route.generation !== pendingRoute.generation) {
+            tap.generationMismatchDrops += 1;
+            scheduleMeetEncodedDecoderReset(tap, "route-generation-changed");
+            return;
+          }
+          if (!meetEncodedPcmCanPublish(tap, route.source)) {
+            tap.nativePreferredDrops += 1;
+            return;
+          }
           const mono = new Float32Array(audioData.numberOfFrames);
           const plane = new Float32Array(audioData.numberOfFrames);
           for (let channel = 0; channel < audioData.numberOfChannels; channel += 1) {
@@ -525,14 +709,19 @@
           }
           let peak = 0;
           for (const sample of mono) peak = Math.max(peak, Math.abs(sample));
+          tap.lastDecodedPeak = peak;
           const samples = resampleMono(mono, audioData.sampleRate);
           const identityDecision = correlateMeetRouteWithActiveSpeaker(
             route,
             peak,
             pendingRoute.allowIdentityChallenge,
           );
-          if (identityDecision === "drop") return;
+          if (identityDecision === "drop") {
+            tap.identityDrops += 1;
+            return;
+          }
           if (identityDecision === "hold") {
+            tap.identityHolds += 1;
             holdMeetRoutePcm(route, tap, samples);
             return;
           }
@@ -543,12 +732,22 @@
         }
       },
       error(error) {
+        if (decoderEpoch !== tap.decoderEpoch) return;
         tap.decodeErrors += 1;
         tap.lastDecodeError = String(error?.message || error);
+        scheduleMeetEncodedDecoderReset(tap, "decoder-error");
       },
     });
-    tap.decoder.configure({ codec: "opus", sampleRate: 48000, numberOfChannels: 2 });
-    return tap.decoder;
+    tap.decoder = decoder;
+    try {
+      decoder.configure({ codec: "opus", sampleRate: 48000, numberOfChannels: 2 });
+    } catch (error) {
+      tap.decodeErrors += 1;
+      tap.lastDecodeError = String(error?.message || error);
+      resetMeetEncodedDecoder(tap, "decoder-configure-failed");
+      return null;
+    }
+    return decoder;
   }
 
   function meetSourcesFromEncodedMetadata(metadata) {
@@ -559,12 +758,98 @@
       .filter((value) => value && value !== "42"))];
   }
 
+  function meetAudioLevelFromEncodedMetadata(metadata, source = "") {
+    if (metadata?.audioLevel !== null && metadata?.audioLevel !== undefined) {
+      const direct = Number(metadata.audioLevel);
+      if (Number.isFinite(direct)) return direct;
+    }
+    const levels = (metadata?.contributingSources || [])
+      .filter((value) => !source || meetSourceKey(value?.source) === source)
+      .map((value) => Number(value?.audioLevel))
+      .filter(Number.isFinite);
+    return levels.length ? Math.max(...levels) : 0;
+  }
+
+  function bufferMeetEncodedFallbackFrame(tap, source, frame) {
+    let frames = tap.fallbackFramesBySource.get(source);
+    if (!frames) {
+      frames = [];
+      tap.fallbackFramesBySource.set(source, frames);
+    }
+    frames.push(frame);
+    if (frames.length > MEET_ENCODED_FALLBACK_MAX_FRAMES) {
+      frames.splice(0, frames.length - MEET_ENCODED_FALLBACK_MAX_FRAMES);
+    }
+  }
+
+  function decodeMeetEncodedFallbackFrame(tap, frame) {
+    if (tap.closed || !running || !meetEncodedPcmCanPublish(tap, frame.route.source)) return true;
+    if (frame.route.generation !== frame.generation) return true;
+    const decoder = ensureMeetAudioDecoder(tap);
+    if (!decoder || decoder.state !== "configured") return false;
+    const timestamp = tap.nextTimestamp;
+    tap.nextTimestamp += 20_000;
+    tap.routesByTimestamp.set(timestamp, {
+      route: frame.route,
+      generation: frame.generation,
+      allowIdentityChallenge: frame.allowIdentityChallenge,
+    });
+    try {
+      decoder.decode(new EncodedAudioChunk({
+        type: "key",
+        timestamp,
+        duration: 20_000,
+        data: frame.payload.slice().buffer,
+      }));
+      return true;
+    } catch (error) {
+      tap.routesByTimestamp.delete(timestamp);
+      tap.decodeErrors += 1;
+      tap.lastDecodeError = String(error?.message || error);
+      scheduleMeetEncodedDecoderReset(tap, "decoder-decode-threw");
+      return false;
+    }
+  }
+
+  function drainMeetEncodedFallbackFrames(tap, source) {
+    const frames = tap.fallbackFramesBySource.get(source) || [];
+    const arbitration = meetPcmArbitrationByReceiver.get(tap.receiver)?.get(source);
+    const heldFrames = arbitration?.nativeCandidate ? MEET_ENCODED_ARBITRATION_HOLD_FRAMES : 0;
+    const publishCount = Math.max(0, frames.length - heldFrames);
+    if (publishCount === 0) return;
+    const remaining = frames.slice(publishCount);
+    if (remaining.length) tap.fallbackFramesBySource.set(source, remaining);
+    else tap.fallbackFramesBySource.delete(source);
+    for (let index = 0; index < publishCount; index += 1) {
+      if (decodeMeetEncodedFallbackFrame(tap, frames[index])) continue;
+      // A synchronous throw may describe the chunk itself, not only decoder
+      // state. Drop that one frame so a poison packet cannot block recovery.
+      const retry = frames.slice(index + 1);
+      if (retry.length > MEET_ENCODED_FALLBACK_MAX_FRAMES) {
+        retry.splice(0, retry.length - MEET_ENCODED_FALLBACK_MAX_FRAMES);
+      }
+      if (retry.length) tap.fallbackFramesBySource.set(source, retry);
+      else tap.fallbackFramesBySource.delete(source);
+      break;
+    }
+  }
+
   function observeMeetEncodedFrame(receiver, frame) {
+    const receiverTrack = receiver.track;
+    const currentKnown = receiverTrack?.id ? knownTracks.get(receiverTrack.id) : null;
+    if (currentKnown && (
+      currentKnown.track !== receiverTrack
+      || (currentKnown.receiver && currentKnown.receiver !== receiver)
+    )) {
+      closeMeetEncodedReceiverTap(receiver);
+      return;
+    }
     let tap = meetEncodedTapByReceiver.get(receiver);
-    if (!tap) {
+    if (!tap || tap.closed || tap.track !== receiverTrack) {
+      if (tap && !tap.closed) closeMeetEncodedTap(tap);
       tap = {
         receiver,
-        track: receiver.track,
+        track: receiverTrack,
         channel: null,
         virtualMeetLane: true,
         released: false,
@@ -573,25 +858,52 @@
         decodedFrames: 0,
         decodeErrors: 0,
         lastDecodeError: null,
+        lastDecodedAt: null,
+        lastDecodedPeak: 0,
         lastMetadata: null,
         nextTimestamp: 0,
         routesByTimestamp: new Map(),
         pcmBuffers: new Map(),
         pcmFrames: 0,
         peak: 0,
+        lastPcmAt: null,
+        missingRouteDrops: 0,
+        generationMismatchDrops: 0,
+        identityDrops: 0,
+        identityHolds: 0,
+        belowPeakBlocks: 0,
+        unsupportedPayloads: 0,
+        codecs: [],
+        codecsRefreshedAt: null,
+        lastCodecRetryAt: null,
+        codecErrors: 0,
+        lastCodecError: null,
+        decoderEpoch: 0,
+        decoderResetScheduled: false,
+        decoderResetToken: 0,
+        decoderResets: 0,
+        lastDecoderResetReason: null,
+        lastDecoderResetAt: null,
+        health: null,
+        sourceHealthBySource: new Map(),
+        pcmFramesBySource: new Map(),
+        lastSourceHealth: null,
+        fallbackFramesBySource: new Map(),
+        nativePreferredDrops: 0,
       };
       meetEncodedTapByReceiver.set(receiver, tap);
       meetEncodedTaps.add(tap);
-      receiver.track?.addEventListener?.("ended", () => closeMeetEncodedTap(tap), { once: true });
+      receiverTrack?.addEventListener?.("ended", () => closeMeetEncodedTap(tap), { once: true });
     }
     const metadata = frame.getMetadata?.() || {};
     tap.encodedFrames += 1;
+    const encodedAudioLevel = meetAudioLevelFromEncodedMetadata(metadata);
     tap.lastMetadata = {
       mimeType: metadata.mimeType || null,
       payloadType: metadata.payloadType ?? null,
       synchronizationSource: metadata.synchronizationSource ?? null,
       contributingSources: metadata.contributingSources || [],
-      audioLevel: metadata.audioLevel ?? null,
+      audioLevel: encodedAudioLevel,
     };
     if (!running) return;
     const contributingSources = meetSourcesFromEncodedMetadata(metadata);
@@ -603,28 +915,80 @@
     if (!route || !capturePolicy.shouldSendMeetRemoteAudio({
       isSelf: route.identity?.isSelf,
     })) return;
-    const decoder = ensureMeetAudioDecoder(tap);
-    if (!decoder || decoder.state !== "configured") return;
-    const payload = primaryOpusPayload(frame.data, metadata);
-    const timestamp = tap.nextTimestamp;
-    tap.nextTimestamp += 20_000;
-    tap.routesByTimestamp.set(timestamp, {
+    const now = performance.now();
+    const audioLevel = meetAudioLevelFromEncodedMetadata(metadata, source);
+    const pcmDecision = meetEncodedPcmDecision(tap, source, audioLevel, now);
+    let codecs = refreshMeetEncodedTapCodecs(tap);
+    let payload = capturePolicy.meetPrimaryOpusPayload(frame.data, metadata, codecs);
+    if (!payload && (
+      !Number.isFinite(tap.lastCodecRetryAt)
+      || now - tap.lastCodecRetryAt >= 1_000
+    )) {
+      tap.lastCodecRetryAt = now;
+      codecs = refreshMeetEncodedTapCodecs(tap, true);
+      payload = capturePolicy.meetPrimaryOpusPayload(frame.data, metadata, codecs);
+    }
+    if (!payload) {
+      tap.unsupportedPayloads += 1;
+      return;
+    }
+    bufferMeetEncodedFallbackFrame(tap, source, {
+      payload: payload.slice(),
       route,
       generation: route.generation,
       allowIdentityChallenge: true,
     });
-    try {
-      decoder.decode(new EncodedAudioChunk({
-        type: "key",
-        timestamp,
-        duration: 20_000,
-        data: payload.slice().buffer,
-      }));
-    } catch (error) {
-      tap.routesByTimestamp.delete(timestamp);
-      tap.decodeErrors += 1;
-      tap.lastDecodeError = String(error?.message || error);
+    if (pcmDecision !== "encoded") return;
+
+    const sourcePcmFrames = tap.pcmFramesBySource.get(source) || 0;
+    const sourceHealth = capturePolicy.nextMeetRemoteAudioHealth(
+      tap.sourceHealthBySource.get(source) || null,
+      {
+        now,
+        source,
+        audioLevel,
+        encodedFrames: tap.encodedFrames,
+        decodedFrames: tap.decodedFrames,
+        pcmFrames: sourcePcmFrames,
+      },
+    );
+    tap.sourceHealthBySource.set(source, sourceHealth);
+    tap.lastSourceHealth = sourceHealth;
+    tap.health = capturePolicy.nextMeetRemoteAudioHealth(tap.health, {
+      now,
+      source: "encoded-lane",
+      audioLevel,
+      encodedFrames: tap.encodedFrames,
+      decodedFrames: tap.decodedFrames,
+      pcmFrames: tap.pcmFrames,
+    });
+    if (sourceHealth.stalled || tap.health.stalled) {
+      resetMeetEncodedDecoder(
+        tap,
+        sourceHealth.stalled ? "source-audible-rtp-without-pcm" : "lane-audible-rtp-without-pcm",
+      );
+      const recoveredSourceHealth = capturePolicy.nextMeetRemoteAudioHealth(sourceHealth, {
+        now,
+        source,
+        audioLevel,
+        encodedFrames: tap.encodedFrames,
+        decodedFrames: tap.decodedFrames,
+        pcmFrames: sourcePcmFrames,
+        recovering: true,
+      });
+      tap.sourceHealthBySource.set(source, recoveredSourceHealth);
+      tap.lastSourceHealth = recoveredSourceHealth;
+      tap.health = capturePolicy.nextMeetRemoteAudioHealth(tap.health, {
+        now,
+        source: "encoded-lane",
+        audioLevel,
+        encodedFrames: tap.encodedFrames,
+        decodedFrames: tap.decodedFrames,
+        pcmFrames: tap.pcmFrames,
+        recovering: true,
+      });
     }
+    drainMeetEncodedFallbackFrames(tap, source);
   }
 
   function firstAttribute(element, names) {
@@ -1053,8 +1417,10 @@
           playbackReadyState: entry.playbackElement?.readyState ?? null,
           sourceFrames: entry.sourceFrames,
           pcmFrames: entry.pcmFrames,
+          lastPcmAt: entry.lastPcmAt,
           peak: entry.peak,
           blockedFrames: entry.blockedFrames || 0,
+          belowPeakBlocks: entry.belowPeakBlocks || 0,
           participantId: bindings.get(entry.channel)?.id || null,
           displayName: bindings.get(entry.channel)?.name || null,
           isSelf: !!bindings.get(entry.channel)?.isSelf,
@@ -1088,9 +1454,30 @@
             decodedFrames: tap.decodedFrames,
             decodeErrors: tap.decodeErrors,
             lastDecodeError: tap.lastDecodeError,
+            lastDecodedAt: tap.lastDecodedAt,
+            lastDecodedPeak: tap.lastDecodedPeak,
             metadata: tap.lastMetadata,
             pcmFrames: tap.pcmFrames,
+            lastPcmAt: tap.lastPcmAt,
             peak: tap.peak,
+            pendingRoutes: tap.routesByTimestamp.size,
+            missingRouteDrops: tap.missingRouteDrops,
+            generationMismatchDrops: tap.generationMismatchDrops,
+            identityDrops: tap.identityDrops,
+            identityHolds: tap.identityHolds,
+            nativePreferredDrops: tap.nativePreferredDrops,
+            belowPeakBlocks: tap.belowPeakBlocks,
+            unsupportedPayloads: tap.unsupportedPayloads,
+            decoderState: tap.decoder?.state || null,
+            decoderResets: tap.decoderResets,
+            lastDecoderResetReason: tap.lastDecoderResetReason,
+            lastDecoderResetAt: tap.lastDecoderResetAt,
+            codecs: tap.codecs,
+            codecErrors: tap.codecErrors,
+            lastCodecError: tap.lastCodecError,
+            health: tap.health,
+            sourceHealth: tap.lastSourceHealth,
+            routedPcmFrames: tap.pcmFrames,
           })),
         },
         microphoneGate: {
@@ -1173,12 +1560,18 @@
   }
 
   async function ensureAudioGraph() {
-    if (!context || context.state === "closed") {
-      context = new AudioContext({ sampleRate: TARGET_RATE, latencyHint: "interactive" });
-      workletReady = context.audioWorklet.addModule(workletUrl);
+    let audioContext = context;
+    let audioWorkletReady = workletReady;
+    if (!audioContext || audioContext.state === "closed") {
+      audioContext = new AudioContext({ sampleRate: TARGET_RATE, latencyHint: "interactive" });
+      // Publish the context before addModule(): implementations and test doubles
+      // may throw synchronously, and startWithCleanup() still has to close it.
+      context = audioContext;
+      audioWorkletReady = audioContext.audioWorklet.addModule(workletUrl);
+      workletReady = audioWorkletReady;
     }
-    await workletReady;
-    await context.resume();
+    await audioWorkletReady;
+    await audioContext.resume();
   }
 
   function resampleMono(samples, sourceRate) {
@@ -1213,7 +1606,11 @@
       if (state.offset !== state.buffer.length) continue;
       let peak = 0;
       for (const sample of state.buffer) peak = Math.max(peak, Math.abs(sample));
-      if (peak >= 0.0005 && !entry.released) onTrackPcm(entry, state.buffer, route);
+      if (peak >= 0.0005 && !entry.released) {
+        onTrackPcm(entry, state.buffer, route);
+      } else if (peak < 0.0005 && entry.virtualMeetLane) {
+        entry.belowPeakBlocks = (entry.belowPeakBlocks || 0) + 1;
+      }
       state.buffer = new Float32Array(2048);
       state.offset = 0;
     }
@@ -1228,15 +1625,6 @@
       isSelf: route.identity?.isSelf,
     })) return null;
 
-    const now = performance.now();
-    const receiverLease = capturePolicy.updateMeetReceiverLease(
-      meetReceiverLeaseBySource.get(route.source),
-      entry.receiver,
-      audioData.timestamp,
-      now,
-    );
-    if (!receiverLease.accepted) return null;
-    meetReceiverLeaseBySource.set(route.source, receiverLease.lease);
     return { route, allowIdentityChallenge: true };
   }
 
@@ -1285,18 +1673,36 @@
   function captureTrack(track, directIdentity = null, forcedChannel = null, sourceStream = null, receiver = null) {
     if (!track || track.kind !== "audio") return;
     if (forcedChannel === MIC_CHANNEL && localIdentity) directIdentity = localIdentity;
-    const known = knownTracks.get(track.id);
+    let known = knownTracks.get(track.id);
+    const inherited = known;
+    if (known?.receiver && (known.track !== track || (receiver && known.receiver !== receiver))) {
+      // Retire only the tap bound to the old track epoch. RTCRtpReceiver
+      // objects can survive renegotiation and later expose a replacement track.
+      closeMeetEncodedReceiverTap(known.receiver);
+    }
+    if (known && known.track !== track) {
+      releaseTrack(track.id, false, false);
+      knownTracks.delete(track.id);
+      known = null;
+    }
     const nextKnown = {
       track,
-      directIdentity: directIdentity || known?.directIdentity || null,
-      forcedChannel: forcedChannel ?? known?.forcedChannel ?? null,
-      sourceStream: sourceStream || known?.sourceStream || null,
-      receiver: receiver || known?.receiver || null,
+      directIdentity: directIdentity || inherited?.directIdentity || null,
+      forcedChannel: forcedChannel ?? inherited?.forcedChannel ?? null,
+      sourceStream: sourceStream || (inherited?.track === track ? inherited.sourceStream : null),
+      receiver: receiver || (inherited?.track === track ? inherited.receiver : null),
     };
     knownTracks.set(track.id, nextKnown);
-    if (!known) track.addEventListener("ended", () => releaseTrack(track.id, true), { once: true });
+    if (!known) {
+      track.addEventListener("ended", () => {
+        if (knownTracks.get(track.id)?.track === track) releaseTrack(track.id, true);
+      }, { once: true });
+    }
     const active = remoteTracks.get(track.id);
     if (active) {
+      if (nextKnown.receiver && active.receiver !== nextKnown.receiver) {
+        active.receiver = nextKnown.receiver;
+      }
       // RTCPeerConnection can reveal a receiver track before Meet attaches its
       // real element MediaStream. If we initially had to wrap that track, swap
       // the source node as soon as the live element stream becomes available.
@@ -1316,11 +1722,11 @@
       && forcedChannel !== MIC_CHANNEL
       && typeof MediaStreamTrackProcessor === "function"
       && typeof AudioData === "function";
-    if ((!running && !canPrewarmMeetLane) || activatingTracks.has(track.id)) return;
-    activatingTracks.add(track.id);
+    if ((!running && !canPrewarmMeetLane) || activatingTracks.has(track)) return;
+    activatingTracks.add(track);
     activateTrack(track).catch((error) => {
       meetingEvent("warning", { code: "track-capture-failed", message: String(error?.message || error) });
-    }).finally(() => activatingTracks.delete(track.id));
+    }).finally(() => activatingTracks.delete(track));
   }
 
   async function activateTrack(track) {
@@ -1330,14 +1736,14 @@
       && typeof MediaStreamTrackProcessor === "function"
       && typeof AudioData === "function";
     if ((!running && !canPrewarmMeetLane) || remoteTracks.has(track.id) || track.readyState === "ended") return;
-    if (!known) return;
+    if (!known || known.track !== track) return;
     const virtualMeetLane = canPrewarmMeetLane && !!known.receiver;
     const channel = virtualMeetLane ? null : (known.forcedChannel ?? nextChannel++);
     // Keep the page's original MediaStream whenever available. Meet's receiver
     // lanes have been observed to expose live PCM through their element stream
     // while a newly constructed MediaStream([track]) remains silent.
     const stream = known.sourceStream instanceof MediaStream
-      && known.sourceStream.getAudioTracks().some((candidate) => candidate.id === track.id)
+      && known.sourceStream.getAudioTracks().some((candidate) => candidate === track)
       ? known.sourceStream
       : new MediaStream([track]);
     if (
@@ -1365,7 +1771,9 @@
         pending: [],
         sourceFrames: 0,
         pcmFrames: 0,
+        lastPcmAt: null,
         blockedFrames: 0,
+        belowPeakBlocks: 0,
         peak: 0,
         pcmBuffers: new Map(),
         released: false,
@@ -1383,7 +1791,10 @@
       return;
     }
     await ensureAudioGraph();
-    if (!running || remoteTracks.has(track.id) || track.readyState === "ended") return;
+    if (!running
+      || remoteTracks.has(track.id)
+      || track.readyState === "ended"
+      || knownTracks.get(track.id)?.track !== track) return;
     const source = context.createMediaStreamSource(stream);
     const processor = new AudioWorkletNode(context, "kuali-pcm", {
       numberOfInputs: 1,
@@ -1416,7 +1827,9 @@
       pending: [],
       sourceFrames: 0,
       pcmFrames: 0,
+      lastPcmAt: null,
       blockedFrames: 0,
+      belowPeakBlocks: 0,
       peak: 0,
       released: false,
     };
@@ -1442,8 +1855,19 @@
       return;
     }
     entry.pcmFrames += 1;
+    entry.lastPcmAt = Date.now();
     for (const sample of samples) entry.peak = Math.max(entry.peak, Math.abs(sample));
     if (route) {
+      entry.pcmFramesBySource?.set(
+        route.source,
+        (entry.pcmFramesBySource.get(route.source) || 0) + 1,
+      );
+      const path = entry.captureMethod === "track-processor" ? "native" : "encoded";
+      if (!claimMeetPcmSource(entry, route, path)) {
+        entry.sourceLeaseDrops = (entry.sourceLeaseDrops || 0) + 1;
+        return;
+      }
+      if (path === "native") preferMeetNativePcm(entry, route);
       announceMeetRoute(route);
       const frame = { channel, ts: Date.now(), pcm: Array.from(samples) };
       if (!route.deviceId) {
@@ -1494,7 +1918,7 @@
     post("audio", { channel, ts: Date.now(), pcm: Array.from(samples) });
   }
 
-  function releaseTrack(trackId, forget = false) {
+  function releaseTrack(trackId, forget = false, emitDeparture = true) {
     const entry = remoteTracks.get(trackId);
     if (!entry) {
       if (forget) knownTracks.delete(trackId);
@@ -1510,7 +1934,9 @@
     try { entry.processor?.disconnect(); } catch (_) {}
     if (entry.processor?.port) entry.processor.port.onmessage = null;
     const binding = bindings.get(entry.channel);
-    meetingEvent("participant-left", { channel: entry.channel, participantId: binding?.id || null }, binding?.name || null);
+    if (emitDeparture) {
+      meetingEvent("participant-left", { channel: entry.channel, participantId: binding?.id || null }, binding?.name || null);
+    }
     bindings.delete(entry.channel);
     identityVotes.delete(entry.channel);
     sentIdentity.delete(entry.channel);
@@ -1546,15 +1972,77 @@
           audio: { deviceId: { exact: deviceId } },
           video: false,
         });
-      } catch (_) {
+      } catch (error) {
+        if (!captureDesired) throw error;
         // Meet can replace a device while joining. Falling back to the current
         // default is preferable to leaving the local participant silent.
       }
     }
+    if (!captureDesired) throw new Error("Capture was cancelled before opening the microphone");
     return navigator.mediaDevices.getUserMedia({ audio: true, video: false });
   }
 
-  async function startMic() {
+  function acquirePendingMicrophoneRequest(meetSenderTrack) {
+    if (pendingMicrophoneRequest) return pendingMicrophoneRequest;
+    const request = {
+      claimed: false,
+      promise: null,
+    };
+    request.promise = Promise.resolve(openLocalMicrophone(meetSenderTrack)).then(
+      (stream) => ({ stream, error: null }),
+      (error) => ({ stream: null, error }),
+    );
+    pendingMicrophoneRequest = request;
+    request.promise.then(({ stream }) => {
+      queueMicrotask(() => {
+        if (pendingMicrophoneRequest !== request || request.claimed || captureDesired) return;
+        for (const track of stream?.getTracks?.() || []) track.stop();
+        pendingMicrophoneRequest = null;
+      });
+    });
+    return request;
+  }
+
+  function captureIntentIsCurrent(intent, signal = null) {
+    return captureDesired && intent === captureIntent && !signal?.aborted;
+  }
+
+  async function awaitCaptureStep(step, signal) {
+    const settled = Promise.resolve(step).then(
+      (value) => ({ value, error: null, cancelled: false }),
+      (error) => ({ value: null, error, cancelled: false }),
+    );
+    if (!signal) {
+      const outcome = await settled;
+      if (outcome.error) throw outcome.error;
+      return outcome;
+    }
+    if (signal.aborted) return { value: null, error: null, cancelled: true };
+    let onAbort;
+    const cancelled = new Promise((resolve) => {
+      onAbort = () => resolve({ value: null, error: null, cancelled: true });
+      signal.addEventListener("abort", onAbort, { once: true });
+    });
+    const outcome = await Promise.race([settled, cancelled]);
+    signal.removeEventListener("abort", onAbort);
+    if (outcome.error) throw outcome.error;
+    return outcome;
+  }
+
+  function stopCaptureImmediately() {
+    running = false;
+    clearInterval(scanTimer);
+    scanTimer = null;
+    clearInterval(activityTimer);
+    activityTimer = null;
+    if (micStreamOwned) {
+      for (const track of micStream?.getTracks?.() || []) track.stop();
+    }
+    micStream = null;
+    micStreamOwned = false;
+  }
+
+  async function startMic(intent, signal) {
     try {
       let meetSenderTrack = null;
       if (platform === "google_meet") {
@@ -1573,7 +2061,24 @@
           || candidates[0]?.track
           || null;
       }
-      micStream = await openLocalMicrophone(meetSenderTrack);
+      const microphoneRequest = acquirePendingMicrophoneRequest(meetSenderTrack);
+      const microphoneOutcome = await awaitCaptureStep(microphoneRequest.promise, signal);
+      if (microphoneOutcome.cancelled) return false;
+      const { stream: nextMicStream, error } = microphoneOutcome.value;
+      if (error) {
+        if (pendingMicrophoneRequest === microphoneRequest) pendingMicrophoneRequest = null;
+        throw error;
+      }
+      if (!captureIntentIsCurrent(intent, signal) || !running) {
+        if (!captureDesired && pendingMicrophoneRequest === microphoneRequest) {
+          for (const track of nextMicStream?.getTracks?.() || []) track.stop();
+          pendingMicrophoneRequest = null;
+        }
+        return false;
+      }
+      microphoneRequest.claimed = true;
+      if (pendingMicrophoneRequest === microphoneRequest) pendingMicrophoneRequest = null;
+      micStream = nextMicStream;
       micStreamOwned = true;
       const currentMeetUser = platform === "google_meet"
         ? [...meetUsers.values()].find((user) => user.isCurrentUser)
@@ -1586,13 +2091,17 @@
       localIdentity = self;
       sendRosterState(identitySnapshot(true));
       for (const track of micStream.getAudioTracks()) captureTrack(track, self, MIC_CHANNEL, micStream);
+      return true;
     } catch (error) {
+      if (!captureIntentIsCurrent(intent, signal) || !running) return false;
       meetingEvent("warning", { code: "microphone-unavailable", message: String(error?.message || error) });
+      return false;
     }
   }
 
-  async function start(url) {
+  async function start(url, intent, signal) {
     if (running) return;
+    if (!captureIntentIsCurrent(intent, signal)) return;
     workletUrl = url || workletUrl;
     if (!workletUrl) {
       meetingEvent("warning", { code: "worklet-unavailable", message: "No llegó el módulo de captura de audio." });
@@ -1601,15 +2110,31 @@
     running = true;
     meetAnnouncedChannels.clear();
     sentIdentity.clear();
-    meetReceiverLeaseBySource.clear();
+    meetPcmLeaseBySource.clear();
+    meetPcmArbitrationByReceiver = new WeakMap();
     meetSourceIdentityVotes.clear();
     meetActivityClaims.clear();
+    for (const tap of meetEncodedTaps) {
+      resetMeetEncodedDecoder(tap);
+      tap.health = null;
+      tap.sourceHealthBySource.clear();
+      tap.pcmFramesBySource.clear();
+      tap.lastSourceHealth = null;
+      tap.pcmFrames = 0;
+      tap.lastPcmAt = null;
+      tap.peak = 0;
+      tap.fallbackFramesBySource.clear();
+    }
     // The page can discover Meet's roster before the local WebSocket is open.
     // Force a fresh snapshot now so the background/UI receives the full count
     // for this capture instead of treating the pre-connection value as sent.
     lastRosterFingerprint = "";
     lastActiveFingerprint = "";
-    await ensureAudioGraph();
+    const graphOutcome = await awaitCaptureStep(ensureAudioGraph(), signal);
+    if (graphOutcome.cancelled || !captureIntentIsCurrent(intent, signal) || !running) {
+      running = false;
+      return;
+    }
     // Enrich receiver tracks with Meet's real element MediaStreams before any
     // fallback MediaStream([track]) sources are constructed.
     scanMediaElements();
@@ -1617,30 +2142,26 @@
       captureTrack(known.track, known.directIdentity, known.forcedChannel, known.sourceStream, known.receiver);
     }
     for (const route of meetRoutesBySource.values()) announceMeetRoute(route);
+    if (window === window.top) {
+      await startMic(intent, signal);
+      if (!captureIntentIsCurrent(intent, signal) || !running) {
+        running = false;
+        return;
+      }
+    }
     scanTimer = setInterval(scanMediaElements, 1000);
     activityTimer = setInterval(() => {
       const snapshot = identitySnapshot(true);
       sendActiveSpeakerState(snapshot);
     }, 250);
-    if (window === window.top) await startMic();
     post("capture-state", { state: "capturing", tracks: remoteTracks.size });
   }
 
   async function stop() {
-    if (!running) return;
-    running = false;
-    clearInterval(scanTimer);
-    scanTimer = null;
-    clearInterval(activityTimer);
-    activityTimer = null;
+    stopCaptureImmediately();
     if (platform === "google_meet" && window === window.top && lastActiveFingerprint) {
       meetingEvent("active-speakers", { platform, participants: [] });
     }
-    if (micStreamOwned) {
-      for (const track of micStream?.getTracks?.() || []) track.stop();
-    }
-    micStream = null;
-    micStreamOwned = false;
     localIdentity = null;
     lastRosterFingerprint = "";
     lastMeetProbeAt = 0;
@@ -1649,6 +2170,19 @@
     for (const route of meetRoutesBySource.values()) {
       route.pendingAudio.length = 0;
       clearMeetRouteChallenge(route);
+    }
+    for (const tap of meetEncodedTaps) {
+      // The encoded TransformStream remains attached to Meet, but its auxiliary
+      // decoder and timestamp map must never leak into the next recording.
+      resetMeetEncodedDecoder(tap);
+      tap.health = null;
+      tap.sourceHealthBySource.clear();
+      tap.pcmFramesBySource.clear();
+      tap.lastSourceHealth = null;
+      tap.pcmFrames = 0;
+      tap.lastPcmAt = null;
+      tap.peak = 0;
+      tap.fallbackFramesBySource.clear();
     }
     for (const [trackId, entry] of [...remoteTracks.entries()]) {
       // Meet's virtual receiver processors must stay attached from the instant
@@ -1664,17 +2198,37 @@
       releaseTrack(trackId, false);
     }
     meetAnnouncedChannels.clear();
-    meetReceiverLeaseBySource.clear();
+    meetPcmLeaseBySource.clear();
+    meetPcmArbitrationByReceiver = new WeakMap();
     meetSourceIdentityVotes.clear();
     meetActivityClaims.clear();
     sentIdentity.clear();
     for (const channel of [...bindings.keys()]) {
       if (channel !== MIC_CHANNEL) bindings.delete(channel);
     }
-    if (context) await context.close().catch(() => {});
+    const closingContext = context;
     context = null;
     workletReady = null;
+    if (closingContext) await closingContext.close().catch(() => {});
     post("capture-state", { state: "idle", tracks: 0 });
+  }
+
+  async function startWithCleanup(url, intent, signal) {
+    try {
+      await start(url, intent, signal);
+    } catch (error) {
+      // A failed worklet/context setup can leave tracks and a live AudioContext
+      // behind. Finish cleanup inside this serialized lifecycle operation so a
+      // newer queued start never inherits the partial state.
+      await stop();
+      throw error;
+    }
+  }
+
+  function queueCaptureLifecycle(operation) {
+    const queued = captureLifecycle.then(operation, operation);
+    captureLifecycle = queued.catch(() => {});
+    return queued;
   }
 
   if (
@@ -1765,12 +2319,30 @@
   window.addEventListener("message", (event) => {
     if (event.source !== window || event.data?.protocol !== TO_PAGE) return;
     if (event.data.command === "start") {
-      start(event.data.workletUrl).catch((error) => {
-        running = false;
+      captureAbortController?.abort();
+      captureAbortController = new AbortController();
+      const { signal } = captureAbortController;
+      captureDesired = true;
+      const intent = ++captureIntent;
+      queueCaptureLifecycle(() => startWithCleanup(event.data.workletUrl, intent, signal)).catch((error) => {
+        if (intent === captureIntent) {
+          captureDesired = false;
+          captureAbortController?.abort();
+          captureAbortController = null;
+        }
         meetingEvent("warning", { code: "capture-start-failed", message: String(error?.message || error) });
       });
     }
-    if (event.data.command === "stop") stop();
+    if (event.data.command === "stop") {
+      captureAbortController?.abort();
+      captureAbortController = null;
+      captureDesired = false;
+      captureIntent += 1;
+      stopCaptureImmediately();
+      queueCaptureLifecycle(stop).catch((error) => {
+        meetingEvent("warning", { code: "capture-stop-failed", message: String(error?.message || error) });
+      });
+    }
   });
 
   post("capture-state", { state: "ready", platform });

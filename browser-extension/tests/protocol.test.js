@@ -246,6 +246,248 @@ test("remote Meet audio survives mute metadata while self audio stays isolated",
   assert.equal(decide({ disabled: true, isSelf: true }), false);
 });
 
+test("Meet remote audio health resets only after sustained audible RTP without PCM", () => {
+  let health = null;
+  let encodedFrames = 0;
+  let decodedFrames = 0;
+  for (let now = 0; now <= 4_000; now += 250) {
+    encodedFrames += 1;
+    decodedFrames += 1;
+    health = capturePolicy.nextMeetRemoteAudioHealth(health, {
+      now,
+      source: "remote/42",
+      audioLevel: 0.08,
+      encodedFrames,
+      decodedFrames,
+      pcmFrames: 0,
+    });
+  }
+  assert.equal(health.stalled, true);
+
+  health = capturePolicy.nextMeetRemoteAudioHealth(health, {
+    now: 4_000,
+    source: "remote/42",
+    audioLevel: 0.08,
+    encodedFrames,
+    decodedFrames,
+    pcmFrames: 0,
+    recovering: true,
+  });
+  assert.equal(health.stalled, false);
+
+  for (let now = 4_250; now < 12_000; now += 250) {
+    encodedFrames += 1;
+    decodedFrames += 1;
+    health = capturePolicy.nextMeetRemoteAudioHealth(health, {
+      now,
+      source: "remote/42",
+      audioLevel: 0.08,
+      encodedFrames,
+      decodedFrames,
+      pcmFrames: 0,
+    });
+    assert.equal(health.stalled, false, `recovery cooldown at ${now}ms`);
+  }
+  encodedFrames += 1;
+  decodedFrames += 1;
+  health = capturePolicy.nextMeetRemoteAudioHealth(health, {
+    now: 12_000,
+    source: "remote/42",
+    audioLevel: 0.08,
+    encodedFrames,
+    decodedFrames,
+    pcmFrames: 0,
+  });
+  assert.equal(health.stalled, true);
+});
+
+test("Meet remote audio health treats silence and advancing PCM as healthy", () => {
+  let silent = null;
+  for (let now = 0; now <= 10_000; now += 500) {
+    silent = capturePolicy.nextMeetRemoteAudioHealth(silent, {
+      now,
+      source: "remote/silent",
+      audioLevel: 0,
+      encodedFrames: now / 500 + 1,
+      decodedFrames: now / 500 + 1,
+      pcmFrames: 0,
+    });
+  }
+  assert.equal(silent.stalled, false);
+
+  let flowing = null;
+  for (let now = 0; now <= 10_000; now += 500) {
+    flowing = capturePolicy.nextMeetRemoteAudioHealth(flowing, {
+      now,
+      source: "remote/flowing",
+      audioLevel: 0.08,
+      encodedFrames: now / 500 + 1,
+      decodedFrames: now / 500 + 1,
+      pcmFrames: now / 500 + 1,
+    });
+    assert.equal(flowing.stalled, false);
+  }
+});
+
+test("Meet remote audio health restarts after source handoffs, quiet gaps, and sub-threshold noise", () => {
+  let sourceHealth = null;
+  let encodedFrames = 0;
+  let decodedFrames = 0;
+  for (let now = 0; now <= 3_750; now += 250) {
+    encodedFrames += 1;
+    decodedFrames += 1;
+    sourceHealth = capturePolicy.nextMeetRemoteAudioHealth(sourceHealth, {
+      now,
+      source: "remote/a",
+      audioLevel: 0.08,
+      encodedFrames,
+      decodedFrames,
+      pcmFrames: 0,
+    });
+  }
+  assert.equal(sourceHealth.stalled, false);
+
+  encodedFrames += 1;
+  decodedFrames += 1;
+  sourceHealth = capturePolicy.nextMeetRemoteAudioHealth(sourceHealth, {
+    now: 4_000,
+    source: "remote/b",
+    audioLevel: 0.08,
+    encodedFrames,
+    decodedFrames,
+    pcmFrames: 0,
+  });
+  assert.equal(sourceHealth.audibleSince, 4_000);
+  assert.equal(sourceHealth.stalled, false);
+
+  encodedFrames += 1;
+  decodedFrames += 1;
+  sourceHealth = capturePolicy.nextMeetRemoteAudioHealth(sourceHealth, {
+    now: 5_000,
+    source: "remote/b",
+    audioLevel: 0,
+    encodedFrames,
+    decodedFrames,
+    pcmFrames: 0,
+  });
+  assert.equal(sourceHealth.audibleSince, null);
+
+  encodedFrames += 1;
+  decodedFrames += 1;
+  sourceHealth = capturePolicy.nextMeetRemoteAudioHealth(sourceHealth, {
+    now: 5_250,
+    source: "remote/b",
+    audioLevel: 0.08,
+    encodedFrames,
+    decodedFrames,
+    pcmFrames: 0,
+  });
+  assert.equal(sourceHealth.audibleSince, 5_250);
+  assert.equal(sourceHealth.stalled, false);
+
+  let noiseHealth = null;
+  for (let now = 0; now <= 10_000; now += 500) {
+    noiseHealth = capturePolicy.nextMeetRemoteAudioHealth(noiseHealth, {
+      now,
+      source: "remote/noise",
+      audioLevel: 0.009,
+      encodedFrames: now / 500 + 1,
+      decodedFrames: now / 500 + 1,
+      pcmFrames: 0,
+    });
+  }
+  assert.equal(noiseHealth.stalled, false);
+});
+
+function redHeader(payloadType, length) {
+  return [0x80 | payloadType, 0, (length >> 8) & 0x03, length & 0xff];
+}
+
+test("Meet extracts negotiated Opus payloads from RED without fixed payload types", () => {
+  const codecs = [
+    { payloadType: 118, mimeType: "audio/red" },
+    { payloadType: 109, mimeType: "audio/opus" },
+  ];
+  const red = Uint8Array.from([
+    ...redHeader(109, 2),
+    109,
+    0xaa, 0xbb,
+    1, 2, 3, 4,
+  ]);
+  assert.deepEqual(
+    [...capturePolicy.meetPrimaryOpusPayload(red, { payloadType: 118 }, codecs)],
+    [1, 2, 3, 4],
+  );
+  assert.deepEqual(
+    [...capturePolicy.meetPrimaryOpusPayload(red, { mimeType: "audio/red" }, codecs)],
+    [1, 2, 3, 4],
+  );
+
+  const direct = Uint8Array.from([7, 8, 9]);
+  assert.equal(
+    capturePolicy.meetPrimaryOpusPayload(
+      direct,
+      { payloadType: 109 },
+      codecs,
+    ),
+    direct,
+  );
+});
+
+test("Meet RED parsing handles multiple redundant blocks and rejects unsafe payloads", () => {
+  const codecs = [
+    { payloadType: 63, mimeType: "audio/red" },
+    { payloadType: 111, mimeType: "audio/opus" },
+    { payloadType: 0, mimeType: "audio/PCMU" },
+  ];
+  const red = Uint8Array.from([
+    ...redHeader(111, 1),
+    ...redHeader(111, 2),
+    111,
+    0xaa,
+    0xbb, 0xcc,
+    5, 6, 7,
+  ]);
+  assert.deepEqual(
+    [...capturePolicy.meetPrimaryOpusPayload(red, { payloadType: 63 }, codecs)],
+    [5, 6, 7],
+  );
+
+  const truncated = Uint8Array.from([...redHeader(111, 20), 111, 1, 2]);
+  assert.equal(
+    capturePolicy.meetPrimaryOpusPayload(truncated, { payloadType: 63 }, codecs),
+    null,
+  );
+  assert.equal(
+    capturePolicy.meetPrimaryOpusPayload(Uint8Array.from([0, 1, 2]), { payloadType: 63 }, codecs),
+    null,
+  );
+
+  const legacy = Uint8Array.from([3, 4, 5]);
+  assert.equal(capturePolicy.meetPrimaryOpusPayload(legacy), legacy);
+});
+
+test("Meet rejects an unknown payload type until renegotiated codecs are refreshed", () => {
+  const staleCodecs = [
+    { payloadType: 63, mimeType: "audio/red" },
+    { payloadType: 111, mimeType: "audio/opus" },
+  ];
+  const renegotiatedCodecs = [
+    { payloadType: 118, mimeType: "audio/red" },
+    { payloadType: 109, mimeType: "audio/opus" },
+  ];
+  const red = Uint8Array.from([109, 7, 8, 9]);
+
+  assert.equal(
+    capturePolicy.meetPrimaryOpusPayload(red, { payloadType: 118 }, staleCodecs),
+    null,
+  );
+  assert.deepEqual(
+    [...capturePolicy.meetPrimaryOpusPayload(red, { payloadType: 118 }, renegotiatedCodecs)],
+    [7, 8, 9],
+  );
+});
+
 test("sustained Meet activity can replace a stale protocol route owner", () => {
   let vote = null;
   for (const now of [0, 60, 120, 180, 240, 300]) {
