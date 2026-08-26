@@ -16,7 +16,7 @@ created by `npm run package:store`; do not ZIP the whole repository.
 3. Register a Chrome Web Store developer account and pay Google's one-time
    registration fee.
 4. Run `npm test` and `npm run package:store` in `browser-extension`.
-5. Upload `dist/kuali-chrome-0.1.5.zip` in the Developer Dashboard.
+5. Upload `dist/kuali-chrome-0.1.6.zip` in the Developer Dashboard.
 
 ## Dashboard fields
 

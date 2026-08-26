@@ -15,7 +15,7 @@ gráficos necesarios para publicar la extensión Kuali. El ZIP se crea con
 3. Registra una cuenta de desarrollador de Chrome Web Store y paga la cuota
    única de Google.
 4. Ejecuta `npm test` y `npm run package:store` dentro de `browser-extension`.
-5. Sube `dist/kuali-chrome-0.1.5.zip` en el panel de desarrolladores.
+5. Sube `dist/kuali-chrome-0.1.6.zip` en el panel de desarrolladores.
 
 ## Campos del panel
 
