@@ -50,7 +50,7 @@ test-rust:
 # Test the desktop UI translations and behavioral contracts.
 [group('tests')]
 test-ui:
-    node --test src/i18n.test.mjs
+    node --test src/*.test.mjs
 
 # Validate the website, SEO metadata, links, and deployment files.
 [group('tests')]

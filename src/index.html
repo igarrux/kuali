@@ -173,6 +173,10 @@
             </button>
           </div>
         </div>
+        <button type="button" class="subtle library-import" id="btn-import-audio" aria-haspopup="dialog" aria-controls="audio-import-dialog">
+          <svg class="icon" aria-hidden="true"><use href="#i-export"/></svg>
+          <span>Importar audio</span>
+        </button>
         <div class="library-search">
           <label class="sr-only" for="library-search">Buscar en la biblioteca</label>
           <svg class="icon" aria-hidden="true"><use href="#i-search"/></svg>
@@ -284,6 +288,10 @@
                     Entra a un canal de voz de Discord. Kuali te seguirá y empezará a transcribir.
                   </p>
                   <div class="home-hero-actions">
+                    <button type="button" class="subtle compact" id="btn-home-import-audio" aria-haspopup="dialog" aria-controls="audio-import-dialog">
+                      <svg class="icon" aria-hidden="true"><use href="#i-export"/></svg>
+                      <span>Importar audio</span>
+                    </button>
                     <button type="button" class="primary compact" id="btn-open-live" hidden>
                       <svg class="icon" aria-hidden="true"><use href="#i-waveform"/></svg>
                       <span>Ver la transcripción en vivo</span>
@@ -1494,6 +1502,47 @@
       <div class="context-menu-separator" role="separator"></div>
       <button type="button" class="danger" id="context-delete" role="menuitem">Eliminar…</button>
     </div>
+
+    <dialog class="confirm-dialog audio-import-dialog" id="audio-import-dialog" aria-labelledby="audio-import-title" aria-describedby="audio-import-description">
+      <form id="audio-import-form">
+        <span class="eyebrow">Audio local</span>
+        <h2 id="audio-import-title">Importar y diarizar audio</h2>
+        <p id="audio-import-description">Separa voces y transcribe un archivo en este equipo. Los hablantes sin nombre quedan como Participante 1, Participante 2…</p>
+        <div class="audio-import-file">
+          <span class="audio-import-field-label" id="audio-import-file-label">Archivo de audio</span>
+          <span id="audio-import-file-name" role="status" aria-live="polite" data-i18n-skip>Ningún archivo seleccionado</span>
+          <button type="button" class="subtle" id="btn-pick-audio" aria-describedby="audio-import-file-name">Elegir archivo…</button>
+          <small>WAV, MP3, M4A/AAC, FLAC y OGG (Vorbis)</small>
+        </div>
+        <div class="audio-import-speakers">
+          <div>
+            <label for="audio-import-speaker-mode">Número de hablantes</label>
+            <select id="audio-import-speaker-mode" aria-describedby="audio-import-speaker-hint">
+              <option value="auto">Detectar automáticamente</option>
+              <option value="exact">Indicar cuántos</option>
+            </select>
+          </div>
+          <div id="audio-import-speaker-count-field" hidden>
+            <label for="audio-import-speaker-count">Cantidad</label>
+            <input type="number" id="audio-import-speaker-count" min="1" max="32" step="1" value="2" inputmode="numeric" aria-describedby="audio-import-speaker-hint" />
+          </div>
+        </div>
+        <p id="audio-import-speaker-hint">Si conoces la cantidad de personas, indicarla puede mejorar la separación. Las voces superpuestas y el ruido pueden reducir la precisión.</p>
+        <p class="audio-import-local-note">El audio se procesa localmente. Se descargarán unos 33 MB para distinguir voces; descarga también un modelo de transcripción en Ajustes para transcribir sin conexión.</p>
+        <p class="audio-import-local-note">Con el resumen automático activado, la IA configurada analizará la transcripción para deducir nombres y resumir; puede ser un servicio remoto. Solo asigna nombres con evidencia, sin confirmar identidades. También puedes importar sin IA.</p>
+        <div class="audio-import-progress" id="audio-import-progress" hidden>
+          <p id="audio-import-stage" role="status" aria-live="polite" aria-atomic="true" tabindex="-1" data-i18n-skip></p>
+          <progress id="audio-import-progress-bar" max="100" aria-labelledby="audio-import-stage"></progress>
+          <span id="audio-import-progress-detail" data-i18n-skip></span>
+        </div>
+        <p class="audio-import-error" id="audio-import-error" role="alert" tabindex="-1" hidden data-i18n-skip></p>
+        <p id="audio-import-notice" role="status" aria-live="polite" hidden data-i18n-skip></p>
+        <div class="confirm-actions">
+          <button type="button" class="ghost" id="btn-cancel-audio-import" data-i18n-skip>Cancelar</button>
+          <button type="submit" class="primary" id="btn-start-audio-import" disabled data-i18n-skip>Diarizar y transcribir</button>
+        </div>
+      </form>
+    </dialog>
 
     <div class="modal-backdrop confirm-backdrop" id="folder-modal" hidden>
       <div

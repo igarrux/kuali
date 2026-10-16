@@ -242,6 +242,7 @@ struct Inner {
     /// A generation change cancels the active download and every duplicate
     /// request that was queued before the user pressed Cancel.
     model_download_cancellation: watch::Sender<u64>,
+    audio_import: Arc<crate::audio_import::AudioImportState>,
     discord: AsyncMutex<Option<DiscordHandle>>,
     /// Searchable index of finished meetings, behind a blocking lock because
     /// SQLite is blocking. `None` when the index could not be opened: asking
@@ -860,6 +861,7 @@ impl Engine {
             closed_segments: Mutex::new(HashSet::new()),
             model_download: AsyncMutex::new(()),
             model_download_cancellation,
+            audio_import: Arc::new(crate::audio_import::AudioImportState::default()),
             discord: AsyncMutex::new(None),
             memory: Mutex::new(open_memory()),
         });
@@ -888,7 +890,8 @@ impl Engine {
     /// Updates are allowed only when no capture, transcription, model work or
     /// meeting post-processing can be interrupted by the restart.
     pub fn safe_for_update(&self) -> bool {
-        self.inner.active.lock().is_empty()
+        !self.audio_import_active()
+            && self.inner.active.lock().is_empty()
             && self.inner.post_processing.load(Ordering::Acquire) == 0
             && self.inner.memory_maintenance.load(Ordering::Acquire) == 0
             && matches!(
@@ -899,6 +902,85 @@ impl Engine {
                 self.model_state(),
                 ModelState::Absent | ModelState::Ready | ModelState::Failed { .. }
             )
+    }
+
+    pub fn audio_import_active(&self) -> bool {
+        self.inner.audio_import.is_active()
+    }
+
+    pub fn cancel_audio_import(&self) {
+        self.inner.audio_import.cancel();
+    }
+
+    /// Process a file with its own Whisper instance and publish a finished local
+    /// record. The detached task owns the job guard, including during blocking
+    /// inference, even if a caller closes its window or drops the response.
+    pub async fn import_audio_file(
+        &self,
+        path: std::path::PathBuf,
+        num_speakers: Option<u32>,
+        progress: impl Fn(crate::audio_import::AudioImportProgress) + Send + Sync + 'static,
+    ) -> Result<String, String> {
+        let job = self.inner.audio_import.begin()?;
+        let engine = self.clone();
+        let progress: crate::audio_import::Progress = Arc::new(progress);
+        tokio::spawn(async move {
+            // Reserve the model files for this job. Deletion and relocation use
+            // this same lock, while live transcription keeps its own lifecycle.
+            let _models = engine.inner.model_download.lock().await;
+            let meeting = crate::audio_import::process(
+                path,
+                num_speakers,
+                engine.config(),
+                Arc::clone(&job.cancel),
+                Arc::clone(&progress),
+            )
+            .await?;
+            job.begin_commit()?;
+            progress(crate::audio_import::AudioImportProgress {
+                stage: crate::audio_import::AudioImportStage::Saving,
+                done: 0,
+                total: 1,
+            });
+            let meeting_id = meeting.meta.id.clone();
+            let inner = Arc::clone(&engine.inner);
+            tokio::task::spawn_blocking(move || {
+                let _metadata = inner.metadata_mutation.lock();
+                kuali_store::save(&meeting).map_err(|error| error.to_string())?;
+                mark_memory_dirty(&inner, &meeting.meta.id);
+                Ok::<_, String>(())
+            })
+            .await
+            .map_err(|error| format!("No se pudo guardar la transcripción: {error}"))??;
+            drop(_models);
+            // Save first: optional AI analysis must never turn a completed
+            // transcription into a failed import or hold the model-file lock.
+            if engine.config().llm.summarize_on_leave {
+                progress(crate::audio_import::AudioImportProgress {
+                    stage: crate::audio_import::AudioImportStage::Analyzing,
+                    done: 0,
+                    total: 0,
+                });
+                if let Err(error) = engine.resummarize(&meeting_id).await {
+                    tracing::warn!(%meeting_id, %error, "audio imported without AI analysis");
+                }
+            }
+            // Rebuild from the saved names and summary. Keep a successfully
+            // saved import usable if its derived index fails.
+            if let Err(error) = engine.reindex_meeting(&meeting_id).await {
+                engine.inner.emit(KualiEvent::error("memory", error));
+                remember_stored_meetings(&engine.inner, vec![meeting_id.clone()]);
+            }
+            progress(crate::audio_import::AudioImportProgress {
+                stage: crate::audio_import::AudioImportStage::Saving,
+                done: 1,
+                total: 1,
+            });
+            drop(job);
+            Ok(meeting_id)
+        })
+        .await
+        .map_err(|error| format!("No se pudo completar la importación: {error}"))?
     }
 
     /// Requests cancellation without waiting for the network stream or the
@@ -2019,7 +2101,13 @@ impl Engine {
         let mut may_create = false;
         let result = summarize_and_sync(&self.inner, &mut meeting, &config, 0, &mut may_create)
             .await
-            .map_err(Into::into);
+            .map_err(EngineError::from);
+        if let Err(error) = &result {
+            self.inner.emit(KualiEvent::SummaryFailed {
+                meeting_id: meeting_id.to_owned(),
+                message: error.to_string(),
+            });
+        }
         // A regenerated summary replaces what questions were answering from.
         remember(&self.inner, &meeting);
         drop(maintenance);
@@ -3166,6 +3254,45 @@ fn merge_authoritative_mutable_fields(target: &mut Meeting, saved: &Meeting) {
     target.meta.tags = saved.meta.tags.clone();
     target.meta.folder = saved.meta.folder.clone();
     target.discord_summary_delivery = saved.discord_summary_delivery;
+    if matches!(
+        saved.source,
+        Some(kuali_core::meeting::MeetingSource::AudioFile { .. })
+    ) {
+        // Another analysis may have resolved names while this summary was in
+        // flight. Names are committed independently, so stored labels always
+        // win at the final save too. Reconcile exact structured owners only.
+        let renamed: HashMap<_, _> = target
+            .speakers
+            .iter()
+            .filter_map(|speaker| {
+                let current = saved.speaker(speaker.user_id)?;
+                if current.display_name == speaker.display_name
+                    || target
+                        .speakers
+                        .iter()
+                        .filter(|other| other.display_name == speaker.display_name)
+                        .count()
+                        != 1
+                {
+                    return None;
+                }
+                Some((speaker.display_name.clone(), current.display_name.clone()))
+            })
+            .collect();
+        if let Some(summary) = &mut target.summary {
+            for owner in summary
+                .action_items
+                .iter_mut()
+                .map(|task| &mut task.assignee)
+                .chain(summary.notes.iter_mut().map(|note| &mut note.author))
+            {
+                if let Some(current) = owner.as_ref().and_then(|name| renamed.get(name)) {
+                    *owner = Some(current.clone());
+                }
+            }
+        }
+        target.speakers = saved.speakers.clone();
+    }
     match (target.summary.as_mut(), saved.summary.as_ref()) {
         (None, summary) => target.summary = summary.cloned(),
         (Some(target_summary), Some(saved_summary)) => {
@@ -3887,6 +4014,40 @@ fn apply_meeting_organization(
     saved_current
 }
 
+/// Commit only accepted name changes to the latest stored record. Inference may
+/// outlive user edits, and a later summary failure must not discard useful names.
+fn persist_inferred_speaker_names(
+    inner: &Arc<Inner>,
+    meeting: &mut Meeting,
+    names: &[kuali_llm::SpeakerName],
+) {
+    if names.is_empty() {
+        return;
+    }
+    let _metadata = inner.metadata_mutation.lock();
+    let mut saved = match kuali_store::load(&meeting.meta.id) {
+        Ok(saved) => saved,
+        // Never recreate a recording deleted while the provider was thinking.
+        Err(kuali_store::StoreError::NotFound(_)) => return,
+        Err(error) => {
+            inner.emit(KualiEvent::error("store", error));
+            return;
+        }
+    };
+    if kuali_llm::apply_speaker_names(&mut saved, names) {
+        mark_memory_dirty(inner, &meeting.meta.id);
+        if let Err(error) = kuali_store::save(&saved) {
+            inner.emit(KualiEvent::error("store", error));
+            schedule_memory_sync(inner, false);
+            return;
+        }
+    }
+    // A concurrent operation may already have named a participant. Analyze the
+    // authoritative labels and keep existing structured task/note owners aligned.
+    meeting.speakers = saved.speakers;
+    meeting.summary = saved.summary;
+}
+
 async fn summarize_with_retries(
     inner: &Arc<Inner>,
     meeting: &mut Meeting,
@@ -3897,6 +4058,22 @@ async fn summarize_with_retries(
     inner.emit(KualiEvent::SummaryStarted {
         meeting_id: meeting.meta.id.clone(),
     });
+
+    // Resolve anonymous file speakers once, before generating the summary, so
+    // transcript labels, task owners and note authors all use the same names.
+    // This is best-effort: provider trouble must not prevent a useful summary.
+    match kuali_llm::infer_speaker_names(provider, meeting).await {
+        Ok(names) => {
+            persist_inferred_speaker_names(inner, meeting, &names);
+        }
+        Err(error) => {
+            tracing::warn!(meeting_id = %meeting.meta.id, %error, "could not infer audio speaker names");
+            inner.emit(KualiEvent::error(
+                "llm",
+                "No se pudieron identificar los nombres. El resumen usará las etiquetas de participantes.",
+            ));
+        }
+    }
 
     let (organization_context, other_meetings) = organization_context(inner, &meeting.meta.id);
 
@@ -3935,6 +4112,9 @@ async fn summarize_with_retries(
         &other_meetings,
         may_create,
     );
+    // Reconciliation may have replaced stale speaker labels in task owners.
+    // Return and emit the same summary that was actually saved.
+    let summary = meeting.summary.clone().unwrap_or(summary);
 
     if persisted {
         inner.emit(KualiEvent::SummaryReady {
@@ -4014,6 +4194,12 @@ fn finish_post_processing(inner: &Arc<Inner>) {
 }
 
 fn prepare_discord_summary_delivery(meeting: &mut Meeting, text_channel_id: u64) {
+    if matches!(
+        meeting.source,
+        Some(kuali_core::meeting::MeetingSource::AudioFile { .. })
+    ) {
+        return;
+    }
     if meeting.discord_summary_delivery.is_some() {
         return;
     }
@@ -4396,6 +4582,114 @@ mod tests {
             }"#
             .into())
         }
+    }
+
+    struct NamedAudioTestProvider {
+        fail_names: bool,
+        summary_failures: usize,
+        rename_on_summary: Option<String>,
+        name_calls: AtomicUsize,
+        summary_calls: AtomicUsize,
+    }
+
+    #[async_trait]
+    impl LlmProvider for NamedAudioTestProvider {
+        fn id(&self) -> &'static str {
+            "named-audio-test"
+        }
+
+        fn info(&self) -> ProviderInfo {
+            ProviderInfo {
+                id: self.id().into(),
+                label: "Named audio test".into(),
+                model: "deterministic".into(),
+                kind: ProviderKind::LocalCli,
+                structured_output: true,
+            }
+        }
+
+        async fn is_available(&self) -> bool {
+            true
+        }
+
+        async fn complete(&self, request: &CompletionRequest) -> Result<String, LlmError> {
+            if request
+                .json_schema
+                .as_ref()
+                .and_then(|schema| schema["properties"].get("names"))
+                .is_some()
+            {
+                self.name_calls.fetch_add(1, AtomicOrdering::Relaxed);
+                if self.fail_names {
+                    return Err(LlmError::Unavailable(self.id().into()));
+                }
+                return Ok(serde_json::json!({"names": [{
+                    "speakerId": "42", "name": "Ana", "confidence": "high",
+                    "evidenceKind": "self_introduction",
+                    "evidence": [{"utteranceId": "intro", "quote": "Hola, soy Ana."}]
+                }]})
+                .to_string());
+            }
+
+            let attempt = self.summary_calls.fetch_add(1, AtomicOrdering::Relaxed) + 1;
+            let expected_name = if self.fail_names {
+                "Participante 1"
+            } else {
+                "Ana"
+            };
+            assert!(request
+                .prompt
+                .contains(&format!("Participants: {expected_name}")));
+            assert!(request.prompt.contains("Hola, soy Ana."));
+            if let Some(id) = &self.rename_on_summary {
+                // Simulate a second analysis committing its names while this
+                // request still contains anonymous labels.
+                let mut saved = kuali_store::load(id).unwrap();
+                saved.speakers[0].display_name = "Ana".into();
+                kuali_store::save(&saved).unwrap();
+            }
+            if attempt <= self.summary_failures {
+                return Err(LlmError::BadJson {
+                    provider: self.id().into(),
+                    message: "retry summary only".into(),
+                });
+            }
+            Ok(serde_json::json!({
+                "title": "Preparación de la propuesta", "overview": "Se preparará una propuesta.",
+                "keyPoints": [], "decisions": [],
+                "actionItems": [{"text": "Preparar la propuesta", "assignee": expected_name,
+                    "due": "", "timestamp": "00:00"}],
+                "notes": [], "openQuestions": [], "tags": [], "folder": "", "newFolder": ""
+            })
+            .to_string())
+        }
+    }
+
+    fn anonymous_audio_meeting(id: &str) -> Meeting {
+        let mut meeting = active_meeting(id, 0).meeting;
+        meeting.source = Some(kuali_core::meeting::MeetingSource::AudioFile {
+            file_name: "conversation.wav".into(),
+            imported_at: None,
+            speaker_turns: vec![kuali_core::meeting::AudioSpeakerTurn {
+                speaker_id: 42,
+                start_ms: 0,
+                end_ms: 3_000,
+            }],
+        });
+        let mut speaker = Speaker::unknown(42);
+        speaker.display_name = "Participante 1".into();
+        speaker.source_id = Some("speaker-0".into());
+        speaker.audio_kind = Some("mixed".into());
+        meeting.upsert_speaker(speaker);
+        meeting.upsert_utterance(Utterance {
+            id: "intro".into(),
+            speaker_id: 42,
+            start_ms: 0,
+            end_ms: 3_000,
+            text: "Hola, soy Ana. Yo preparo la propuesta.".into(),
+            confidence: Some(0.95),
+        });
+        meeting
     }
 
     fn session(source: VoiceSource, id: u64) -> VoiceSessionKey {
@@ -5163,6 +5457,205 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn audio_names_are_inferred_once_and_saved_with_summary_and_original_turns() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let provider = NamedAudioTestProvider {
+            fail_names: false,
+            summary_failures: 2,
+            rename_on_summary: None,
+            name_calls: AtomicUsize::new(0),
+            summary_calls: AtomicUsize::new(0),
+        };
+        let id = format!("audio-names-{}", uuid::Uuid::new_v4());
+        let mut meeting = anonymous_audio_meeting(&id);
+        let original = meeting.clone();
+        kuali_store::save(&meeting).unwrap();
+        let mut may_create = false;
+        let summary = summarize_with_retries(
+            &engine.inner,
+            &mut meeting,
+            &provider,
+            "Spanish",
+            &mut may_create,
+        )
+        .await
+        .unwrap();
+        let saved = kuali_store::load(&id).unwrap();
+        assert_eq!(provider.name_calls.load(AtomicOrdering::Relaxed), 1);
+        assert_eq!(provider.summary_calls.load(AtomicOrdering::Relaxed), 3);
+        assert_eq!(saved.speaker_name(42), "Ana");
+        assert_eq!(saved.summary, Some(summary.clone()));
+        assert_eq!(summary.action_items[0].assignee.as_deref(), Some("Ana"));
+        assert_eq!(saved.utterances, original.utterances);
+        assert_eq!(saved.source, original.source);
+        assert!(saved.transcript_text().contains("Ana"));
+        assert!(!saved.transcript_text().contains("Participante 1"));
+
+        // Regenerating an already named recording must preserve its identity
+        // and skip another inference call.
+        summarize_with_retries(
+            &engine.inner,
+            &mut meeting,
+            &provider,
+            "Spanish",
+            &mut may_create,
+        )
+        .await
+        .unwrap();
+        assert_eq!(provider.name_calls.load(AtomicOrdering::Relaxed), 1);
+        assert_eq!(kuali_store::load(&id).unwrap().speaker_name(42), "Ana");
+        kuali_store::delete(&id).unwrap();
+    }
+
+    #[tokio::test]
+    async fn audio_name_inference_failure_still_saves_a_useful_summary() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let provider = NamedAudioTestProvider {
+            fail_names: true,
+            summary_failures: 0,
+            rename_on_summary: None,
+            name_calls: AtomicUsize::new(0),
+            summary_calls: AtomicUsize::new(0),
+        };
+        let id = format!("audio-names-unavailable-{}", uuid::Uuid::new_v4());
+        let mut meeting = anonymous_audio_meeting(&id);
+        kuali_store::save(&meeting).unwrap();
+        let mut may_create = false;
+        let summary = summarize_with_retries(
+            &engine.inner,
+            &mut meeting,
+            &provider,
+            "Spanish",
+            &mut may_create,
+        )
+        .await
+        .unwrap();
+        let saved = kuali_store::load(&id).unwrap();
+        assert_eq!(saved.speaker_name(42), "Participante 1");
+        assert_eq!(saved.summary, Some(summary));
+        assert_eq!(provider.name_calls.load(AtomicOrdering::Relaxed), 1);
+        assert_eq!(provider.summary_calls.load(AtomicOrdering::Relaxed), 1);
+        kuali_store::delete(&id).unwrap();
+    }
+
+    #[tokio::test]
+    async fn failed_audio_summary_preserves_inferred_names_and_the_saved_transcript() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let provider = NamedAudioTestProvider {
+            fail_names: false,
+            summary_failures: usize::MAX,
+            rename_on_summary: None,
+            name_calls: AtomicUsize::new(0),
+            summary_calls: AtomicUsize::new(0),
+        };
+        let id = format!("audio-analysis-failure-{}", uuid::Uuid::new_v4());
+        let mut meeting = anonymous_audio_meeting(&id);
+        kuali_store::save(&meeting).unwrap();
+        let original = kuali_store::load(&id).unwrap();
+        let mut may_create = false;
+        assert!(summarize_with_retries(
+            &engine.inner,
+            &mut meeting,
+            &provider,
+            "Spanish",
+            &mut may_create,
+        )
+        .await
+        .is_err());
+        let saved = kuali_store::load(&id).unwrap();
+        assert_eq!(saved.speaker_name(42), "Ana");
+        assert_eq!(saved.utterances, original.utterances);
+        assert_eq!(saved.source, original.source);
+        assert_eq!(saved.summary, original.summary);
+        assert_eq!(provider.name_calls.load(AtomicOrdering::Relaxed), 1);
+        assert_eq!(
+            provider.summary_calls.load(AtomicOrdering::Relaxed),
+            MAX_SUMMARY_ATTEMPTS
+        );
+        kuali_store::delete(&id).unwrap();
+    }
+
+    #[test]
+    fn inferred_audio_names_preserve_concurrent_metadata_and_never_recreate_deleted_records() {
+        let (engine, _events) = Engine::new(KualiConfig::default());
+        let id = format!("audio-names-metadata-{}", uuid::Uuid::new_v4());
+        let mut stale = anonymous_audio_meeting(&id);
+        let mut authoritative = stale.clone();
+        authoritative.meta.tags = vec!["Manual".into()];
+        authoritative.meta.display_title = Some("Título editado".into());
+        kuali_store::save(&authoritative).unwrap();
+        let names = [kuali_llm::SpeakerName {
+            speaker_id: 42,
+            display_name: "Ana".into(),
+        }];
+        persist_inferred_speaker_names(&engine.inner, &mut stale, &names);
+        let saved = kuali_store::load(&id).unwrap();
+        assert_eq!(saved.meta, authoritative.meta);
+        assert_eq!(saved.speaker_name(42), "Ana");
+        assert_eq!(stale.speaker_name(42), "Ana");
+
+        // A name already corrected in storage is authoritative too.
+        let mut edited = saved;
+        edited.speakers[0].display_name = "Ana María".into();
+        kuali_store::save(&edited).unwrap();
+        stale.speakers[0].display_name = "Participante 1".into();
+        persist_inferred_speaker_names(&engine.inner, &mut stale, &names);
+        assert_eq!(stale.speaker_name(42), "Ana María");
+        assert_eq!(
+            kuali_store::load(&id).unwrap().speaker_name(42),
+            "Ana María"
+        );
+
+        kuali_store::delete(&id).unwrap();
+        persist_inferred_speaker_names(&engine.inner, &mut stale, &names);
+        assert!(matches!(
+            kuali_store::load(&id),
+            Err(kuali_store::StoreError::NotFound(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn concurrent_audio_names_win_over_a_summary_started_with_anonymous_labels() {
+        let (engine, mut events) = Engine::new(KualiConfig::default());
+        let id = format!("audio-names-concurrent-{}", uuid::Uuid::new_v4());
+        let provider = NamedAudioTestProvider {
+            fail_names: true,
+            summary_failures: 0,
+            rename_on_summary: Some(id.clone()),
+            name_calls: AtomicUsize::new(0),
+            summary_calls: AtomicUsize::new(0),
+        };
+        let mut meeting = anonymous_audio_meeting(&id);
+        kuali_store::save(&meeting).unwrap();
+        let mut may_create = false;
+        let summary = summarize_with_retries(
+            &engine.inner,
+            &mut meeting,
+            &provider,
+            "Spanish",
+            &mut may_create,
+        )
+        .await
+        .unwrap();
+        let saved = kuali_store::load(&id).unwrap();
+        assert_eq!(saved.speaker_name(42), "Ana");
+        assert_eq!(summary.action_items[0].assignee.as_deref(), Some("Ana"));
+        assert_eq!(saved.summary, Some(summary.clone()));
+        let mut ready = false;
+        while let Ok(event) = events.try_recv() {
+            if let KualiEvent::SummaryReady {
+                summary: emitted, ..
+            } = event
+            {
+                assert_eq!(emitted, summary);
+                ready = true;
+            }
+        }
+        assert!(ready);
+        kuali_store::delete(&id).unwrap();
+    }
+
+    #[tokio::test]
     async fn summary_generation_stops_after_three_invalid_responses() {
         let (engine, _events) = Engine::new(KualiConfig::default());
         let provider = SummaryTestProvider::new(usize::MAX);
@@ -5244,6 +5737,36 @@ mod tests {
             engine.resummarize("any-meeting").await,
             Err(EngineError::SummariesDisabled)
         ));
+    }
+
+    #[tokio::test]
+    async fn unavailable_audio_analysis_emits_failure_and_keeps_the_import_available() {
+        let mut config = KualiConfig::default();
+        config.llm.preferred_provider = Some("provider-that-does-not-exist".into());
+        config.llm.meeting_questions = false;
+        let (engine, mut events) = Engine::new(config);
+        let id = format!("audio-analysis-unavailable-{}", uuid::Uuid::new_v4());
+        let meeting = anonymous_audio_meeting(&id);
+        kuali_store::save(&meeting).unwrap();
+        assert!(engine.resummarize(&id).await.is_err());
+        assert_eq!(kuali_store::load(&id).unwrap(), meeting);
+        let mut failure = false;
+        while let Ok(event) = events.try_recv() {
+            if let KualiEvent::SummaryFailed {
+                meeting_id,
+                message,
+            } = event
+            {
+                assert_eq!(meeting_id, id);
+                assert!(!message.is_empty());
+                failure = true;
+            }
+        }
+        assert!(
+            failure,
+            "the UI must be able to clear its analysis progress"
+        );
+        kuali_store::delete(&id).unwrap();
     }
 
     #[tokio::test]
@@ -5402,8 +5925,32 @@ mod tests {
         assert!(!engine.safe_for_update());
         engine.inner.post_processing.store(0, Ordering::Release);
 
+        let import = engine.inner.audio_import.begin().unwrap();
+        assert!(!engine.safe_for_update());
+        engine.cancel_audio_import();
+        assert!(
+            !engine.safe_for_update(),
+            "cancellation must wait for the worker"
+        );
+        drop(import);
+        assert!(engine.safe_for_update());
+
         *engine.inner.model_state.write() = ModelState::Loading;
         assert!(!engine.safe_for_update());
+    }
+
+    #[test]
+    fn audio_imports_never_create_a_discord_delivery_destination() {
+        let mut meeting = active_meeting("audio-import-delivery", 0).meeting;
+        meeting.source = Some(kuali_core::meeting::MeetingSource::AudioFile {
+            file_name: "entrevista.wav".into(),
+            imported_at: None,
+            speaker_turns: Vec::new(),
+        });
+        prepare_discord_summary_delivery(&mut meeting, 123);
+        assert!(meeting.discord_summary_delivery.is_none());
+        prepare_discord_summary_delivery(&mut meeting, 0);
+        assert!(meeting.discord_summary_delivery.is_none());
     }
 
     #[test]

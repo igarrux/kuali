@@ -103,7 +103,7 @@ workflows on the official website.
 
 ## Quick start
 
-Install the current macOS release with Homebrew:
+Install the current release on Apple Silicon with macOS 13.4 or later using Homebrew:
 
 ```sh
 brew install --cask igarrux/kuali/kuali
