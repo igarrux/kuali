@@ -24,6 +24,8 @@ use std::path::{Path, PathBuf};
 use ndarray::Array2;
 use ort::session::{builder::GraphOptimizationLevel, Session};
 use ort::value::Value;
+// Retain the shared static runtime when this crate is built without kuali-stt.
+use sherpa_onnx_sys as _;
 use tokenizers::Tokenizer;
 
 use crate::MemoryError;
@@ -291,6 +293,14 @@ pub fn from_bytes(bytes: &[u8]) -> Option<Vec<f32>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn bundled_runtime_initializes_without_external_libraries() {
+        let _builder = Session::builder().expect("bundled ONNX Runtime initializes");
+        let tensor = Value::from_array(([2], vec![1.0_f32, 2.0]))
+            .expect("bundled ONNX Runtime allocates a tensor");
+        assert_eq!(tensor.try_extract_tensor::<f32>().unwrap().1, &[1.0, 2.0]);
+    }
 
     #[test]
     fn a_vector_survives_the_trip_to_storage_and_back() {
