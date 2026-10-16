@@ -74,6 +74,28 @@ pub fn is_downloaded(models_dir: &Path) -> bool {
     model_path(models_dir).is_file() && tokenizer_path(models_dir).is_file()
 }
 
+/// Initialize ort from the one runtime provided by Sherpa. Keeping the native
+/// entry point here also avoids late archive references with single-pass ELF
+/// linkers when kuali-memory is used without the speech crate.
+fn ensure_bundled_runtime() -> Result<(), MemoryError> {
+    let unavailable = || MemoryError::Embedding {
+        message: format!(
+            "el runtime ONNX no expone la API de embeddings requerida ({})",
+            ort_sys::ORT_API_VERSION
+        ),
+    };
+    // SAFETY: the statically linked C entry point takes no arguments and returns
+    // a process-lifetime interface. Check for null before reading its table.
+    let base = unsafe { ort_sys::OrtGetApiBase().as_ref() }.ok_or_else(unavailable)?;
+    // SAFETY: GetApi accepts the requested API version and returns an immutable
+    // process-lifetime table, or null when that version is unsupported.
+    let api =
+        unsafe { (base.GetApi)(ort_sys::ORT_API_VERSION).as_ref() }.ok_or_else(unavailable)?;
+    // set_api is synchronized; a previous/racing call installs the same table.
+    let _ = ort::set_api(api.clone());
+    Ok(())
+}
+
 /// A loaded embedding model. Dropping it releases the memory.
 pub struct Embedder {
     session: Session,
@@ -101,6 +123,7 @@ impl Embedder {
         let loading = |error: &dyn std::fmt::Display| MemoryError::Embedding {
             message: format!("no pude cargar el modelo de embeddings: {error}"),
         };
+        ensure_bundled_runtime()?;
         let builder = Session::builder().map_err(|error| loading(&error))?;
         let mut builder = builder
             .with_optimization_level(GraphOptimizationLevel::Level3)
@@ -296,7 +319,9 @@ mod tests {
 
     #[test]
     fn bundled_runtime_initializes_without_external_libraries() {
+        ensure_bundled_runtime().expect("bundled runtime exposes the required API");
         let _builder = Session::builder().expect("bundled ONNX Runtime initializes");
+        ensure_bundled_runtime().expect("repeated initialization keeps the same API");
         let tensor = Value::from_array(([2], vec![1.0_f32, 2.0]))
             .expect("bundled ONNX Runtime allocates a tensor");
         assert_eq!(tensor.try_extract_tensor::<f32>().unwrap().1, &[1.0, 2.0]);
