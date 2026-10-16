@@ -164,6 +164,48 @@ pub async fn test_webhook(
 // --- meetings -------------------------------------------------------------
 
 #[tauri::command]
+pub async fn pick_audio_file(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    let (reply, response) = tokio::sync::oneshot::channel();
+    let mut dialog = app
+        .dialog()
+        .file()
+        .set_title("Importar un archivo de audio")
+        .add_filter("Audio", &["wav", "mp3", "m4a", "aac", "flac", "ogg"]);
+    if let Some(window) = app.get_webview_window("main") {
+        dialog = dialog.set_parent(&window);
+    }
+    dialog.pick_file(move |selected| {
+        let selected = selected
+            .map(|path| path.into_path().map(|path| path.display().to_string()))
+            .transpose()
+            .map_err(fail);
+        let _ = reply.send(selected);
+    });
+    response
+        .await
+        .map_err(|_| "El selector de audio se cerró inesperadamente".to_string())?
+}
+
+#[tauri::command]
+pub async fn import_audio_file(
+    app: tauri::AppHandle,
+    engine: State<'_, Engine>,
+    path: String,
+    num_speakers: Option<u32>,
+) -> Result<String, String> {
+    engine
+        .import_audio_file(path.into(), num_speakers, move |progress| {
+            let _ = app.emit("kuali://audio-import", progress);
+        })
+        .await
+}
+
+#[tauri::command]
+pub fn cancel_audio_import(engine: State<'_, Engine>) {
+    engine.cancel_audio_import();
+}
+
+#[tauri::command]
 pub fn list_meetings(engine: State<'_, Engine>) -> Result<Vec<MeetingMeta>, String> {
     engine.list_meetings().map_err(fail)
 }
@@ -900,6 +942,13 @@ pub async fn factory_reset(
 ) -> Result<(), String> {
     if !crate::factory_reset::confirmation_matches(&confirmation) {
         return Err("La frase de confirmación no coincide exactamente".into());
+    }
+
+    if engine.audio_import_active() {
+        return Err(
+            "Espera a que termine la importación de audio o cancélala antes de restablecer Kuali."
+                .into(),
+        );
     }
 
     if app.autolaunch().is_enabled().map_err(fail)? {

@@ -158,6 +158,12 @@ pub enum KualiEvent {
         meeting_id: String,
         summary: MeetingSummary,
     },
+    /// Analysis failed for an already saved meeting.
+    /// The transcript remains usable and analysis can be retried later.
+    SummaryFailed {
+        meeting_id: String,
+        message: String,
+    },
     /// Recoverable errors shown in the interface without stopping the app.
     Error {
         message: String,

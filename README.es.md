@@ -110,7 +110,7 @@ en el sitio oficial.
 
 ## Inicio rápido
 
-Instala la versión actual para macOS con Homebrew:
+Instala la versión actual en Apple Silicon con macOS 13.4 o posterior usando Homebrew:
 
 ```sh
 brew install --cask igarrux/kuali/kuali

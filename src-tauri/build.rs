@@ -6,7 +6,7 @@ fn main() {
 /// Links the clang runtime when required.
 ///
 /// ggml's Metal backend checks `@available(macOS 15.0, ...)` before using newer
-/// APIs. Because Kuali targets macOS 11, those checks call
+/// APIs. Because Kuali targets macOS 13.4, those checks call
 /// `___isPlatformVersionAtLeast` at runtime. The symbol lives in compiler-rt,
 /// while rustc links with `-nodefaultlibs`, so release builds must request it
 /// explicitly.

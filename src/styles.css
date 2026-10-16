@@ -2873,6 +2873,108 @@ p > .icon,
   margin-top: 22px;
 }
 
+.library-import {
+  width: calc(100% - 24px);
+  align-self: center;
+  flex-shrink: 0;
+  min-height: 36px;
+  justify-content: center;
+  margin: 0 var(--space-3) var(--space-3);
+}
+
+.audio-import-dialog {
+  width: min(520px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  color: var(--text);
+}
+
+.audio-import-dialog::backdrop {
+  background: rgba(4, 7, 10, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.audio-import-dialog p {
+  font-size: var(--text-sm);
+}
+
+.audio-import-file {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  margin-top: var(--space-5);
+  padding: var(--space-4);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+}
+
+.audio-import-field-label,
+.audio-import-speakers label {
+  display: block;
+  font-size: var(--text-sm);
+  font-weight: 650;
+}
+
+#audio-import-file-name {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  color: var(--muted-strong);
+  font-size: var(--text-sm);
+}
+
+.audio-import-file small { color: var(--muted-strong); font-size: var(--text-xs); }
+
+.audio-import-speakers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-5);
+}
+
+.audio-import-speakers > div:first-child { flex: 1 1 220px; }
+.audio-import-speakers > div:last-child { flex: 0 1 96px; }
+.audio-import-speakers select,
+.audio-import-speakers input {
+  width: 100%;
+  min-height: 40px;
+  margin-top: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  color: var(--text);
+  background: var(--surface-2);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+}
+
+.audio-import-local-note {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--line);
+}
+
+.audio-import-progress {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-4);
+}
+
+.audio-import-progress p { margin: 0; color: var(--text); }
+.audio-import-progress > span { color: var(--muted-strong); font-size: var(--text-xs); }
+.audio-import-progress progress {
+  display: block;
+  width: 100%;
+  height: 8px;
+  accent-color: var(--accent);
+}
+
+.audio-import-dialog .audio-import-error {
+  color: color-mix(in srgb, var(--danger) 80%, var(--text));
+  overflow-wrap: anywhere;
+}
+.audio-import-dialog .confirm-actions { flex-wrap: wrap; }
+.audio-import-dialog button { min-height: 40px; }
+
 .confirm-danger {
   padding: 9px 15px;
   background: var(--danger);
@@ -4257,6 +4359,7 @@ select {
 .integration-logo.whisper { background: linear-gradient(145deg, #35c89a, #17876a); }
 .platform-mark.teams { background: #6264a7; }
 .platform-mark.zoom { background: #2d8cff; }
+.platform-mark.audio-file { background: var(--accent-soft); color: var(--accent); }
 
 .sidebar-head { padding-top: 15px; }
 .channel-toggle { grid-template-columns: 12px 22px minmax(0, 1fr) auto; }

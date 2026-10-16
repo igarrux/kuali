@@ -105,7 +105,7 @@ jobs:
           node-version: 22
 
       - name: Test translations and interface contracts
-        run: node --test src/i18n.test.mjs
+        run: node --test src/*.test.mjs
 
   extension:
     name: Browser extension

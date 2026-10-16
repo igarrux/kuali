@@ -20,9 +20,12 @@ tracing.workspace = true
 # macOS and Windows instead of inheriting whatever the system ships.
 rusqlite = { version = "0.37", features = ["bundled"] }
 
-# ONNX Runtime links statically on the platforms Kuali ships, so the embedding
-# model needs no extra library beside the signed binary.
-ort = "2.0.0-rc.13"
+# Share Sherpa's static ONNX Runtime with diarization. Downloading ort's own
+# static archive would link two runtimes and collide on Linux. Sherpa 1.13.7
+# bundles runtime 1.27.1+ on the CI/release targets, compatible with API 27.
+ort = { version = "=2.0.0-rc.13", default-features = false, features = ["std", "ndarray", "tracing", "api-27", "alternative-backend"] }
+ort-sys = { version = "=2.0.0-rc.13", default-features = false, features = ["disable-linking"] }
+sherpa-onnx-sys = "=1.13.7"
 ndarray = "0.17"
 tokenizers = { version = "0.23", default-features = false, features = ["onig"] }
 

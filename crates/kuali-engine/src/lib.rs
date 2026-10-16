@@ -6,6 +6,7 @@
 //! The interface communicates only with `Engine`; all activity is emitted over
 //! the `KualiEvent` channel returned by `Engine::new`.
 
+pub mod audio_import;
 pub mod engine;
 pub mod questions;
 pub mod stt_worker;
