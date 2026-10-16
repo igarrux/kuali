@@ -10,7 +10,10 @@ kuali-core.workspace = true
 
 futures.workspace = true
 reqwest.workspace = true
+rubato.workspace = true
 sha2.workspace = true
+sherpa-onnx = "=1.13.7"
+symphonia = { workspace = true, features = ["aac", "alac", "flac", "isomp4", "ogg", "pcm", "vorbis", "wav"] }
 thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
