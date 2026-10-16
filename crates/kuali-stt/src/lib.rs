@@ -17,6 +17,8 @@
 //! The model remains in memory only while Kuali has an active call.
 
 pub mod audio;
+pub mod audio_file;
+pub mod diarization;
 pub mod model;
 pub mod segmenter;
 pub mod whisper;

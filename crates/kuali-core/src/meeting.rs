@@ -289,6 +289,9 @@ pub struct Meeting {
     // Avoid `flatten`: a nested header gives the interface a clearer contract
     // than mixing metadata with content.
     pub meta: MeetingMeta,
+    /// Origin of imported content. Legacy call records omit this field.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<MeetingSource>,
     #[serde(default)]
     pub speakers: Vec<Speaker>,
     #[serde(default)]
@@ -299,10 +302,39 @@ pub struct Meeting {
     pub discord_summary_delivery: Option<DiscordSummaryDelivery>,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(
+    tag = "kind",
+    rename_all = "camelCase",
+    rename_all_fields = "camelCase"
+)]
+pub enum MeetingSource {
+    /// File name only: the user's local directory is never persisted.
+    AudioFile {
+        file_name: String,
+        /// Actual import time. Meeting clock dates are synthetic because the
+        /// original recording date is unknown; turn offsets remain exact.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        imported_at: Option<DateTime<Utc>>,
+        /// Native diarization output, including simultaneous real speakers.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        speaker_turns: Vec<AudioSpeakerTurn>,
+    },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AudioSpeakerTurn {
+    pub speaker_id: SpeakerId,
+    pub start_ms: u64,
+    pub end_ms: u64,
+}
+
 impl Meeting {
     pub fn new(meta: MeetingMeta) -> Self {
         Self {
             meta,
+            source: None,
             speakers: Vec::new(),
             utterances: Vec::new(),
             summary: None,

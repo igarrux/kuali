@@ -106,7 +106,7 @@ pub fn system_prompt(language: &str) -> String {
 About the material you work with:
 
 - It comes from automatic speech recognition, so it has misheard words, mangled proper nouns and sentences cut in half. Interpret with common sense instead of repeating word for word something that is clearly mistranscribed.
-- Every line carries its timestamp and the name of whoever is speaking, taken from the meeting platform. Use them: a task with no owner is worth far less than one with an owner.
+- Every line carries its timestamp and the speaker label. Names come from the meeting platform or explicit evidence in an imported recording; unresolved speakers keep their anonymous labels. Use these labels exactly: a task with no owner is worth far less than one with an owner. Never infer additional names or merge speakers yourself.
 - Go through the commitments of every participant. Do not centre the tasks on whoever spoke the most, or on a single person.
 - When a task has an owner, copy one of the names in the Participants list exactly. If the owner is unclear, use an empty string; do not invent or merge names.
 - Someone mentioning something does not turn it into a task. A task is a commitment: someone is going to do something concrete. If none came up in the meeting, return an empty list; inventing tasks is worse than finding none.

@@ -12,6 +12,7 @@ pub mod detect;
 pub mod json;
 pub mod models;
 pub mod provider;
+pub mod speaker_names;
 pub mod summarize;
 
 pub use api::{AnthropicApiProvider, GeminiApiProvider, OpenAiApiProvider};
@@ -26,6 +27,7 @@ pub use provider::{
     CompletionRequest, LlmError, LlmFailureKind, LlmProvider, ProviderInfo, ProviderKind,
     ProviderStatus,
 };
+pub use speaker_names::{apply_speaker_names, infer_speaker_names, SpeakerName};
 pub use summarize::{
     analyze, language_rule, parse_analysis, parse_summary, summarize, system_prompt, user_prompt,
     MeetingAnalysis, MeetingOrganization, OrganizationContext,

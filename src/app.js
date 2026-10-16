@@ -117,6 +117,16 @@ const state = {
   /** "move" files the targets; "manage" only creates, renames, and deletes. */
   folderDialogMode: "move",
   folderReturnFocus: null,
+  audioImport: {
+    path: null,
+    picking: false,
+    pending: false,
+    cancelling: false,
+    progress: null,
+    error: "",
+    notice: "",
+    returnFocus: null,
+  },
   /** "channel" keeps meetings under their source; "date" under when they happened. */
   libraryGrouping: ["date", "tag", "folder"].includes(localStorage.getItem("kuali.library.grouping"))
     ? localStorage.getItem("kuali.library.grouping")
@@ -203,6 +213,14 @@ function talkingFor(meetingId) {
   return state.talking.get(meetingId);
 }
 
+function isMeetingParticipant(speaker) {
+  return !speaker.isBot && speaker.audioKind !== "overlap";
+}
+
+function speakerDisplayName(speaker) {
+  return speaker.audioKind === "overlap" ? t("Voces superpuestas") : speaker.displayName;
+}
+
 function isWebMeeting(meta) {
   return ["Google Meet", "Microsoft Teams", "Zoom", "Reunión web"].includes(meta?.guildName);
 }
@@ -243,7 +261,8 @@ function humanBytes(bytes) {
 }
 
 function canRestartForUpdate() {
-  return state.liveMeetings.size === 0 && ["offline", "watching"].includes(state.status);
+  return !state.audioImport.pending
+    && state.liveMeetings.size === 0 && ["offline", "watching"].includes(state.status);
 }
 
 function renderUpdateState() {
@@ -407,6 +426,7 @@ function shortDate(iso) {
 
 function meetingTitle(meta) {
   if (meta.displayTitle?.trim()) return meta.displayTitle.trim();
+  if (meetingPlatform(meta) === "audio-file") return meta.channelName;
   if (["Google Meet", "Microsoft Teams", "Zoom"].includes(meta.guildName)) {
     return t("Reunión de {platform}", { platform: meta.guildName });
   }
@@ -419,7 +439,7 @@ function libraryMeetingName(meta) {
 
 function liveMeetingTitle(meeting) {
   if (meeting.meta.displayTitle?.trim()) return meeting.meta.displayTitle.trim();
-  const people = meeting.speakers.filter((speaker) => !speaker.isBot).map((speaker) => speaker.displayName);
+  const people = meeting.speakers.filter(isMeetingParticipant).map(speakerDisplayName);
   if (people.length === 1) return t("Sesión de {person}", { person: people[0] });
   if (people.length === 2) return t("{first} y {second}", { first: people[0], second: people[1] });
   if (people.length > 2) {
@@ -1357,10 +1377,15 @@ function meetingLength(meta) {
 }
 
 function meetingPlatform(meta) {
+  if (meta?.guildName === "Archivos de audio") return "audio-file";
   if (meta?.guildName === "Google Meet") return "google-meet";
   if (meta?.guildName === "Microsoft Teams") return "teams";
   if (meta?.guildName === "Zoom") return "zoom";
   return "discord";
+}
+
+function meetingSourceName(meta) {
+  return meetingPlatform(meta) === "audio-file" ? t("Archivos de audio") : meta.guildName;
 }
 
 /** Each platform wears its own mark instead of an initial. Brand glyphs are
@@ -1371,6 +1396,7 @@ const PLATFORM_ICONS = {
   "google-meet": "brand-meet",
   teams: "brand-teams",
   zoom: "brand-zoom",
+  "audio-file": "waveform",
 };
 
 function platformMark(platform) {
@@ -1399,7 +1425,7 @@ function renderLiveMeetingList() {
     const title = document.createElement("strong");
     title.textContent = liveMeetingTitle(meeting);
     const meta = document.createElement("small");
-    const participants = meeting.speakers.filter((speaker) => !speaker.isBot).length;
+    const participants = meeting.speakers.filter(isMeetingParticipant).length;
     meta.textContent = t("{count} {people} · Transcribiendo", {
       count: participants || "—",
       people: t(participants === 1 ? "participante" : "participantes"),
@@ -1869,8 +1895,8 @@ function sourceGroups(meetings) {
       if (!sources.has(key)) {
         sources.set(key, {
           key,
-          guildName: meta.guildName,
-          channelName: meta.guildName,
+          guildName: meetingSourceName(meta),
+          channelName: meetingSourceName(meta),
           platform,
           web: true,
           meetings: [],
@@ -2171,7 +2197,7 @@ function meetingListNode(meta) {
   const processing = processingLabel(meta.id);
   if (processing) button.classList.add("processing");
   const platform = meetingPlatform(meta);
-  const source = platform === "discord" ? `# ${meta.channelName}` : meta.guildName;
+  const source = platform === "discord" ? `# ${meta.channelName}` : meetingSourceName(meta);
   kind.textContent = processing
     ? processing
     : meta.searchMatch?.source
@@ -2465,6 +2491,167 @@ async function deleteMeeting(meta, button = null) {
   }
 }
 
+// --- recorded audio ------------------------------------------------------
+
+const AUDIO_IMPORT_STAGES = {
+  downloading: "Descargando modelos para distinguir voces…",
+  decoding: "Preparando el audio…",
+  diarizing: "Separando hablantes…",
+  transcribing: "Transcribiendo las intervenciones…",
+  saving: "Guardando en la biblioteca…",
+  analyzing: "Identificando participantes y creando resumen…",
+};
+
+function renderAudioImport() {
+  const job = state.audioImport;
+  const busy = job.pending || job.picking;
+  const exact = $("audio-import-speaker-mode").value === "exact";
+  const fileName = job.path
+    ? job.path.split(/[\\/]/).pop()
+    : t("Ningún archivo seleccionado");
+  if ($("audio-import-file-name").textContent !== fileName) $("audio-import-file-name").textContent = fileName;
+  $("btn-pick-audio").disabled = busy;
+  $("audio-import-speaker-mode").disabled = busy;
+  $("audio-import-speaker-count-field").hidden = !exact;
+  $("audio-import-speaker-count").disabled = busy || !exact;
+  $("audio-import-speaker-count").required = exact;
+  $("btn-start-audio-import").disabled = busy || !job.path;
+  $("btn-start-audio-import").textContent = t(job.pending ? "Procesando…" : "Diarizar y transcribir");
+  $("btn-cancel-audio-import").disabled = job.picking || job.cancelling
+    || (job.pending && ["saving", "analyzing"].includes(job.progress?.stage));
+  $("btn-cancel-audio-import").textContent = t(job.cancelling
+    ? "Cancelando…"
+    : job.pending ? "Cancelar importación" : "Cancelar");
+  $("audio-import-error").hidden = !job.error;
+  if ($("audio-import-error").textContent !== job.error) $("audio-import-error").textContent = job.error;
+  $("audio-import-notice").hidden = !job.notice;
+  const notice = t(job.notice);
+  if ($("audio-import-notice").textContent !== notice) $("audio-import-notice").textContent = notice;
+  $("audio-import-progress").hidden = !job.pending;
+  const stage = job.cancelling
+    ? t("Cancelando… Kuali terminará el paso actual.")
+    : t(AUDIO_IMPORT_STAGES[job.progress?.stage] ?? "Preparando la importación…");
+  if ($("audio-import-stage").textContent !== stage) $("audio-import-stage").textContent = stage;
+  const { done = 0, total = 0 } = job.progress ?? {};
+  const determinate = total > 0 && !job.cancelling;
+  const percent = Math.min(100, Math.max(0, Math.round(done / total * 100)));
+  if (determinate) $("audio-import-progress-bar").value = percent;
+  else $("audio-import-progress-bar").removeAttribute("value");
+  $("audio-import-progress-detail").textContent = determinate ? `${percent}%` : "";
+}
+
+function openAudioImport(returnFocus = document.activeElement) {
+  const dialog = $("audio-import-dialog");
+  if (dialog.open) return;
+  state.audioImport.returnFocus = returnFocus;
+  state.audioImport.error = "";
+  state.audioImport.notice = "";
+  renderAudioImport();
+  dialog.showModal();
+  $("btn-pick-audio").focus();
+}
+
+function closeAudioImport() {
+  if (state.audioImport.pending || state.audioImport.picking) return;
+  $("audio-import-dialog").close();
+  state.audioImport.returnFocus?.focus?.();
+  state.audioImport.returnFocus = null;
+}
+
+async function pickAudioImportFile() {
+  const job = state.audioImport;
+  if (job.pending || job.picking) return;
+  job.picking = true;
+  job.error = "";
+  job.notice = "";
+  renderAudioImport();
+  try {
+    const path = await invoke("pick_audio_file");
+    if (path) job.path = path;
+  } catch (error) {
+    job.error = t("No se pudo elegir el archivo: {error}", { error: String(error) });
+  } finally {
+    job.picking = false;
+    renderAudioImport();
+    $(job.error ? "audio-import-error" : "btn-pick-audio").focus();
+  }
+}
+
+async function startAudioImport(event) {
+  event.preventDefault();
+  const job = state.audioImport;
+  if (job.pending || job.picking || !job.path) return;
+  if (!$("audio-import-form").reportValidity()) return;
+  const numSpeakers = $("audio-import-speaker-mode").value === "exact"
+    ? $("audio-import-speaker-count").valueAsNumber
+    : null;
+  job.pending = true;
+  job.cancelling = false;
+  job.progress = null;
+  job.error = "";
+  job.notice = "";
+  renderAudioImport();
+  renderUpdateState();
+  $("btn-cancel-audio-import").focus();
+  try {
+    const id = await invoke("import_audio_file", { path: job.path, numSpeakers });
+    state.tasksLoaded = false;
+    await Promise.all([refreshMeetings(), refreshFolders(), refreshTagCatalog()]);
+    await openMeeting(id);
+    job.pending = false;
+    job.path = null;
+    closeAudioImport();
+    toast(t("Audio importado"), t("Biblioteca"));
+  } catch (error) {
+    if (String(error) === "audio_import_cancelled") {
+      job.notice = "Importación cancelada. Puedes volver a intentarlo con el mismo archivo.";
+    } else {
+      job.error = t("No se pudo importar el audio: {error}", { error: String(error) });
+    }
+  } finally {
+    job.pending = false;
+    job.cancelling = false;
+    renderAudioImport();
+    renderUpdateState();
+    if ($("audio-import-dialog").open) {
+      $(job.error ? "audio-import-error" : "btn-start-audio-import").focus();
+    }
+  }
+}
+
+async function cancelAudioImport() {
+  const job = state.audioImport;
+  if (!job.pending) {
+    closeAudioImport();
+    return;
+  }
+  if (job.cancelling || ["saving", "analyzing"].includes(job.progress?.stage)) return;
+  job.cancelling = true;
+  job.error = "";
+  renderAudioImport();
+  $("audio-import-stage").focus();
+  try {
+    await invoke("cancel_audio_import");
+    // The import promise remains pending until its current CPU step stops.
+  } catch (error) {
+    if (!job.pending) return;
+    job.cancelling = false;
+    job.error = t("No se pudo cancelar: {error}", { error: String(error) });
+    renderAudioImport();
+    $("audio-import-error").focus();
+  }
+}
+
+function handleAudioImportProgress(progress) {
+  if (!state.audioImport.pending || !progress || !Object.hasOwn(AUDIO_IMPORT_STAGES, progress.stage)) return;
+  state.audioImport.progress = {
+    stage: progress.stage,
+    done: Number.isFinite(progress.done) ? Math.max(0, progress.done) : 0,
+    total: Number.isFinite(progress.total) ? Math.max(0, progress.total) : 0,
+  };
+  renderAudioImport();
+}
+
 async function openMeeting(id) {
   try {
     state.viewing = state.liveMeetings.get(id) ?? await invoke("load_meeting", { id });
@@ -2657,8 +2844,9 @@ function renderMeeting() {
   closeMeetingMenus();
 
   const last = meeting.utterances.at(-1);
-  const participantCount = meeting.speakers.filter((speaker) => !speaker.isBot).length;
+  const participantCount = meeting.speakers.filter(isMeetingParticipant).length;
   const facts = [
+    meeting.source?.kind === "audioFile" ? ["waveform", t("Audio importado")] : null,
     ["calendar", shortDate(meeting.meta.startedAt)],
     last ? ["clock", timestamp(last.endMs)] : null,
     ["users", t(participantCount === 1 ? "{count} participante" : "{count} participantes", {
@@ -3058,7 +3246,7 @@ function renderMeetingProgress() {
 }
 
 function renderSpeakers() {
-  const speakers = state.viewing.speakers.filter((s) => !s.isBot);
+  const speakers = state.viewing.speakers.filter(isMeetingParticipant);
   const talking = talkingFor(state.viewing.meta.id);
   $("speakers").replaceChildren(
     ...speakers.map((speaker) => {
@@ -3116,8 +3304,8 @@ function renderTranscript() {
   const live = isLiveMeeting(meeting.meta.id);
   const talking = talkingFor(meeting.meta.id);
   const talkingNames = meeting.speakers
-    .filter((speaker) => talking.has(speaker.userId))
-    .map((speaker) => speaker.displayName);
+    .filter((speaker) => isMeetingParticipant(speaker) && talking.has(speaker.userId))
+    .map(speakerDisplayName);
 
   const drafts = live
     ? [...state.liveDrafts.values()].filter((draft) => draft.meetingId === meeting.meta.id)
@@ -3156,7 +3344,7 @@ function renderTranscript() {
       const who = document.createElement("div");
       who.className = "who";
       const name = document.createElement("strong");
-      name.textContent = speaker?.displayName ?? t("Desconocido ({id})", { id: turn.speakerId });
+      name.textContent = speaker ? speakerDisplayName(speaker) : t("Desconocido ({id})", { id: turn.speakerId });
       const time = document.createElement("span");
       time.className = "time";
       time.textContent = timestamp(turn.startMs);
@@ -3307,7 +3495,7 @@ function renderMeetingNotes() {
     meta.className = "note-meta";
     if (note.author) {
       const speaker = meeting.speakers.find((candidate) =>
-        !candidate.isBot && personKey(candidate.displayName) === personKey(note.author));
+        isMeetingParticipant(candidate) && personKey(candidate.displayName) === personKey(note.author));
       meta.append(participantAvatar(speaker ?? { displayName: note.author, color: "" }, 20));
       const author = document.createElement("span");
       author.textContent = note.author;
@@ -3365,7 +3553,7 @@ function taskParticipants(meeting, summary) {
     const key = personKey(owner);
     if (!key || participants.has(key)) continue;
     const speaker = meeting.speakers.find((candidate) =>
-      !candidate.isBot && [candidate.displayName, candidate.username]
+      isMeetingParticipant(candidate) && [candidate.displayName, candidate.username]
         .some((name) => personKey(name) === key));
     participants.set(key, speaker ?? { displayName: owner, avatarUrl: null, color: "" });
   }
@@ -3421,7 +3609,8 @@ function participantAvatar(speaker, size = 24) {
   initial.style.width = `${size}px`;
   initial.style.height = `${size}px`;
   initial.style.background = speaker?.color || "var(--surface-3)";
-  initial.textContent = (speaker?.displayName?.[0] ?? "?").toUpperCase();
+  if (speaker?.audioKind === "overlap") initial.append(icon("users"));
+  else initial.textContent = (speaker?.displayName?.[0] ?? "?").toUpperCase();
   initial.setAttribute("aria-hidden", "true");
   return initial;
 }
@@ -3432,7 +3621,7 @@ function canonicalAssignee(meeting, assignee) {
   return (
     meeting.speakers.find(
       (speaker) =>
-        !speaker.isBot &&
+        isMeetingParticipant(speaker) &&
         [speaker.displayName, speaker.username].some((name) => personKey(name) === key),
     )?.displayName ?? assignee
   );
@@ -3479,7 +3668,7 @@ function taskGroupNode(owner, tasks, meetingId, meeting) {
   head.className = "task-group-head";
   const title = document.createElement("h5");
   const speaker = meeting?.speakers.find((candidate) =>
-    !candidate.isBot && personKey(candidate.displayName) === personKey(owner));
+    isMeetingParticipant(candidate) && personKey(candidate.displayName) === personKey(owner));
   title.append(participantAvatar(speaker ?? { displayName: owner }, 24), document.createTextNode(owner));
   const count = document.createElement("span");
   count.className = "task-count";
@@ -3621,7 +3810,7 @@ function renderHomeMeetings() {
     const title = document.createElement("strong");
     title.textContent = meetingTitle(meta);
     const detail = document.createElement("small");
-    detail.textContent = `${platform === "discord" ? `# ${meta.channelName}` : meta.guildName} · ${relativeDay(meta.startedAt)}`;
+    detail.textContent = `${platform === "discord" ? `# ${meta.channelName}` : meetingSourceName(meta)} · ${relativeDay(meta.startedAt)}`;
     copy.append(title, detail);
 
     row.append(platformMark(platform), copy, icon("chevron-right", "icon home-row-go"));
@@ -4182,7 +4371,7 @@ function taskMeetingGroup(key, items, expanded) {
   const title = document.createElement("strong");
   title.textContent = first.meetingTitle;
   const detail = document.createElement("small");
-  const sourceName = platform === "discord" ? `# ${first.channelName}` : first.guildName;
+  const sourceName = platform === "discord" ? `# ${first.channelName}` : meetingSourceName(first);
   detail.textContent = `${sourceName} · ${shortDate(first.startedAt)}`;
   copy.append(title, detail);
   toggle.append(platformMark(platform), copy);
@@ -5012,6 +5201,20 @@ function handleEvent(event) {
       state.tasksLoaded = false;
       void refreshMeetingAfterSummary(event.meetingId);
       toast(t("Resumen listo"), "Kuali");
+      break;
+
+    case "summaryFailed":
+      state.processingMeetings.delete(event.meetingId);
+      state.tasksLoaded = false;
+      renderMeetingList();
+      if (state.viewing?.meta.id === event.meetingId) {
+        renderSummary();
+        renderMeetingProgress();
+      }
+      void refreshMeetingAfterSummary(event.meetingId);
+      toast(t("No se pudo completar el análisis con IA: {error}. La transcripción sigue disponible.", {
+        error: event.message,
+      }), "Kuali", true);
       break;
 
     case "meetingIndexChanged":
@@ -6305,6 +6508,7 @@ async function renderForLanguageChange() {
   }
   renderStatus();
   renderUpdateState();
+  renderAudioImport();
   renderMeetingList();
   renderLiveMeetingList();
   if (state.currentPane === "meeting") renderMeeting();
@@ -6327,6 +6531,19 @@ function wireUp() {
   let librarySearchTimer;
   let taskSearchTimer;
   wireGuideImages();
+  $("btn-import-audio").addEventListener("click", () => openAudioImport());
+  $("btn-home-import-audio").addEventListener("click", () => openAudioImport());
+  $("btn-pick-audio").addEventListener("click", pickAudioImportFile);
+  $("audio-import-speaker-mode").addEventListener("change", () => {
+    renderAudioImport();
+    if ($("audio-import-speaker-mode").value === "exact") $("audio-import-speaker-count").focus();
+  });
+  $("audio-import-form").addEventListener("submit", startAudioImport);
+  $("btn-cancel-audio-import").addEventListener("click", cancelAudioImport);
+  $("audio-import-dialog").addEventListener("cancel", (event) => {
+    event.preventDefault();
+    closeAudioImport();
+  });
   window.addEventListener("kuali:languagechange", () => {
     renderForLanguageChange().catch((error) => toast(String(error), "Kuali", true));
   });
@@ -7006,6 +7223,8 @@ function wireUp() {
   $("btn-reindex-meeting").addEventListener("click", reindexCurrentMeeting);
 
   document.addEventListener("keydown", (e) => {
+    // The native dialog owns focus and Escape while importing audio.
+    if ($("audio-import-dialog").open) return;
     if (e.key === "Escape" && (meetingDragActive() || orderDragActive())) {
       e.preventDefault();
       cancelMeetingDrag();
@@ -7078,6 +7297,7 @@ async function boot() {
   if (resetCompleted) localStorage.clear();
   wireUp();
   await listen("kuali://event", (e) => handleEvent(e.payload));
+  await listen("kuali://audio-import", (event) => handleAudioImportProgress(event.payload));
   await listen("kuali://navigate", (event) => {
     const destination = String(event.payload ?? "");
     if (destination === "tasks") showTasks();
