@@ -3092,7 +3092,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-app"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "kuali-core",
  "kuali-discord",
@@ -3116,7 +3116,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-core"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "chrono",
  "directories",
@@ -3130,7 +3130,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-discord"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "async-trait",
  "chrono",
@@ -3150,7 +3150,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-engine"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "anyhow",
  "async-trait",
@@ -3180,7 +3180,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-llm"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "async-trait",
  "directories",
@@ -3197,7 +3197,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-meet"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "futures-util",
  "kuali-core",
@@ -3211,7 +3211,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-memory"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "chrono",
  "kuali-core",
@@ -3230,7 +3230,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-store"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "chrono",
  "kuali-core",
@@ -3241,7 +3241,7 @@ dependencies = [
 
 [[package]]
 name = "kuali-stt"
-version = "0.1.15"
+version = "0.1.16"
 dependencies = [
  "futures",
  "kuali-core",
