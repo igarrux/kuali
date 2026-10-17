@@ -126,8 +126,15 @@ This follows the support filtering and reassignment approach in
 It avoids using the most dissimilar pair of fragments to decide whether an
 entire voice should remain split, as complete linkage does. A supplied count
 guides the number of supported clusters; it does not manufacture silent speakers.
-Grouping parameters still need evaluation on independent recordings, including
-long meetings and brief speakers.
+Training uses embeddings with at least two seconds of exclusive speech, with a
+fallback to all embeddings if fewer than two meet that condition. Shorter
+fragments still receive labels from the resulting centroids. The support minimum
+is `min(12, max(1, round_ties_even(0.1 * training_count)))`. Automatic grouping
+uses cosine distance 0.6; a supplied count selects a supported-cluster cut near
+0.5. These values preserve the public reference fixtures described below, but
+do not make automatic counting an attendance detector. A person represented
+only by very brief fragments may be missed. Broader evaluation on independent
+recordings is still required.
 
 Downloads use `.part` files, validate exact size and SHA-256, and promote the
 completed file only after validation. Cancelled or failed downloads clean up
@@ -233,6 +240,12 @@ the four fixtures return 4, 2, 2, and 2 voices respectively. The four-speaker
 reference preserves all ten attributed turns in both modes. The other three
 fixtures are count/stability smoke checks without independent reference labels;
 they do not establish attribution accuracy.
+
+On a separate long-recording diagnostic with a supplied count of four, excluding
+embeddings shorter than two seconds preserved four final voices and stable
+assignments when a quarter of the training windows were omitted. Automatic
+counting still overestimated that recording. This is a regression/stability
+check, not a labeled accuracy benchmark; use a known count when available.
 
 An opt-in native regression checks every identity and turn boundary in the
 four-speaker reference, in both automatic and supplied-count modes, together

@@ -410,8 +410,14 @@ pub(super) fn cluster(
         *out = samples as f64 / f64::from(sample_rate);
     }
     let config = Config {
-        threshold: 0.5,
-        min_training_seconds: 0.0,
+        threshold: if expected_speakers.is_some() {
+            0.5
+        } else {
+            0.6
+        },
+        // Very brief masked speech is too unstable to define a voice centroid.
+        // It still receives a label after the supported voices are established.
+        min_training_seconds: 2.0,
         min_cluster_size: 12,
         expected_speakers: expected_speakers.map(|n| n as usize),
     };
@@ -614,5 +620,23 @@ mod tests {
             cluster(&[], 256, &[], 16000, None, &cancel),
             Err(Error::Cancelled)
         );
+    }
+
+    #[test]
+    fn brief_fragments_receive_labels_without_defining_a_new_voice() {
+        let mut data = Vec::new();
+        let mut durations = Vec::new();
+        for voice in [[1., 0., 0.], [0., 1., 0.], [0.2, 0., 1.]] {
+            for _ in 0..20 {
+                data.extend(voice);
+                durations.push(if voice[2] == 0. { 48_000 } else { 8_000 });
+            }
+        }
+        let labels = cluster(&data, 3, &durations, 16_000, None, &AtomicBool::new(false))
+            .expect("short fragments are assigned after reliable centroids are established");
+        assert!(labels[..20].iter().all(|&label| label == labels[0]));
+        assert!(labels[20..40].iter().all(|&label| label == labels[20]));
+        assert_ne!(labels[0], labels[20]);
+        assert!(labels[40..].iter().all(|&label| label == labels[0]));
     }
 }
