@@ -11,6 +11,7 @@ const openMeetingSource = app.slice(app.indexOf("async function openMeeting("), 
 const speakerHelpers = app.slice(app.indexOf("function isMeetingParticipant("), app.indexOf("function isWebMeeting("));
 const renderSpeakersSource = app.slice(app.indexOf("function renderSpeakers("), app.indexOf("/** Groups adjacent turns"));
 const eventSource = app.slice(app.indexOf("function handleEvent("), app.indexOf("function upsertUtterance("));
+const meetingSource = app.slice(app.indexOf("function audioSpeakerFeedback("), app.indexOf("async function refreshFolders("));
 
 function deferred() {
   let resolve;
@@ -298,13 +299,160 @@ test("overlapping speech has a translated group label without adding a participa
   assert.equal(context.isMeetingParticipant({ displayName: "Voces superpuestas" }), true);
 });
 
+function savedAudioMeeting(count, requestedSpeakers) {
+  const speakers = Array.from({ length: count }, (_, index) => ({
+    userId: index + 1, displayName: `Participante ${index + 1}`, audioKind: "mixed",
+    sourceId: `speaker-${index}`,
+  }));
+  return {
+    meta: { id: "saved", startedAt: "2026-10-16T10:00:00Z" },
+    source: {
+      kind: "audioFile", requestedSpeakers,
+      speakerTurns: speakers.flatMap(({ userId }) => [
+        { speakerId: userId, startMs: 0, endMs: 1_000 },
+        { speakerId: userId, startMs: 2_000, endMs: 3_000 },
+      ]),
+    },
+    speakers: [...speakers, { userId: 99, displayName: "Voces superpuestas", audioKind: "overlap", sourceId: "overlap" }],
+    utterances: [{ speakerId: 99, endMs: 3_000, text: "Voces mezcladas" }],
+  };
+}
+
+function meetingFeedbackHarness(meeting, english = false) {
+  const ui = harness();
+  ui.state.viewing = meeting;
+  Object.assign(ui.document, {
+    createElement: () => ({ children: [], append(...children) { this.children.push(...children); } }),
+    createTextNode: (text) => ({ textContent: text }),
+  });
+  ui.element("meeting-meta").replaceChildren = (...children) => {
+    ui.element("meeting-meta").children = children;
+  };
+  Object.assign(ui.api, {
+    t: (key, variables = {}) => (english ? ENGLISH_TRANSLATIONS[key] ?? key : key)
+      .replace(/\{(\w+)\}/g, (_, name) => variables[name]),
+    isLiveMeeting: () => false,
+    meetingTitle: () => "Reunión",
+    summariesEnabled: () => true,
+    closeMeetingMenus() {}, shortDate: () => "16 oct", timestamp: () => "00:03", icon: () => ({}),
+    renderMeetingIndex() {}, renderSpeakers() {}, renderTranscript() {}, renderSummary() {},
+    renderMeetingNotes() {}, renderMeetingTasks() {}, renderMeetingTags() {}, renderMeetingProgress() {},
+    selectMeetingInsightTab() {},
+  });
+  vm.runInContext(`${speakerHelpers}\n${meetingSource}`, ui.api);
+  return ui;
+}
+
+function countFact(ui) {
+  return ui.element("meeting-meta").children.find((child) =>
+    /voces? detectada|detected voice|participante/.test(child.children.at(-1)?.textContent))
+    ?.children.at(-1).textContent;
+}
+
+test("saved requested count mismatch remains visible without inventing or counting overlap speakers", () => {
+  const saved = savedAudioMeeting(3, 4);
+  const ui = meetingFeedbackHarness(JSON.parse(JSON.stringify(saved)));
+  ui.api.renderMeeting();
+  assert.equal(countFact(ui), "3 voces detectadas");
+  assert.equal(ui.element("audio-speaker-feedback").hidden, false);
+  assert.match(ui.element("audio-speaker-feedback").textContent, /Indicaste 4 voces y se detectaron 3/);
+  assert.match(ui.element("audio-speaker-feedback").textContent, /transcripción está guardada/);
+  assert.match(ui.element("audio-speaker-feedback").textContent, /estimación/);
+  ui.api.renderMeeting();
+  assert.match(ui.element("audio-speaker-feedback").textContent, /se detectaron 3/);
+});
+
+test("Rust u64 speaker IDs that collide during JSON parsing do not merge detected voices", () => {
+  const saved = JSON.parse(`{
+    "meta": { "id": "saved-u64", "startedAt": "2026-10-16T10:00:00Z" },
+    "source": {
+      "kind": "audioFile", "requestedSpeakers": 2,
+      "speakerTurns": [
+        { "speakerId": 6288432454692765697, "startMs": 0, "endMs": 1000 },
+        { "speakerId": 6288432454692765698, "startMs": 0, "endMs": 1000 }
+      ]
+    },
+    "speakers": [
+      { "userId": 6288432454692765697, "displayName": "Participante 1", "audioKind": "mixed", "sourceId": "speaker-0" },
+      { "userId": 6288432454692765698, "displayName": "Participante 2", "audioKind": "mixed", "sourceId": "speaker-1" },
+      { "userId": 6288432454692765699, "displayName": "Voces superpuestas", "audioKind": "overlap", "sourceId": "overlap" }
+    ],
+    "utterances": [{ "speakerId": 6288432454692765699, "endMs": 1000, "text": "Voces mezcladas" }]
+  }`);
+  assert.equal(saved.speakers[0].userId, saved.speakers[1].userId);
+  assert.equal(saved.speakers[0].userId, saved.speakers[2].userId);
+  const ui = meetingFeedbackHarness(saved);
+  ui.api.renderMeeting();
+  assert.equal(countFact(ui), "2 voces detectadas");
+  assert.doesNotMatch(ui.element("audio-speaker-feedback").textContent, /Indicaste/);
+  saved.source.requestedSpeakers = 4;
+  ui.api.renderMeeting();
+  assert.match(ui.element("audio-speaker-feedback").textContent, /Indicaste 4 voces y se detectaron 2/);
+  // A source marker also identifies overlap if legacy metadata lacks audioKind.
+  delete saved.speakers[2].audioKind;
+  ui.api.renderMeeting();
+  assert.equal(countFact(ui), "2 voces detectadas");
+});
+
+test("matching and automatic counts retain estimation guidance and clear a previous mismatch", () => {
+  const ui = meetingFeedbackHarness(savedAudioMeeting(3, 4));
+  ui.api.renderMeeting();
+  ui.state.viewing = savedAudioMeeting(4, 4);
+  ui.api.renderMeeting();
+  assert.equal(countFact(ui), "4 voces detectadas");
+  assert.equal(ui.element("audio-speaker-feedback").textContent,
+    "La separación es una estimación y puede dividir o mezclar voces.");
+  ui.state.viewing = savedAudioMeeting(8);
+  ui.api.renderMeeting();
+  assert.equal(countFact(ui), "8 voces detectadas");
+  assert.doesNotMatch(ui.element("audio-speaker-feedback").textContent, /Indicaste/);
+});
+
+test("legacy imports and translated singular voice counts render without a requested count", () => {
+  const oldImport = savedAudioMeeting(1);
+  delete oldImport.source.speakerTurns;
+  delete oldImport.source.requestedSpeakers;
+  oldImport.speakers.forEach((speaker) => { delete speaker.sourceId; });
+  const ui = meetingFeedbackHarness(oldImport, true);
+  ui.api.renderMeeting();
+  assert.equal(countFact(ui), "1 detected voice");
+  assert.equal(ui.element("audio-speaker-feedback").textContent,
+    "Speaker separation is an estimate and may split or combine voices.");
+});
+
+test("Discord and web meetings keep participant counts and clear audio-only feedback", () => {
+  const ui = meetingFeedbackHarness(savedAudioMeeting(3, 4));
+  ui.api.renderMeeting();
+  for (const guildName of ["Discord", "Google Meet"]) {
+    ui.state.viewing = { ...savedAudioMeeting(4), source: undefined,
+      meta: { id: guildName, guildName, startedAt: "2026-10-16T10:00:00Z" } };
+    ui.api.renderMeeting();
+    assert.equal(countFact(ui), "4 participantes");
+    assert.equal(ui.element("audio-speaker-feedback").hidden, true);
+    assert.equal(ui.element("audio-speaker-feedback").textContent, "");
+  }
+});
+
+test("persisted speaker feedback is accessible and the count input shares its guidance", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const notice = html.match(/<p[^>]*id="audio-speaker-feedback"[^>]*>/)?.[0];
+  assert.ok(notice);
+  assert.match(notice, /role="status"/);
+  assert.match(notice, /aria-live="polite"/);
+  assert.match(notice, /aria-atomic="true"/);
+  assert.match(html, /id="audio-import-speaker-count"[^>]*aria-describedby="audio-import-speaker-hint"/);
+});
+
 test("audio import exposes translated actions, uncertainty and first-use download", () => {
   for (const key of [
     "Importar audio", "Diarizar y transcribir", "Cancelar importación",
     "Cancelando… Kuali terminará el paso actual.", "Archivos de audio",
     "Identificando participantes y creando resumen…",
     "No se pudo completar el análisis con IA: {error}. La transcripción sigue disponible.",
-    "Si conoces la cantidad de personas, indicarla puede mejorar la separación. Las voces superpuestas y el ruido pueden reducir la precisión.",
+    "La cantidad orienta la separación. Si distingue menos voces, guardará la transcripción con un aviso. El modo automático también estima; el ruido y las voces superpuestas pueden afectar el resultado.",
+    "{count} voz detectada", "{count} voces detectadas",
+    "La separación es una estimación y puede dividir o mezclar voces.",
+    "Indicaste {requested} voces y se detectaron {detected}. La transcripción está guardada; revisa quién habla en cada intervención.",
     "El audio se procesa localmente. Se descargarán unos 33 MB para distinguir voces; descarga también un modelo de transcripción en Ajustes para transcribir sin conexión.",
     "Con el resumen automático activado, la IA configurada analizará la transcripción para deducir nombres y resumir; puede ser un servicio remoto. Solo asigna nombres con evidencia, sin confirmar identidades. También puedes importar sin IA.",
   ]) assert.ok(ENGLISH_TRANSLATIONS[key], key);

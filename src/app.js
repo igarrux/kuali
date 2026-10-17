@@ -2823,6 +2823,24 @@ async function reindexCurrentMeeting() {
   renderMeetingIndex();
 }
 
+function audioSpeakerFeedback(meeting) {
+  if (meeting.source?.kind !== "audioFile") return null;
+  // Import creates one roster entry per detected voice. Count those entries,
+  // not numeric IDs: distinct Rust u64 IDs can round to the same JS Number.
+  // The synthetic overlap group is identified by metadata, never by its ID.
+  const count = meeting.speakers.filter((speaker) => isMeetingParticipant(speaker)
+    && speaker.sourceId !== "overlap").length;
+  const requested = meeting.source.requestedSpeakers;
+  const mismatch = Number.isInteger(requested) && requested > 0 && requested !== count;
+  const estimate = t("La separación es una estimación y puede dividir o mezclar voces.");
+  return {
+    count,
+    message: mismatch
+      ? `${t("Indicaste {requested} voces y se detectaron {detected}. La transcripción está guardada; revisa quién habla en cada intervención.", { requested, detected: count })} ${estimate}`
+      : estimate,
+  };
+}
+
 function renderMeeting() {
   const meeting = state.viewing;
   if (!meeting) return;
@@ -2844,13 +2862,16 @@ function renderMeeting() {
   closeMeetingMenus();
 
   const last = meeting.utterances.at(-1);
+  const audioFeedback = audioSpeakerFeedback(meeting);
   const participantCount = meeting.speakers.filter(isMeetingParticipant).length;
   const facts = [
     meeting.source?.kind === "audioFile" ? ["waveform", t("Audio importado")] : null,
     ["calendar", shortDate(meeting.meta.startedAt)],
     last ? ["clock", timestamp(last.endMs)] : null,
-    ["users", t(participantCount === 1 ? "{count} participante" : "{count} participantes", {
-      count: participantCount,
+    ["users", t(audioFeedback
+      ? (audioFeedback.count === 1 ? "{count} voz detectada" : "{count} voces detectadas")
+      : (participantCount === 1 ? "{count} participante" : "{count} participantes"), {
+      count: audioFeedback?.count ?? participantCount,
     })],
     ["transcript", t(
       meeting.utterances.length === 1 ? "{count} intervención" : "{count} intervenciones",
@@ -2863,6 +2884,10 @@ function renderMeeting() {
     fact.append(icon(name), document.createTextNode(text));
     return fact;
   }));
+  const feedback = $("audio-speaker-feedback");
+  feedback.hidden = !audioFeedback;
+  const feedbackMessage = audioFeedback?.message ?? "";
+  if (feedback.textContent !== feedbackMessage) feedback.textContent = feedbackMessage;
   renderMeetingIndex();
 
   renderSpeakers();

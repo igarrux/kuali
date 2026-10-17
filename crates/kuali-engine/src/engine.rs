@@ -4669,6 +4669,7 @@ mod tests {
         let mut meeting = active_meeting(id, 0).meeting;
         meeting.source = Some(kuali_core::meeting::MeetingSource::AudioFile {
             file_name: "conversation.wav".into(),
+            requested_speakers: None,
             imported_at: None,
             speaker_turns: vec![kuali_core::meeting::AudioSpeakerTurn {
                 speaker_id: 42,
@@ -5944,6 +5945,7 @@ mod tests {
         let mut meeting = active_meeting("audio-import-delivery", 0).meeting;
         meeting.source = Some(kuali_core::meeting::MeetingSource::AudioFile {
             file_name: "entrevista.wav".into(),
+            requested_speakers: None,
             imported_at: None,
             speaker_turns: Vec::new(),
         });

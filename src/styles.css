@@ -1636,6 +1636,13 @@ p > .icon,
   gap: 6px;
 }
 
+.audio-speaker-feedback {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--text-xs);
+  line-height: 1.5;
+}
+
 .meta-fact .icon {
   width: 14px;
   height: 14px;

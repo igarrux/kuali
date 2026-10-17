@@ -22,7 +22,12 @@ left in place; the library stores the transcript and raw diarization timeline.
 `source.speakerTurns` preserves simultaneous speakers. Transcription processes
 each time interval once; overlapping voices receive the explicit label
 **Voces superpuestas**, rather than duplicating a mixed recording under two
-people's names. This group is excluded from participant counts. The original
+people's names. This group is excluded from detected-voice counts. Imported
+meeting headers show detected voices rather than confirmed attendance, with a
+visible reminder that the separation can split or combine voices. An optional
+`source.requestedSpeakers` retains the user's count; a mismatch displays a
+persistent notice after saving and reopening the meeting. Earlier imports without
+this field remain readable. The original
 capture date is unknown: `source.importedAt` records import time and the meeting
 clock dates are synthetic, while turn timestamps remain offsets into the file.
 Imports never automatically send summaries or webhooks.
@@ -57,8 +62,10 @@ and analysis can be retried by regenerating the summary.
 The backend downloads two fixed model files into the model directory supplied by
 the caller. Model downloads are the only network requests made by this module;
 audio samples, speaker embeddings, and diarization results are not uploaded.
-Both models together occupy **32,523,463 bytes** (about 31 MiB). Python,
-Hugging Face credentials, and a GPU are not required.
+The two downloads total **32,523,463 bytes** (about 31 MiB). Loading also creates
+a verified local copy of the embedding model with corrected preprocessing
+metadata, bringing the complete cache to **59,054,052 bytes** (about 56 MiB).
+Python, Hugging Face credentials, and a GPU are not required.
 
 | Installed file | Upstream model | Bytes | License |
 | --- | --- | ---: | --- |
@@ -81,6 +88,43 @@ and [embedding checksums](https://github.com/k2-fsa/sherpa-onnx/releases/downloa
 220ad67ca923bef2fa91f2390c786097bf305bceb5e261d4af67b38e938e1079  pyannote-segmentation-3.0.onnx
 e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012  wespeaker-resnet34-lm.onnx
 ```
+
+### Embedding preprocessing compatibility
+
+The pinned WeSpeaker export omits the `feature_normalize_type` metadata used by
+Sherpa. WeSpeaker's own
+[inference implementation](https://github.com/wenet-e2e/wespeaker/blob/9fecd6cb4f47475d01761d87c826298dff4ef18c/runtime/core/speaker/speaker_engine.cc#L132-L142)
+subtracts the temporal mean of each filterbank feature before ONNX inference.
+Sherpa's
+[general embedding extractor](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.7/sherpa-onnx/csrc/speaker-embedding-extractor-general-impl.h#L62-L75)
+requires `feature_normalize_type=global-mean` to apply that operation. Omitting
+it distorts the distances used to group voices, even when a result happens to
+contain the requested number of labels.
+
+Kuali retains the original SHA-verified download and appends one 39-byte ONNX
+`ModelProto.metadata_props` entry to a separate local copy. No weights or graph
+operators change. This transformation is restricted to the pinned model; the
+complete derived file is also checked against a fixed size and SHA-256 before
+publication and native loading:
+
+```text
+26,530,589 bytes
+ce2c5db3fb2c438f1d58de35577c951bc27ea0d41ef74968de4a480a1a59e39b  wespeaker-resnet34-lm-cmn.onnx
+```
+
+The prepared copy is reusable offline. A corrupt copy is rebuilt from the
+verified original; a corrupt original is rejected. Concurrent preparation uses
+distinct temporary files and atomic replacement of the completed cache file.
+This corrects the input contract; automatic counting still requires separate
+quality evaluation and is not an exact attendance count.
+
+Automatic clustering uses a cosine-distance cutoff of **0.9** with these
+normalized features. Sherpa's generic 0.5 default fragments the four-speaker
+reference into nine labels after correcting preprocessing. At 0.9 it preserves
+the same ten attributed turns as the supplied-count run. This value is also used
+in the upstream diarization guide, but thresholds are model- and data-dependent;
+the public regression fixtures and real recordings must be checked separately.
+A supplied speaker count bypasses this distance cutoff in the native engine.
 
 Downloads use `.part` files, validate exact size and SHA-256, and promote the
 completed file only after validation. Cancelled or failed downloads clean up
@@ -110,13 +154,15 @@ artifacts; see the upstream
 ## Behavior and quality limits
 
 - Automatic speaker counting is the default. A known count from 1 through 32
-  can be supplied to the grouping stage. If a nonempty result contains a
-  different number of speakers, Kuali rejects it with a clear error suggesting
-  Auto or a lower count. It does not silently deliver a result that contradicts
-  the requested count. An empty result remains available for no-speech handling.
+  can be supplied as guidance to the grouping stage. If a nonempty result contains
+  a different number of voices, Kuali keeps the result and transcribes it. The
+  saved meeting reports the discrepancy instead of discarding the import or
+  inventing speakers to reach the supplied count. An empty result remains
+  available for no-speech handling.
   If the requested count exceeds the number of extracted embeddings, the
-  upstream clustering routine assigns all embeddings to one speaker; the count
-  check catches this fallback. Use Auto unless the count is known. See the pinned
+  upstream clustering routine can assign all embeddings to one speaker. A known
+  count is guidance, not proof that the audio contains enough distinct speech to
+  identify that many voices. Use Auto unless the count is known. See the pinned
   [clustering implementation](https://github.com/csukuangfj/hclust-cpp/blob/2026-02-25/fastcluster.cpp).
 - Each result is sorted by time. Labels start at zero internally and follow the
   order in which speakers first appear. Overlapping turns are retained, and all
@@ -154,16 +200,42 @@ accuracy percentage.
 
 ## Reproducible evaluation
 
-An initial smoke run on **Apple M4 with 16 GB RAM** processed the upstream
+An initial **0.1.16 smoke run, before the preprocessing correction**, on
+**Apple M4 with 16 GB RAM** processed the upstream
 16-second English fixture with automatic counting, returning two speakers and
 four turns. Loading took **1.28 seconds** and inference **0.75 seconds**
 (RTF **0.047**). This used Rust's development profile with the prebuilt native
 libraries. It verifies this short input on that machine; it is not a release
 benchmark, Spanish quality measurement, or long-recording performance claim.
 Requesting 32 speakers on the same fixture completed without a native crash but
-returned one speaker inside the native library. This observation prompted the
-explicit count check: Kuali now rejects that mismatch instead of accepting the
-one-speaker result.
+returned one speaker inside the native library. That mismatch previously caused
+Kuali to reject the import. It now preserves the result, retains the requested
+count and shows the discrepancy in the saved meeting for review.
+
+The preprocessing regression was checked against the official
+[four-speaker example and its ten reference turns](https://k2-fsa.github.io/sherpa/onnx/speaker-diarization/models.html).
+With a supplied count of four, the corrected model matches all ten speaker
+assignments, including repeated speakers. After matching anonymous labels, the
+time agreement with the documented reference is 30.593 of 30.595 seconds (2 ms
+of timestamp rounding), versus 20.181 seconds with the original preprocessing.
+This is agreement with one documented fixture, not a corpus DER or a general
+accuracy estimate. The existing two-speaker English fixture keeps identical
+turns after the correction, and two additional public two-speaker fixtures
+retain two speakers. With the corrected preprocessing and automatic threshold,
+the four fixtures return 4, 2, 2, and 2 voices respectively. The four-speaker
+reference preserves all ten attributed turns in both modes. The other three
+fixtures are count/stability smoke checks without independent reference labels;
+they do not establish attribution accuracy.
+
+An opt-in native regression checks every identity and turn boundary in the
+four-speaker reference, in both automatic and supplied-count modes. It requires
+local models and the public fixture and never downloads them:
+
+```sh
+KUALI_DIARIZATION_MODELS_DIR=/path/to/diarization-models \
+KUALI_DIARIZATION_TEST_AUDIO=/path/to/0-four-speakers-zh.wav \
+cargo test --locked -p kuali-stt --test diarization_reference -- --ignored
+```
 
 Use the native example to run the same model path outside the UI:
 

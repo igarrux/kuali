@@ -5,11 +5,11 @@
 //! recording's timeline; they do not make independently processed chunks share
 //! speaker identities or provide streaming diarization.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::future::Future;
-use std::io::Read;
+use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Duration;
 
 use futures::StreamExt;
@@ -25,6 +25,11 @@ pub const SAMPLE_RATE: u32 = 16_000;
 /// Bounds the full-recording native algorithm's memory and clustering cost.
 pub const MAX_AUDIO_DURATION_MS: u64 = 2 * 60 * 60 * 1_000;
 pub const MAX_SPEAKERS: u32 = 32;
+
+// Cosine-distance cutoff for normalized WeSpeaker features. Sherpa's generic
+// 0.5 default fragments repeated voices on the public reference fixtures;
+// 0.9 preserves their attributed turns. A supplied count bypasses this cutoff.
+const AUTO_CLUSTERING_THRESHOLD: f32 = 0.9;
 
 struct ModelAsset {
     file_name: &'static str,
@@ -47,11 +52,29 @@ const EMBEDDING: ModelAsset = ModelAsset {
     sha256: "e9848563da86f263117134dfd7ad63c92355b37de492b55e325400c9d9c39012",
 };
 
+// This pinned WeSpeaker export expects temporal mean normalization of the
+// filterbank features, but omits Sherpa's feature_normalize_type metadata.
+// Preserve the verified download and cache a deterministic metadata-only copy.
+// The weights and computation graph are unchanged. Both hashes are pinned.
+const NORMALIZED_EMBEDDING: ModelAsset = ModelAsset {
+    file_name: "wespeaker-resnet34-lm-cmn.onnx",
+    url: EMBEDDING.url,
+    bytes: 26_530_589,
+    sha256: "ce2c5db3fb2c438f1d58de35577c951bc27ea0d41ef74968de4a480a1a59e39b",
+};
+
+// ONNX ModelProto.metadata_props (field 14), containing StringStringEntryProto
+// key (field 1) and value (field 2). Appending a repeated protobuf entry is valid
+// for this exact SHA-verified model; this is not a general ONNX patcher.
+const GLOBAL_MEAN_METADATA: &[u8] = b"\x72\x25\x0a\x16feature_normalize_type\x12\x0bglobal-mean";
+static NEXT_MODEL_TEMP_ID: AtomicU64 = AtomicU64::new(0);
+
 const MODEL_BYTES: u64 = SEGMENTATION.bytes + EMBEDDING.bytes;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct DiarizationOptions {
-    /// `None` estimates the number of speakers; otherwise use 1 through 32.
+    /// `None` estimates the number of speakers; otherwise guide clustering
+    /// toward 1 through 32 speakers. The surviving turns may contain fewer.
     pub num_speakers: Option<u32>,
 }
 
@@ -81,8 +104,6 @@ pub enum DiarizationError {
     Cancelled,
     #[error("speaker count must be between 1 and 32 (got {0})")]
     InvalidSpeakerCount(u32),
-    #[error("requested {expected} speakers, but the audio produced {detected}; try Auto or a lower speaker count")]
-    SpeakerCountMismatch { expected: u32, detected: u32 },
     #[error("invalid diarization audio: {0}")]
     InvalidAudio(&'static str),
     #[error("invalid diarization model path: {0}")]
@@ -357,13 +378,86 @@ where
     Ok(())
 }
 
+fn prepare_normalized_embedding(
+    dir: &Path,
+    source: &ModelAsset,
+    prepared: &ModelAsset,
+    cancel: &AtomicBool,
+) -> Result<PathBuf, DiarizationError> {
+    let source_path = dir.join(source.file_name);
+    let final_path = dir.join(prepared.file_name);
+    verify_model(&source_path, source, cancel)?;
+    match verify_model(&final_path, prepared, cancel) {
+        Ok(()) => return Ok(final_path),
+        Err(DiarizationError::ModelSize { .. } | DiarizationError::ModelChecksum { .. }) => {}
+        Err(DiarizationError::Io { source, .. })
+            if source.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => return Err(error),
+    }
+
+    // Bound the read even if another process replaces the source after its
+    // verification. The derived checksum also detects a changed source.
+    let mut bytes = Vec::with_capacity(prepared.bytes as usize);
+    std::fs::File::open(&source_path)
+        .map_err(|error| io_error(&source_path, error))?
+        .take(source.bytes + 1)
+        .read_to_end(&mut bytes)
+        .map_err(|error| io_error(&source_path, error))?;
+    bytes.extend_from_slice(GLOBAL_MEAN_METADATA);
+    if bytes.len() as u64 != prepared.bytes {
+        return Err(DiarizationError::ModelSize {
+            path: final_path,
+            got: bytes.len() as u64,
+            expected: prepared.bytes,
+        });
+    }
+    if format!("{:x}", Sha256::digest(&bytes)) != prepared.sha256 {
+        return Err(DiarizationError::ModelChecksum { path: final_path });
+    }
+    check_cancel(cancel)?;
+
+    // Unique create_new files prevent concurrent loaders from truncating each
+    // other's prepared models. A stale partial file is harmless and skipped.
+    let (partial, mut file) = loop {
+        let id = NEXT_MODEL_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+        let path = dir.join(format!(
+            "{}.{}.{}.part",
+            prepared.file_name,
+            std::process::id(),
+            id
+        ));
+        match std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&path)
+        {
+            Ok(file) => break (PartialDownload(path), file),
+            Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => {
+                check_cancel(cancel)?;
+            }
+            Err(error) => return Err(io_error(&path, error)),
+        }
+    };
+    for chunk in bytes.chunks(64 * 1024) {
+        check_cancel(cancel)?;
+        file.write_all(chunk)
+            .map_err(|error| io_error(&partial.0, error))?;
+    }
+    file.sync_all()
+        .map_err(|error| io_error(&partial.0, error))?;
+    drop(file);
+    verify_model(&partial.0, prepared, cancel)?;
+    std::fs::rename(&partial.0, &final_path).map_err(|error| io_error(&final_path, error))?;
+    check_cancel(cancel)?;
+    Ok(final_path)
+}
+
 /// CPU diarizer for one complete recording per invocation.
 ///
 /// Run `load` and `diarize` on a blocking worker. Inference cannot be interrupted
 /// by the safe native API: cancellation discards its output after it returns.
 pub struct Diarizer {
     inner: OfflineSpeakerDiarization,
-    expected_speakers: Option<u32>,
 }
 
 impl Diarizer {
@@ -372,7 +466,7 @@ impl Diarizer {
         let options = options.validate()?;
         let cancel = AtomicBool::new(false);
         verify_model(&dir.join(SEGMENTATION.file_name), &SEGMENTATION, &cancel)?;
-        verify_model(&dir.join(EMBEDDING.file_name), &EMBEDDING, &cancel)?;
+        prepare_normalized_embedding(dir, &EMBEDDING, &NORMALIZED_EMBEDDING, &cancel)?;
         let model_path = |model: &ModelAsset| -> Result<String, DiarizationError> {
             let path = dir.join(model.file_name);
             match path.to_str() {
@@ -392,13 +486,13 @@ impl Diarizer {
                 ..Default::default()
             },
             embedding: SpeakerEmbeddingExtractorConfig {
-                model: Some(model_path(&EMBEDDING)?),
+                model: Some(model_path(&NORMALIZED_EMBEDDING)?),
                 num_threads: threads,
                 ..Default::default()
             },
             clustering: FastClusteringConfig {
                 num_clusters: options.num_speakers.map_or(-1, |count| count as i32),
-                ..Default::default()
+                threshold: AUTO_CLUSTERING_THRESHOLD,
             },
             ..Default::default()
         };
@@ -407,10 +501,7 @@ impl Diarizer {
         if inner.sample_rate() != SAMPLE_RATE as i32 {
             return Err(DiarizationError::Initialization);
         }
-        Ok(Self {
-            inner,
-            expected_speakers: options.num_speakers,
-        })
+        Ok(Self { inner })
     }
 
     /// Input must be finite, normalized (`-1..=1`), mono PCM at 16 kHz.
@@ -434,30 +525,13 @@ impl Diarizer {
         check_cancel(cancel)?;
         let native = native.ok_or(DiarizationError::Inference)?;
         let segments = normalize_segments(native.sort_by_start_time(), duration_ms, offset_ms);
-        validate_speaker_count(&segments, self.expected_speakers)?;
+        // The requested count guides native clustering. Window voting and
+        // short-turn filtering can leave fewer speakers in the final result;
+        // keep those turns instead of discarding an otherwise valid import.
         progress(1, 1);
         check_cancel(cancel)?;
         Ok(segments)
     }
-}
-
-fn validate_speaker_count(
-    segments: &[SpeakerSegment],
-    expected: Option<u32>,
-) -> Result<(), DiarizationError> {
-    if let Some(expected) = expected {
-        if !segments.is_empty() {
-            let detected = segments
-                .iter()
-                .map(|segment| segment.speaker_id)
-                .collect::<HashSet<_>>()
-                .len() as u32;
-            if detected != expected {
-                return Err(DiarizationError::SpeakerCountMismatch { expected, detected });
-            }
-        }
-    }
-    Ok(())
 }
 
 fn validate_audio(
@@ -533,6 +607,127 @@ fn normalize_segments(
 mod tests {
     use super::*;
 
+    struct ModelTestDir(PathBuf);
+
+    impl ModelTestDir {
+        fn new() -> Self {
+            let id = NEXT_MODEL_TEMP_ID.fetch_add(1, Ordering::Relaxed);
+            let path = std::env::temp_dir()
+                .join(format!("kuali-prepared-model-{}-{id}", std::process::id()));
+            std::fs::create_dir(&path).unwrap();
+            Self(path)
+        }
+    }
+
+    impl Drop for ModelTestDir {
+        fn drop(&mut self) {
+            std::fs::remove_dir_all(&self.0).unwrap();
+        }
+    }
+
+    const MODEL_FIXTURE: ModelAsset = ModelAsset {
+        file_name: "original.onnx",
+        url: "unused",
+        bytes: 3,
+        sha256: "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+    };
+    const PREPARED_FIXTURE: ModelAsset = ModelAsset {
+        file_name: "prepared.onnx",
+        url: "unused",
+        bytes: 42,
+        sha256: "f12511e2008d333ddcb0f417e795b981960fd4ace53d41a03e5fb1d75b0b6528",
+    };
+
+    #[test]
+    fn prepared_model_is_verified_reused_and_keeps_the_original_untouched() {
+        let dir = ModelTestDir::new();
+        let original = dir.0.join(MODEL_FIXTURE.file_name);
+        std::fs::write(&original, b"abc").unwrap();
+        let cancel = AtomicBool::new(false);
+        let path = prepare_normalized_embedding(&dir.0, &MODEL_FIXTURE, &PREPARED_FIXTURE, &cancel)
+            .unwrap();
+        verify_model(&path, &PREPARED_FIXTURE, &cancel).unwrap();
+        let modified = std::fs::metadata(&path).unwrap().modified().unwrap();
+        let reused =
+            prepare_normalized_embedding(&dir.0, &MODEL_FIXTURE, &PREPARED_FIXTURE, &cancel)
+                .unwrap();
+        assert_eq!(reused, path);
+        assert_eq!(
+            std::fs::metadata(&path).unwrap().modified().unwrap(),
+            modified
+        );
+        assert_eq!(std::fs::read(original).unwrap(), b"abc");
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn corrupt_prepared_model_is_rebuilt_but_a_corrupt_original_is_rejected() {
+        let dir = ModelTestDir::new();
+        let original = dir.0.join(MODEL_FIXTURE.file_name);
+        let prepared = dir.0.join(PREPARED_FIXTURE.file_name);
+        let cancel = AtomicBool::new(false);
+        std::fs::write(&original, b"abc").unwrap();
+        for corruption in [vec![0; PREPARED_FIXTURE.bytes as usize], vec![0]] {
+            std::fs::write(&prepared, corruption).unwrap();
+            prepare_normalized_embedding(&dir.0, &MODEL_FIXTURE, &PREPARED_FIXTURE, &cancel)
+                .unwrap();
+            verify_model(&prepared, &PREPARED_FIXTURE, &cancel).unwrap();
+        }
+        std::fs::write(&original, b"abd").unwrap();
+        assert!(matches!(
+            prepare_normalized_embedding(&dir.0, &MODEL_FIXTURE, &PREPARED_FIXTURE, &cancel),
+            Err(DiarizationError::ModelChecksum { .. })
+        ));
+        assert_eq!(std::fs::read(original).unwrap(), b"abd");
+        verify_model(&prepared, &PREPARED_FIXTURE, &cancel).unwrap();
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2);
+    }
+
+    #[test]
+    fn cancelled_model_preparation_does_not_publish_a_partial_model() {
+        let dir = ModelTestDir::new();
+        std::fs::write(dir.0.join(MODEL_FIXTURE.file_name), b"abc").unwrap();
+        let cancel = AtomicBool::new(true);
+        assert!(matches!(
+            prepare_normalized_embedding(&dir.0, &MODEL_FIXTURE, &PREPARED_FIXTURE, &cancel),
+            Err(DiarizationError::Cancelled)
+        ));
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn concurrent_preparation_publishes_one_valid_model_without_partial_files() {
+        let dir = ModelTestDir::new();
+        std::fs::write(dir.0.join(MODEL_FIXTURE.file_name), b"abc").unwrap();
+        let cancel = AtomicBool::new(false);
+        let ready = std::sync::Barrier::new(8);
+        std::thread::scope(|scope| {
+            let workers: Vec<_> = (0..8)
+                .map(|_| {
+                    scope.spawn(|| {
+                        ready.wait();
+                        let path = prepare_normalized_embedding(
+                            &dir.0,
+                            &MODEL_FIXTURE,
+                            &PREPARED_FIXTURE,
+                            &cancel,
+                        )
+                        .unwrap();
+                        verify_model(&path, &PREPARED_FIXTURE, &cancel).unwrap();
+                    })
+                })
+                .collect();
+            for worker in workers {
+                worker.join().unwrap();
+            }
+        });
+        assert_eq!(std::fs::read_dir(&dir.0).unwrap().count(), 2);
+        assert_eq!(
+            std::fs::read(dir.0.join(MODEL_FIXTURE.file_name)).unwrap(),
+            b"abc"
+        );
+    }
+
     #[test]
     fn speaker_count_accepts_auto_and_rejects_values_outside_supported_bounds() {
         for count in [None, Some(1), Some(MAX_SPEAKERS)] {
@@ -595,34 +790,6 @@ mod tests {
                 },
             ]
         );
-    }
-
-    #[test]
-    fn requested_count_checks_distinct_speakers_without_rejecting_no_speech() {
-        let segments = vec![
-            SpeakerSegment {
-                speaker_id: 8,
-                start_ms: 0,
-                end_ms: 1_000,
-            },
-            SpeakerSegment {
-                speaker_id: 3,
-                start_ms: 1_000,
-                end_ms: 2_000,
-            },
-            SpeakerSegment {
-                speaker_id: 8,
-                start_ms: 2_000,
-                end_ms: 3_000,
-            },
-        ];
-        assert!(validate_speaker_count(&segments, None).is_ok());
-        assert!(validate_speaker_count(&segments, Some(2)).is_ok());
-        assert!(validate_speaker_count(&[], Some(32)).is_ok());
-        for expected in [1, 3, 32] {
-            assert!(matches!(validate_speaker_count(&segments, Some(expected)),
-                Err(DiarizationError::SpeakerCountMismatch { expected: got, detected: 2 }) if got == expected));
-        }
     }
 
     #[test]
