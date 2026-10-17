@@ -3208,6 +3208,7 @@ dependencies = [
 name = "kuali-stt"
 version = "0.1.17"
 dependencies = [
+ "cc",
  "futures",
  "kuali-core",
  "reqwest 0.12.28",
