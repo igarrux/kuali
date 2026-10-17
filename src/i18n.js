@@ -26,8 +26,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Detectar automáticamente": "Detect automatically",
   "Indicar cuántos": "Specify a number",
   Cantidad: "Count",
-  "Si conoces la cantidad de personas, indicarla puede mejorar la separación. Las voces superpuestas y el ruido pueden reducir la precisión.":
-    "If you know how many people are speaking, specifying the number may improve separation. Overlapping voices and noise can reduce accuracy.",
+  "La cantidad orienta la separación. Si distingue menos voces, guardará la transcripción con un aviso. El modo automático también estima; el ruido y las voces superpuestas pueden afectar el resultado.":
+    "The count guides speaker separation. If fewer voices can be distinguished, the transcript will be saved with a notice. Automatic mode also estimates; noise and overlapping voices may affect the result.",
   "El audio se procesa localmente. Se descargarán unos 33 MB para distinguir voces; descarga también un modelo de transcripción en Ajustes para transcribir sin conexión.":
     "Audio is processed locally. About 33 MB will be downloaded to distinguish voices; also download a transcription model in Settings to transcribe offline.",
   "Con el resumen automático activado, la IA configurada analizará la transcripción para deducir nombres y resumir; puede ser un servicio remoto. Solo asigna nombres con evidencia, sin confirmar identidades. También puedes importar sin IA.":
@@ -49,6 +49,12 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Importación cancelada. Puedes volver a intentarlo con el mismo archivo.":
     "Import cancelled. You can try again with the same file.",
   "Audio importado": "Audio imported",
+  "{count} voz detectada": "{count} detected voice",
+  "{count} voces detectadas": "{count} detected voices",
+  "La separación es una estimación y puede dividir o mezclar voces.":
+    "Speaker separation is an estimate and may split or combine voices.",
+  "Indicaste {requested} voces y se detectaron {detected}. La transcripción está guardada; revisa quién habla en cada intervención.":
+    "You specified {requested} voices and {detected} were detected. The transcript is saved; review who speaks in each turn.",
   "No se pudo completar el análisis con IA: {error}. La transcripción sigue disponible.":
     "AI analysis could not be completed: {error}. The transcript is still available.",
   "Archivos de audio": "Audio files",

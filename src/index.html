@@ -741,6 +741,7 @@
             <div class="meeting-head-copy">
               <h2 id="meeting-title"></h2>
               <p class="meeting-meta" id="meeting-meta" data-i18n-skip></p>
+              <p class="audio-speaker-feedback" id="audio-speaker-feedback" role="status" aria-live="polite" aria-atomic="true" hidden data-i18n-skip></p>
               <div class="meeting-index" id="meeting-index" data-i18n-skip hidden>
                 <span
                   class="meeting-index-status"
@@ -1527,7 +1528,7 @@
             <input type="number" id="audio-import-speaker-count" min="1" max="32" step="1" value="2" inputmode="numeric" aria-describedby="audio-import-speaker-hint" />
           </div>
         </div>
-        <p id="audio-import-speaker-hint">Si conoces la cantidad de personas, indicarla puede mejorar la separación. Las voces superpuestas y el ruido pueden reducir la precisión.</p>
+        <p id="audio-import-speaker-hint">La cantidad orienta la separación. Si distingue menos voces, guardará la transcripción con un aviso. El modo automático también estima; el ruido y las voces superpuestas pueden afectar el resultado.</p>
         <p class="audio-import-local-note">El audio se procesa localmente. Se descargarán unos 33 MB para distinguir voces; descarga también un modelo de transcripción en Ajustes para transcribir sin conexión.</p>
         <p class="audio-import-local-note">Con el resumen automático activado, la IA configurada analizará la transcripción para deducir nombres y resumir; puede ser un servicio remoto. Solo asigna nombres con evidencia, sin confirmar identidades. También puedes importar sin IA.</p>
         <div class="audio-import-progress" id="audio-import-progress" hidden>

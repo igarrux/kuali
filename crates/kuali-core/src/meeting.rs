@@ -312,6 +312,9 @@ pub enum MeetingSource {
     /// File name only: the user's local directory is never persisted.
     AudioFile {
         file_name: String,
+        /// User-provided grouping guidance, not a confirmed attendance count.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        requested_speakers: Option<u32>,
         /// Actual import time. Meeting clock dates are synthetic because the
         /// original recording date is unknown; turn offsets remain exact.
         #[serde(default, skip_serializing_if = "Option::is_none")]
