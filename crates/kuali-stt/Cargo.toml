@@ -19,6 +19,9 @@ tokio.workspace = true
 tracing.workspace = true
 whisper-rs.workspace = true
 
+[build-dependencies]
+cc = "1"
+
 # Metal on Apple Silicon enables real-time `large-v3-turbo` transcription
 # without saturating the CPU.
 [target.'cfg(target_os = "macos")'.dependencies]

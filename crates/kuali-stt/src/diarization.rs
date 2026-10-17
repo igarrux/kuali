@@ -15,21 +15,18 @@ use std::time::Duration;
 use futures::StreamExt;
 use sha2::{Digest, Sha256};
 use sherpa_onnx::{
-    FastClusteringConfig, OfflineSpeakerDiarization, OfflineSpeakerDiarizationConfig,
-    OfflineSpeakerDiarizationSegment, OfflineSpeakerSegmentationModelConfig,
-    OfflineSpeakerSegmentationPyannoteModelConfig, SpeakerEmbeddingExtractorConfig,
+    OfflineSpeakerDiarizationSegment, SpeakerEmbeddingExtractor, SpeakerEmbeddingExtractorConfig,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+mod clustering;
+mod native;
+mod pipeline;
 
 pub const SAMPLE_RATE: u32 = 16_000;
 /// Bounds the full-recording native algorithm's memory and clustering cost.
 pub const MAX_AUDIO_DURATION_MS: u64 = 2 * 60 * 60 * 1_000;
 pub const MAX_SPEAKERS: u32 = 32;
-
-// Cosine-distance cutoff for normalized WeSpeaker features. Sherpa's generic
-// 0.5 default fragments repeated voices on the public reference fixtures;
-// 0.9 preserves their attributed turns. A supplied count bypasses this cutoff.
-const AUTO_CLUSTERING_THRESHOLD: f32 = 0.9;
 
 struct ModelAsset {
     file_name: &'static str,
@@ -454,10 +451,12 @@ fn prepare_normalized_embedding(
 
 /// CPU diarizer for one complete recording per invocation.
 ///
-/// Run `load` and `diarize` on a blocking worker. Inference cannot be interrupted
-/// by the safe native API: cancellation discards its output after it returns.
+/// Run `load` and `diarize` on a blocking worker. Cancellation is checked between
+/// windows and embeddings; an individual native inference call must finish first.
 pub struct Diarizer {
-    inner: OfflineSpeakerDiarization,
+    segmentation: native::SegmentationModel,
+    embedding: SpeakerEmbeddingExtractor,
+    num_speakers: Option<u32>,
 }
 
 impl Diarizer {
@@ -476,32 +475,21 @@ impl Diarizer {
         };
         let threads =
             std::thread::available_parallelism().map_or(2, |count| count.get().min(4)) as i32;
-        let config = OfflineSpeakerDiarizationConfig {
-            segmentation: OfflineSpeakerSegmentationModelConfig {
-                pyannote: OfflineSpeakerSegmentationPyannoteModelConfig {
-                    model: Some(model_path(&SEGMENTATION)?),
-                    window_shift_ratio: 0.1,
-                },
-                num_threads: threads,
-                ..Default::default()
-            },
-            embedding: SpeakerEmbeddingExtractorConfig {
-                model: Some(model_path(&NORMALIZED_EMBEDDING)?),
-                num_threads: threads,
-                ..Default::default()
-            },
-            clustering: FastClusteringConfig {
-                num_clusters: options.num_speakers.map_or(-1, |count| count as i32),
-                threshold: AUTO_CLUSTERING_THRESHOLD,
-            },
+        let segmentation = native::SegmentationModel::load(&model_path(&SEGMENTATION)?, threads)?;
+        let embedding = SpeakerEmbeddingExtractor::create(&SpeakerEmbeddingExtractorConfig {
+            model: Some(model_path(&NORMALIZED_EMBEDDING)?),
+            num_threads: threads,
             ..Default::default()
-        };
-        let inner =
-            OfflineSpeakerDiarization::create(&config).ok_or(DiarizationError::Initialization)?;
-        if inner.sample_rate() != SAMPLE_RATE as i32 {
+        })
+        .ok_or(DiarizationError::Initialization)?;
+        if embedding.dim() != 256 {
             return Err(DiarizationError::Initialization);
         }
-        Ok(Self { inner })
+        Ok(Self {
+            segmentation,
+            embedding,
+            num_speakers: options.num_speakers,
+        })
     }
 
     /// Input must be finite, normalized (`-1..=1`), mono PCM at 16 kHz.
@@ -519,18 +507,109 @@ impl Diarizer {
     {
         check_cancel(cancel)?;
         let duration_ms = validate_audio(samples, offset_ms, cancel)?;
-        progress(0, 0);
+        let metadata = self.segmentation.metadata();
+        let num_chunks = samples
+            .len()
+            .saturating_sub(metadata.window_size)
+            .div_ceil(metadata.window_shift)
+            + 1;
+        let mut chunks = Vec::with_capacity(num_chunks);
+        let mut padded = vec![0.0; metadata.window_size];
+        progress(0, 1_000);
+        for index in 0..num_chunks {
+            check_cancel(cancel)?;
+            let start = index * metadata.window_shift;
+            let end = (start + metadata.window_size).min(samples.len());
+            let audio = &samples[start..end];
+            let chunk = if audio.len() == metadata.window_size {
+                self.segmentation.process(audio)?
+            } else {
+                padded.fill(0.0);
+                padded[..audio.len()].copy_from_slice(audio);
+                self.segmentation.process(&padded)?
+            };
+            chunks.push(chunk);
+            progress((index as u64 + 1) * 200 / num_chunks as u64, 1_000);
+        }
+        let inputs = pipeline::prepare_embedding_inputs(&chunks, samples.len(), metadata, || {
+            cancel.load(Ordering::Relaxed)
+        })
+        .map_err(pipeline_error)?;
+        let input_count = inputs.len();
+        let mut retained = Vec::with_capacity(input_count);
+        let mut useful_samples = Vec::with_capacity(input_count);
+        let mut embeddings = Vec::with_capacity(input_count * self.embedding.dim() as usize);
+        // One window already provides local identities; no global association
+        // is needed, matching the segmentation model's short-recording path.
+        if chunks.len() > 1 {
+            for (index, input) in inputs.into_iter().enumerate() {
+                check_cancel(cancel)?;
+                let stream = self
+                    .embedding
+                    .create_stream()
+                    .ok_or(DiarizationError::Inference)?;
+                for range in &input.samples {
+                    stream.accept_waveform(SAMPLE_RATE as i32, &samples[range.clone()]);
+                }
+                stream.input_finished();
+                if self.embedding.is_ready(&stream) {
+                    let vector = self
+                        .embedding
+                        .compute(&stream)
+                        .ok_or(DiarizationError::Inference)?;
+                    if vector.iter().all(|v| v.is_finite()) && vector.iter().any(|v| *v != 0.0) {
+                        embeddings.extend(vector);
+                        useful_samples.push(input.useful_samples());
+                        retained.push(input);
+                    }
+                }
+                progress(200 + (index as u64 + 1) * 750 / input_count as u64, 1_000);
+            }
+        }
         check_cancel(cancel)?;
-        let native = self.inner.process(samples);
+        progress(950, 1_000);
+        let labels = clustering::cluster(
+            &embeddings,
+            self.embedding.dim() as usize,
+            &useful_samples,
+            SAMPLE_RATE,
+            self.num_speakers,
+            cancel,
+        )
+        .map_err(|error| match error {
+            clustering::Error::Cancelled => DiarizationError::Cancelled,
+            _ => DiarizationError::Inference,
+        })?;
+        let turns = pipeline::reconstruct(
+            &chunks,
+            &retained,
+            &labels,
+            samples.len(),
+            metadata,
+            pipeline::PostprocessConfig::default(),
+            || cancel.load(Ordering::Relaxed),
+        )
+        .map_err(pipeline_error)?;
+        let raw = turns
+            .into_iter()
+            .map(|turn| OfflineSpeakerDiarizationSegment {
+                start: turn.start,
+                end: turn.end,
+                speaker: turn.speaker as i32,
+            })
+            .collect();
+        let segments = normalize_segments(raw, duration_ms, offset_ms);
         check_cancel(cancel)?;
-        let native = native.ok_or(DiarizationError::Inference)?;
-        let segments = normalize_segments(native.sort_by_start_time(), duration_ms, offset_ms);
-        // The requested count guides native clustering. Window voting and
-        // short-turn filtering can leave fewer speakers in the final result;
-        // keep those turns instead of discarding an otherwise valid import.
-        progress(1, 1);
+        progress(1_000, 1_000);
         check_cancel(cancel)?;
         Ok(segments)
+    }
+}
+
+fn pipeline_error(error: pipeline::Error) -> DiarizationError {
+    match error {
+        pipeline::Error::Cancelled => DiarizationError::Cancelled,
+        _ => DiarizationError::Inference,
     }
 }
 

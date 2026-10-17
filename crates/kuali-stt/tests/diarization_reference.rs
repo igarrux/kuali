@@ -3,11 +3,15 @@
 //! KUALI_DIARIZATION_TEST_AUDIO, then run:
 //! cargo test -p kuali-stt --test diarization_reference -- --ignored
 
-use std::{collections::HashMap, path::PathBuf, sync::atomic::AtomicBool};
+use std::{
+    collections::HashMap,
+    path::PathBuf,
+    sync::atomic::{AtomicBool, Ordering},
+};
 
 use kuali_stt::{
     audio_file::decode_audio_file,
-    diarization::{DiarizationOptions, Diarizer},
+    diarization::{DiarizationError, DiarizationOptions, Diarizer},
 };
 
 #[test]
@@ -34,17 +38,8 @@ fn four_speaker_reference_preserves_every_turn_identity() {
     // At most one segmentation frame of boundary variation across runtimes.
     const MAX_BOUNDARY_ERROR_MS: u64 = 35;
 
-    let models = PathBuf::from(
-        std::env::var_os("KUALI_DIARIZATION_MODELS_DIR")
-            .expect("set KUALI_DIARIZATION_MODELS_DIR to the local verified model cache"),
-    );
-    let audio =
-        PathBuf::from(std::env::var_os("KUALI_DIARIZATION_TEST_AUDIO").expect(
-            "set KUALI_DIARIZATION_TEST_AUDIO to the public 0-four-speakers-zh.wav fixture",
-        ));
+    let (models, samples) = local_public_fixture();
     let cancel = AtomicBool::new(false);
-    let samples = decode_audio_file(&audio, &cancel, |_, _| {})
-        .expect("decode the local public four-speaker fixture");
     for num_speakers in [Some(4), None] {
         let mode = if num_speakers.is_some() {
             "known"
@@ -53,9 +48,18 @@ fn four_speaker_reference_preserves_every_turn_identity() {
         };
         let diarizer = Diarizer::load(&models, DiarizationOptions { num_speakers })
             .expect("load verified local diarization models without downloading");
+        let mut updates = Vec::new();
         let turns = diarizer
-            .diarize(&samples, 0, &cancel, |_, _| {})
+            .diarize(&samples, 0, &cancel, |completed, total| {
+                updates.push((completed, total));
+            })
             .expect("diarize the public four-speaker fixture");
+        assert_progress_is_monotonic(&updates);
+        let &(completed, total) = updates.last().expect("diarization reports progress");
+        assert_eq!(
+            completed, total,
+            "{mode}: successful diarization reaches 100%"
+        );
         assert_eq!(turns.len(), REFERENCE.len(), "{mode}: reference turn count");
 
         // Canonicalize first appearance so native cluster numbering is
@@ -87,4 +91,74 @@ fn four_speaker_reference_preserves_every_turn_identity() {
             "{mode}: all four reference voices survive"
         );
     }
+}
+
+#[test]
+#[ignore = "requires local diarization models and the public four-speaker fixture"]
+fn cancellation_after_first_progress_stops_further_processing() {
+    let (models, samples) = local_public_fixture();
+    let diarizer = Diarizer::load(&models, DiarizationOptions::default())
+        .expect("load verified local diarization models without downloading");
+    let cancel = AtomicBool::new(false);
+    let mut updates = Vec::new();
+    let mut cancelled_at = None;
+    let result = diarizer.diarize(&samples, 0, &cancel, |completed, total| {
+        updates.push((completed, total));
+        if completed > 0 && cancelled_at.is_none() {
+            cancelled_at = Some(updates.len() - 1);
+            cancel.store(true, Ordering::Relaxed);
+        }
+    });
+
+    assert!(
+        matches!(result, Err(DiarizationError::Cancelled)),
+        "cancellation from the progress callback must return Cancelled"
+    );
+    assert_progress_is_monotonic(&updates);
+    let index = cancelled_at.expect("the fixture reaches a positive progress update");
+    let (completed, total) = updates[index];
+    assert!(
+        completed < total,
+        "the first positive update must arrive before the work completes"
+    );
+    assert_eq!(
+        updates.len(),
+        index + 1,
+        "no more processing progress is emitted after cancellation"
+    );
+}
+
+fn assert_progress_is_monotonic(updates: &[(u64, u64)]) {
+    assert!(!updates.is_empty(), "diarization reports progress");
+    for &(completed, total) in updates {
+        assert!(total > 0, "progress has a nonzero total");
+        assert!(completed <= total, "progress never exceeds 100%");
+    }
+    for pair in updates.windows(2) {
+        let (previous, previous_total) = pair[0];
+        let (current, current_total) = pair[1];
+        // Compare fractions without rounding or assuming a fixed denominator.
+        assert!(
+            u128::from(current) * u128::from(previous_total)
+                >= u128::from(previous) * u128::from(current_total),
+            "progress must not move backwards: {:?} -> {:?}",
+            pair[0],
+            pair[1]
+        );
+    }
+}
+
+fn local_public_fixture() -> (PathBuf, Vec<f32>) {
+    let models = PathBuf::from(
+        std::env::var_os("KUALI_DIARIZATION_MODELS_DIR")
+            .expect("set KUALI_DIARIZATION_MODELS_DIR to the local verified model cache"),
+    );
+    let audio =
+        PathBuf::from(std::env::var_os("KUALI_DIARIZATION_TEST_AUDIO").expect(
+            "set KUALI_DIARIZATION_TEST_AUDIO to the public 0-four-speakers-zh.wav fixture",
+        ));
+    let cancel = AtomicBool::new(false);
+    let samples = decode_audio_file(&audio, &cancel, |_, _| {})
+        .expect("decode the local public four-speaker fixture");
+    (models, samples)
 }

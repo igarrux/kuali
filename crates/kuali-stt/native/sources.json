@@ -1,0 +1,87 @@
+[
+  {
+    "file": "fastcluster.h",
+    "source": "https://raw.githubusercontent.com/csukuangfj/hclust-cpp/2026-02-25/fastcluster.h",
+    "sha256": "78214bd46784533deae05ebfe252a122c80856a6083dd7c85dd1a4a0cf6999a5"
+  },
+  {
+    "file": "onnxruntime-1.27.1/onnxruntime_c_api.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.1/include/onnxruntime/core/session/onnxruntime_c_api.h",
+    "sha256": "523131bab81173fe287c578f7dda344e1dc5c749fa3f70b55fbbf8f210850313"
+  },
+  {
+    "file": "onnxruntime-1.27.1/onnxruntime_cxx_api.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.1/include/onnxruntime/core/session/onnxruntime_cxx_api.h",
+    "sha256": "c5f9bb73d7674cf99a197b383a144eb2a5eda71cc060193a86c7d24e6fa36ed7"
+  },
+  {
+    "file": "onnxruntime-1.27.1/onnxruntime_cxx_inline.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.1/include/onnxruntime/core/session/onnxruntime_cxx_inline.h",
+    "sha256": "114b4d008351eaa4462560438474cebd104f74259cc8af607acc0b97453200d2"
+  },
+  {
+    "file": "onnxruntime-1.27.1/onnxruntime_ep_c_api.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.1/include/onnxruntime/core/session/onnxruntime_ep_c_api.h",
+    "sha256": "f65ac849718cabe3ff4902698dd2de643c3b3dbe0010242b2b0407548e7ee00c"
+  },
+  {
+    "file": "onnxruntime-1.27.1/onnxruntime_float16.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.27.1/include/onnxruntime/core/session/onnxruntime_float16.h",
+    "sha256": "88b242845d25981633a0bbd1c148e273cf8bfb016ea3f57c4af41a06530f72b0"
+  },
+  {
+    "file": "onnxruntime-1.28.1/onnxruntime_c_api.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.1/include/onnxruntime/core/session/onnxruntime_c_api.h",
+    "sha256": "b69a133143c0da61782b2b02cc8a620d21ac139231fd211719776d10385135c1"
+  },
+  {
+    "file": "onnxruntime-1.28.1/onnxruntime_cxx_api.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.1/include/onnxruntime/core/session/onnxruntime_cxx_api.h",
+    "sha256": "c6bf005e4063b7db911d0a6b030452bcb9d4fc5e87530a39d94c4a5fcd311b61"
+  },
+  {
+    "file": "onnxruntime-1.28.1/onnxruntime_cxx_inline.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.1/include/onnxruntime/core/session/onnxruntime_cxx_inline.h",
+    "sha256": "97f960b1bc4a372918893ef4c77102dee725ccfce0d76607f4570b03e7e28325"
+  },
+  {
+    "file": "onnxruntime-1.28.1/onnxruntime_ep_c_api.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.1/include/onnxruntime/core/session/onnxruntime_ep_c_api.h",
+    "sha256": "db86df0f846b8d3bdbf429a5c76c5805293196575ca3c475878612591cd18e51"
+  },
+  {
+    "file": "onnxruntime-1.28.1/onnxruntime_error_code.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.1/include/onnxruntime/core/session/onnxruntime_error_code.h",
+    "sha256": "5ce3b054e798eced8d14f5b86e98692fd33470463f96194ce0700a2d53dd8721"
+  },
+  {
+    "file": "onnxruntime-1.28.1/onnxruntime_float16.h",
+    "source": "https://raw.githubusercontent.com/microsoft/onnxruntime/v1.28.1/include/onnxruntime/core/session/onnxruntime_float16.h",
+    "sha256": "88b242845d25981633a0bbd1c148e273cf8bfb016ea3f57c4af41a06530f72b0"
+  },
+  {
+    "file": "sherpa-onnx/csrc/offline-speaker-segmentation-model-config.h",
+    "source": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/sherpa-onnx/csrc/offline-speaker-segmentation-model-config.h",
+    "sha256": "8bffb92cce4ed696fdb112b1533c00f8ae48ae6baf1b8f446558a414794ec521"
+  },
+  {
+    "file": "sherpa-onnx/csrc/offline-speaker-segmentation-pyannote-model-config.h",
+    "source": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/sherpa-onnx/csrc/offline-speaker-segmentation-pyannote-model-config.h",
+    "sha256": "bb59e9fa6f862dcb8dd6dd03fd2ab032f9606405172f5cabd404c1bc3a3002f2"
+  },
+  {
+    "file": "sherpa-onnx/csrc/offline-speaker-segmentation-pyannote-model-meta-data.h",
+    "source": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/sherpa-onnx/csrc/offline-speaker-segmentation-pyannote-model-meta-data.h",
+    "sha256": "3749275ad08681c86ed78b54e210d10bcd64d37d331352ed40e2f2daf79e4db3"
+  },
+  {
+    "file": "sherpa-onnx/csrc/offline-speaker-segmentation-pyannote-model.h",
+    "source": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/sherpa-onnx/csrc/offline-speaker-segmentation-pyannote-model.h",
+    "sha256": "eb07a11bda4347ecfba2b7904d02473d432ca4490b8f249ca7141946c2020f55"
+  },
+  {
+    "file": "sherpa-onnx/csrc/parse-options.h",
+    "source": "https://raw.githubusercontent.com/k2-fsa/sherpa-onnx/v1.13.7/sherpa-onnx/csrc/parse-options.h",
+    "sha256": "4b47180282c7b1694261d9b42f81c7c494c664b2d38908c04adaec7ec9044a7c"
+  }
+]
