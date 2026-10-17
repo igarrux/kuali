@@ -6,9 +6,10 @@ into separate audio files or establish that the same label in two recordings
 belongs to the same person. Optional AI analysis can then infer names from
 explicit evidence in the transcript, as described below.
 
-The first implementation uses the native Rust bindings for
+The implementation uses
 [Sherpa ONNX 1.13.7](https://github.com/k2-fsa/sherpa-onnx/tree/v1.13.7/sherpa-onnx/rust)
-with pyannote segmentation 3.0 and WeSpeaker ResNet34-LM embeddings. Audio is
+for pyannote segmentation 3.0 and WeSpeaker ResNet34-LM embeddings, with
+recording-level clustering and turn reconstruction controlled by Kuali. Audio is
 decoded and resampled to normalized, mono, 16 kHz PCM before inference. The app's
 file-import flow also transcribes the recording and requires a separately
 installed Whisper model. The standalone benchmark example performs diarization
@@ -118,13 +119,15 @@ distinct temporary files and atomic replacement of the completed cache file.
 This corrects the input contract; automatic counting still requires separate
 quality evaluation and is not an exact attendance count.
 
-Automatic clustering uses a cosine-distance cutoff of **0.9** with these
-normalized features. Sherpa's generic 0.5 default fragments the four-speaker
-reference into nine labels after correcting preprocessing. At 0.9 it preserves
-the same ten attributed turns as the supplied-count run. This value is also used
-in the upstream diarization guide, but thresholds are model- and data-dependent;
-the public regression fixtures and real recordings must be checked separately.
-A supplied speaker count bypasses this distance cutoff in the native engine.
+Grouping uses average linkage over cosine distances, consolidates clusters with
+too little support, and assigns embeddings to the resulting speaker centroids.
+This follows the support filtering and reassignment approach in
+[pyannote's clustering pipeline](https://github.com/pyannote/pyannote-audio/blob/3.1.1/pyannote/audio/pipelines/clustering.py).
+It avoids using the most dissimilar pair of fragments to decide whether an
+entire voice should remain split, as complete linkage does. A supplied count
+guides the number of supported clusters; it does not manufacture silent speakers.
+Grouping parameters still need evaluation on independent recordings, including
+long meetings and brief speakers.
 
 Downloads use `.part` files, validate exact size and SHA-256, and promote the
 completed file only after validation. Cancelled or failed downloads clean up
@@ -151,6 +154,15 @@ Linux, and Windows on x64 and arm64. For an offline build,
 artifacts; see the upstream
 [build implementation](https://github.com/k2-fsa/sherpa-onnx/blob/v1.13.7/sherpa-onnx/rust/sherpa-onnx-sys/build.rs).
 
+A small C++ bridge exposes segmentation and average linkage from that same
+runtime. It does not replace native archive objects or download another runtime.
+Its vendored declarations and ONNX headers match the pinned desktop builds:
+ONNX Runtime 1.28.1 on macOS and 1.27.1 on Linux/Windows. Source URLs and hashes
+are recorded in `crates/kuali-stt/native/sources.json`; upstream licenses are
+included beside it. Updating Sherpa requires checking this bridge and its
+headers together. Rust owns the window processing, embedding selection,
+centroid assignment, overlap voting, and final timestamp clipping.
+
 ## Behavior and quality limits
 
 - Automatic speaker counting is the default. A known count from 1 through 32
@@ -159,11 +171,8 @@ artifacts; see the upstream
   saved meeting reports the discrepancy instead of discarding the import or
   inventing speakers to reach the supplied count. An empty result remains
   available for no-speech handling.
-  If the requested count exceeds the number of extracted embeddings, the
-  upstream clustering routine can assign all embeddings to one speaker. A known
-  count is guidance, not proof that the audio contains enough distinct speech to
-  identify that many voices. Use Auto unless the count is known. See the pinned
-  [clustering implementation](https://github.com/csukuangfj/hclust-cpp/blob/2026-02-25/fastcluster.cpp).
+  A known count is guidance, not proof that the audio contains enough distinct
+  speech to identify that many voices. Use Auto unless the count is known.
 - Each result is sorted by time. Labels start at zero internally and follow the
   order in which speakers first appear. Overlapping turns are retained, and all
   timestamps are clipped to the actual input duration.
@@ -183,11 +192,11 @@ artifacts; see the upstream
   has not been benchmarked for Spanish in Kuali**. No Spanish accuracy or speed
   guarantee is attached to it. See the
   [WeSpeaker model card](https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM).
-- The safe native Rust API runs inference as a blocking call and does not expose
-  a cancellation callback. Cancel requested during that call remains pending
-  until native inference finishes; the result is then discarded. The inference
-  stage reports indeterminate progress rather than estimating a percentage.
-  Download cancellation is responsive independently of inference.
+- Cancellation is checked between segmentation windows, speaker embeddings,
+  distance-matrix rows, and reconstruction steps. An individual native model
+  call or hierarchical-linkage call must finish before cancellation is checked
+  again. Progress advances through segmentation, embeddings, and grouping;
+  its percentage describes processing stages, not a remaining-time estimate.
 
 The Python-based
 [pyannote community-1 pipeline](https://huggingface.co/pyannote/speaker-diarization-community-1)
@@ -219,16 +228,15 @@ assignments, including repeated speakers. After matching anonymous labels, the
 time agreement with the documented reference is 30.593 of 30.595 seconds (2 ms
 of timestamp rounding), versus 20.181 seconds with the original preprocessing.
 This is agreement with one documented fixture, not a corpus DER or a general
-accuracy estimate. The existing two-speaker English fixture keeps identical
-turns after the correction, and two additional public two-speaker fixtures
-retain two speakers. With the corrected preprocessing and automatic threshold,
+accuracy estimate. With the corrected preprocessing and grouping,
 the four fixtures return 4, 2, 2, and 2 voices respectively. The four-speaker
 reference preserves all ten attributed turns in both modes. The other three
 fixtures are count/stability smoke checks without independent reference labels;
 they do not establish attribution accuracy.
 
 An opt-in native regression checks every identity and turn boundary in the
-four-speaker reference, in both automatic and supplied-count modes. It requires
+four-speaker reference, in both automatic and supplied-count modes, together
+with progress and cancellation during inference. It requires
 local models and the public fixture and never downloads them:
 
 ```sh
