@@ -202,7 +202,7 @@ pub(crate) async fn process(
             }
             Err(error) => return Err(error.to_string()),
         };
-        let mut meeting = imported_meeting(file_name, duration_ms, &segments);
+        let mut meeting = imported_meeting(file_name, duration_ms, &segments, num_speakers);
         let mut contexts: HashMap<u32, (u64, String)> = HashMap::new();
         for (index, turn) in turns.iter().enumerate() {
             check_cancelled(&cancel)?;
@@ -324,7 +324,12 @@ fn anonymous_id(meeting_id: &str, speaker: u32) -> u64 {
     browser_identifier(hasher.finish())
 }
 
-fn imported_meeting(file_name: String, duration_ms: u64, segments: &[SpeakerSegment]) -> Meeting {
+fn imported_meeting(
+    file_name: String,
+    duration_ms: u64,
+    segments: &[SpeakerSegment],
+    requested_speakers: Option<u32>,
+) -> Meeting {
     let imported_at = Utc::now();
     let started_at = imported_at - chrono::Duration::milliseconds(duration_ms as i64);
     let id = uuid::Uuid::new_v4().to_string();
@@ -363,6 +368,7 @@ fn imported_meeting(file_name: String, duration_ms: u64, segments: &[SpeakerSegm
     }
     meeting.source = Some(kuali_core::meeting::MeetingSource::AudioFile {
         file_name,
+        requested_speakers,
         imported_at: Some(imported_at),
         speaker_turns,
     });
@@ -437,7 +443,7 @@ mod tests {
 
     #[test]
     fn imported_sources_roundtrip_and_legacy_records_remain_readable() {
-        let meeting = imported_meeting("entrevista.wav".into(), 10_000, &[]);
+        let meeting = imported_meeting("entrevista.wav".into(), 10_000, &[], Some(4));
         assert!(kuali_core::is_browser_identifier(anonymous_id(
             &meeting.meta.id,
             0
@@ -445,6 +451,7 @@ mod tests {
         let mut json = serde_json::to_value(&meeting).unwrap();
         assert_eq!(json["source"]["kind"], "audioFile");
         assert_eq!(json["source"]["fileName"], "entrevista.wav");
+        assert_eq!(json["source"]["requestedSpeakers"], 4);
         let roundtrip: Meeting = serde_json::from_value(json.clone()).unwrap();
         assert_eq!(roundtrip.source, meeting.source);
         json["source"]
@@ -452,9 +459,13 @@ mod tests {
             .unwrap()
             .remove("speakerTurns");
         json["source"].as_object_mut().unwrap().remove("importedAt");
+        json["source"]
+            .as_object_mut()
+            .unwrap()
+            .remove("requestedSpeakers");
         let older_import: Meeting = serde_json::from_value(json.clone()).unwrap();
         assert!(
-            matches!(older_import.source, Some(kuali_core::meeting::MeetingSource::AudioFile { imported_at: None, speaker_turns, .. }) if speaker_turns.is_empty())
+            matches!(older_import.source, Some(kuali_core::meeting::MeetingSource::AudioFile { imported_at: None, requested_speakers: None, speaker_turns, .. }) if speaker_turns.is_empty())
         );
         json.as_object_mut().unwrap().remove("source");
         let legacy: Meeting = serde_json::from_value(json).unwrap();
@@ -475,7 +486,7 @@ mod tests {
                 end_ms: 8_000,
             },
         ];
-        let meeting = imported_meeting("dos-voces.wav".into(), 10_000, &segments);
+        let meeting = imported_meeting("dos-voces.wav".into(), 10_000, &segments, None);
         assert_eq!(meeting.speakers.len(), 2);
         assert!(meeting.utterances.is_empty());
         let Some(kuali_core::meeting::MeetingSource::AudioFile {
@@ -493,6 +504,28 @@ mod tests {
         assert_ne!(speaker_turns[0].speaker_id, speaker_turns[1].speaker_id);
         assert_eq!(meeting.meta.ended_at, *imported_at);
         assert!(meeting.meta.ended_at.unwrap() <= Utc::now());
+    }
+
+    #[test]
+    fn requested_count_preserves_actual_voices_without_fabricating_missing_speakers() {
+        let segments: Vec<_> = (0..3)
+            .map(|speaker_id| SpeakerSegment {
+                speaker_id,
+                start_ms: u64::from(speaker_id) * 1_000,
+                end_ms: u64::from(speaker_id + 1) * 1_000,
+            })
+            .collect();
+        let meeting = imported_meeting("reunion.wav".into(), 3_000, &segments, Some(4));
+        assert_eq!(meeting.speakers.len(), 3);
+        let json = serde_json::to_value(&meeting).unwrap();
+        assert_eq!(json["source"]["requestedSpeakers"], 4);
+        assert_eq!(json["source"]["speakerTurns"].as_array().unwrap().len(), 3);
+        let reloaded: Meeting = serde_json::from_value(json).unwrap();
+        assert_eq!(reloaded, meeting);
+
+        let automatic = imported_meeting("reunion.wav".into(), 3_000, &segments, None);
+        let json = serde_json::to_value(automatic).unwrap();
+        assert!(json["source"].get("requestedSpeakers").is_none());
     }
 
     #[test]
