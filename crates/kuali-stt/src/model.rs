@@ -507,7 +507,12 @@ mod tests {
 
     #[test]
     fn download_urls_point_at_the_matching_file_name() {
-        for model in WhisperModel::ALL {
+        // The GigaAM export is named `model.int8.onnx` upstream; its pinned URL
+        // is asserted with the catalog in kuali-core.
+        for model in WhisperModel::ALL
+            .into_iter()
+            .filter(|model| *model != WhisperModel::GigaamV3E2eCtc)
+        {
             assert!(
                 model.download_url().contains(model.file_name()),
                 "{:?} apunta a otro fichero",

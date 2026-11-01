@@ -33,8 +33,8 @@ Kuali listens to live calls, transcribes them on your computer, and keeps every
 speaker attached to their words. Meetings become a searchable library with live
 transcripts, summaries, decisions, questions, and participant-owned tasks.
 
-Raw audio is processed in memory by Whisper and Silero. It is never retained as
-an audio recording and never sent to a Kuali-operated service.
+Raw audio is processed in memory by Whisper or GigaAM and Silero. It is never
+retained as an audio recording and never sent to a Kuali-operated service.
 
 ## Why Kuali
 
@@ -64,9 +64,9 @@ Kuali is built around participants, not around one mixed system-audio file:
 
 The native desktop core is written in Rust. The Discord bot and gateway run
 from your Mac, while browser meetings use a loopback connection to the same
-machine. Kuali loads Whisper only when an active meeting needs it and releases
-the model from RAM after the final active meeting ends. The project is free and
-open source; no Kuali subscription or hosted account is required.
+machine. Kuali loads the speech model only when an active meeting needs it and
+releases it from RAM after the final active meeting ends. The project is free
+and open source; no Kuali subscription or hosted account is required.
 
 Learn about the dedicated
 [Discord transcription](https://kuali.garrux.dev/discord-meeting-transcription/)
@@ -88,9 +88,11 @@ workflows on the official website.
   support while their integrations are validated and improved.
 - Separate concurrent meetings without shared participants, clocks, or state.
 - Native Rust desktop core with about 40 MB of observed memory use while idle.
-- On-demand Whisper lifecycle: one model is shared by active meetings and
+- On-demand speech-model lifecycle: one model is shared by active meetings and
   released from RAM after the final meeting ends.
 - Local Whisper inference with Metal acceleration and Silero voice detection.
+- Optional Russian-only GigaAM engine that runs on the CPU; see
+  [Russian transcription](docs/russian-transcription.md).
 - Searchable meeting library with transcript excerpts, channel folders, and
   Markdown or JSON export.
 - Questions answered across past meetings from Discord or the desktop app, with
@@ -259,7 +261,7 @@ permissions in Kuali's configuration file.
 |---|---|
 | Raw audio | Processed in memory; not saved as an audio file |
 | Transcripts and meeting metadata | Stored locally in Kuali's application-data directory |
-| Whisper model weights | Stored in the directory selected by the user |
+| Whisper and GigaAM model weights | Stored in the directory selected by the user |
 | LLM requests | Disabled by the **Summaries and tasks** switch; otherwise sent only to the configured provider |
 | A local CLI as the provider | Runs with no tools, an emptied environment, and a kernel sandbox: it cannot see your home folder or write to disk |
 | Webhooks | Disabled until the user creates and enables a subscription |
@@ -271,7 +273,7 @@ responsible for using them appropriately. See the full [privacy policy](PRIVACY.
 ### Data locations
 
 ```text
-~/.kuali/                                      Whisper and Silero weights
+~/.kuali/                                      Whisper, GigaAM, and Silero weights
 
 ~/Library/Application Support/com.onwev.Kuali/
 └── meetings/<id>/
@@ -282,9 +284,9 @@ responsible for using them appropriately. See the full [privacy policy](PRIVACY.
 ```
 
 **Settings → Data → Reset Kuali** removes Kuali-owned configuration, meetings,
-logs, and Whisper weights after typed confirmation. It preserves the bundled
-runtime, Silero, the browser extension, and unrelated files in external model
-directories.
+logs, and Whisper and GigaAM weights after typed confirmation. It preserves the
+bundled runtime, Silero, the browser extension, and other files in external
+model directories that Kuali did not download.
 
 ## Integrations
 
@@ -339,7 +341,7 @@ npm run test:e2e:meet
 | `crates/kuali-core` | Shared types and configuration |
 | `crates/kuali-discord` | Discord lifecycle, consent, and per-speaker audio |
 | `crates/kuali-meet` | Local browser-meeting ingest and wire protocol |
-| `crates/kuali-stt` | Segmentation, Silero VAD, Whisper, and model storage |
+| `crates/kuali-stt` | Segmentation, Silero VAD, Whisper, GigaAM, and model storage |
 | `crates/kuali-llm` | LLM providers and structured meeting insights |
 | `crates/kuali-store` | Persistence, search, and export |
 | `crates/kuali-engine` | Concurrent meeting orchestration |

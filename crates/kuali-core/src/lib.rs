@@ -15,8 +15,8 @@ pub mod source;
 
 pub use config::{
     ApplicationConfig, DiscordConfig, IntegrationsConfig, KualiConfig, LlmConfig, MeetConfig,
-    ProviderSettings, RecordingConfig, WebMeetingsConfig, WebhookScope, WebhookSubscription,
-    WhisperConfig, WhisperModel, CONSENT_MESSAGE,
+    ProviderSettings, RecordingConfig, SpeechEngineKind, WebMeetingsConfig, WebhookScope,
+    WebhookSubscription, WhisperConfig, WhisperModel, CONSENT_MESSAGE,
 };
 pub use event::{EngineStatus, KualiEvent, ModelState, QuestionSetupStage};
 pub use meeting::{

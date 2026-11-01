@@ -1137,6 +1137,7 @@
                 <label class="field">
                   <span>Idioma del audio</span>
                   <select id="cfg-language" name="whisper-language" data-i18n-skip></select>
+                  <small id="cfg-language-fixed" hidden>Este modelo solo reconoce ruso.</small>
                   <small>El idioma y el vocabulario se fijan al entrar y se aplican desde la próxima llamada. Detectar automáticamente decide idioma en cada turno de habla, y en las respuestas cortas se equivoca: un «ajá» de medio segundo puede acabar transcrito en ruso.</small>
                 </label>
               </div>
@@ -1162,7 +1163,8 @@
                     <button type="button" class="ghost" id="btn-add-vocabulary">Añadir</button>
                   </div>
                   <div class="vocabulary-chips" id="vocabulary-chips" data-i18n-skip></div>
-                  <small>Whisper usará estas grafías como contexto desde la próxima llamada.</small>
+                  <small id="vocabulary-whisper-hint">Whisper usará estas grafías como contexto desde la próxima llamada.</small>
+                  <small id="vocabulary-unsupported" hidden>El modelo seleccionado no usa el vocabulario personalizado; se conserva para los modelos de Whisper.</small>
                 </div>
               </div>
 

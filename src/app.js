@@ -74,6 +74,7 @@ const state = {
   models: [],
   modelsDirectory: "",
   customVocabulary: [],
+  languageBeforeLock: null,
   settingsTab: "discord",
   discordEditing: true,
   /** Provider catalog with availability state. */
@@ -601,7 +602,7 @@ function renderStatus() {
     state.status === "joining"
       ? {
           verifying: t("Verificando modelo…"),
-          loading: t("Cargando Whisper…"),
+          loading: t("Cargando el modelo…"),
         }[state.modelState.state]
       : null;
   let [text, dotClass] = modelPreparation
@@ -5369,6 +5370,7 @@ function renderAudioLanguages() {
 
 async function openSettings() {
   closeWhisperModelPicker();
+  state.languageBeforeLock = null;
   let snapshot;
   [state.config, state.models, state.modelsDirectory, snapshot] = await Promise.all([
     invoke("get_config"),
@@ -5415,6 +5417,7 @@ async function openSettings() {
   state.customVocabulary = [...(c.whisper["custom-vocabulary"] ?? [])];
   $("cfg-vocabulary-input").value = "";
   renderCustomVocabulary();
+  applyModelLimits();
   updateModelsDirectoryHint();
   updateModelHint();
   renderInstalledModels();
@@ -5556,7 +5559,35 @@ function selectWhisperModel(modelId, { updateHint = true } = {}) {
     option.setAttribute("aria-selected", String(selected));
     option.tabIndex = selected ? 0 : -1;
   }
+  applyModelLimits();
   if (updateHint) updateModelHint();
+}
+
+/** Locks the audio language and vocabulary to what the selected model supports. */
+function applyModelLimits() {
+  const model = state.models.find((candidate) => candidate.id === $("cfg-model").value);
+  const fixedLanguage = model?.fixedLanguage ?? null;
+  const language = $("cfg-language");
+  if (fixedLanguage) {
+    if (!language.disabled) state.languageBeforeLock = language.value;
+    language.value = fixedLanguage;
+  } else if (language.disabled && state.languageBeforeLock) {
+    language.value = state.languageBeforeLock;
+  }
+  language.disabled = Boolean(fixedLanguage);
+  $("cfg-language-fixed").hidden = !fixedLanguage;
+
+  const vocabulary = model?.supportsVocabulary !== false;
+  $("cfg-vocabulary-input").disabled = !vocabulary;
+  $("btn-add-vocabulary").disabled = !vocabulary;
+  $("vocabulary-whisper-hint").hidden = !vocabulary;
+  $("vocabulary-unsupported").hidden = vocabulary;
+}
+
+/** The audio language the user picked, ignoring a model's lock. */
+function chosenAudioLanguage() {
+  const language = $("cfg-language");
+  return language.disabled ? state.languageBeforeLock ?? language.value : language.value;
 }
 
 function closeWhisperModelPicker(returnFocus = false) {
@@ -7134,7 +7165,8 @@ function wireUp() {
       // it moments ago and has not saved Settings yet.
       const storageConfig = structuredClone(state.config);
       storageConfig.whisper["models-directory"] = $("cfg-models-directory").value.trim() || null;
-      storageConfig.whisper.language = $("cfg-language").value;
+      // The new model is not selected yet, so keep the user's own language.
+      storageConfig.whisper.language = chosenAudioLanguage();
       storageConfig.whisper["custom-vocabulary"] = [...state.customVocabulary];
       await invoke("set_config", { config: storageConfig });
       state.config = storageConfig;

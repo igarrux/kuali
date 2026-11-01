@@ -820,9 +820,11 @@ fn replacement_model_after_deletion(
     models_dir: &std::path::Path,
     deleted: WhisperModel,
 ) -> WhisperModel {
+    // A Russian-only model is never chosen silently in place of another.
     WhisperModel::SELECTABLE
         .iter()
         .copied()
+        .filter(|candidate| candidate.fixed_language().is_none())
         .find(|candidate| *candidate != deleted && kuali_stt::is_downloaded(models_dir, *candidate))
         .unwrap_or(WhisperModel::LargeV3TurboQ5)
 }
@@ -1179,8 +1181,9 @@ impl Engine {
     }
 
     /// Saves configuration and reconnects when required by changed settings.
-    pub async fn update_config(&self, config: KualiConfig) -> Result<(), EngineError> {
+    pub async fn update_config(&self, mut config: KualiConfig) -> Result<(), EngineError> {
         validate_webhook_config(&config)?;
+        config.whisper.lock_model_language();
         let previous = self.config();
         let previous_models = previous.whisper.resolved_models_directory();
         let next_models = config.whisper.resolved_models_directory();
@@ -3001,6 +3004,12 @@ async fn load_model_without_gpu(
     config: &kuali_core::WhisperConfig,
     gpu_error: crate::stt_worker::WorkerError,
 ) -> Result<(), String> {
+    // GigaAM always runs on the CPU, so there is no Metal failure to retry.
+    if config.model.engine() == kuali_core::SpeechEngineKind::GigaAm {
+        return Err(format!(
+            "GigaAM no pudo cargar el modelo aunque sus pesos están íntegros. Libera memoria o elige un modelo de Whisper. Detalle: {gpu_error}"
+        ));
+    }
     if !config.gpu {
         return Err(format!(
             "Whisper no pudo cargar el modelo aunque sus pesos están íntegros. Libera memoria o elige Large v3 Q5. Detalle: {gpu_error}"
@@ -5899,6 +5908,14 @@ mod tests {
         ));
         std::fs::create_dir_all(&root).unwrap();
 
+        assert_eq!(
+            replacement_model_after_deletion(&root, WhisperModel::LargeV3TurboQ5),
+            WhisperModel::LargeV3TurboQ5
+        );
+
+        let russian_only = WhisperModel::GigaamV3E2eCtc;
+        let file = std::fs::File::create(kuali_stt::model_path(&root, russian_only)).unwrap();
+        file.set_len(russian_only.approx_bytes()).unwrap();
         assert_eq!(
             replacement_model_after_deletion(&root, WhisperModel::LargeV3TurboQ5),
             WhisperModel::LargeV3TurboQ5

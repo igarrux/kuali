@@ -598,6 +598,9 @@ pub struct ModelInfo {
     pub downloaded: bool,
     pub selectable: bool,
     pub recommended: bool,
+    /// Audio language the model is limited to, such as `ru` for GigaAM.
+    pub fixed_language: Option<&'static str>,
+    pub supports_vocabulary: bool,
 }
 
 #[tauri::command]
@@ -621,6 +624,8 @@ pub fn whisper_models(engine: State<'_, Engine>) -> Vec<ModelInfo> {
             downloaded: kuali_stt::is_downloaded(&models_dir, *model),
             selectable: model.is_selectable(),
             recommended: model.is_recommended(),
+            fixed_language: model.fixed_language(),
+            supports_vocabulary: model.supports_vocabulary(),
         })
         .collect()
 }

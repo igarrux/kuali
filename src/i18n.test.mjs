@@ -221,6 +221,34 @@ test("the curated model catalog exposes four clear performance tiers", () => {
   setLanguagePreference("es", { notify: false });
 });
 
+test("a Russian-only model locks the audio language and sets the vocabulary aside", () => {
+  setLanguagePreference("en", { notify: false });
+  assert.equal(t("Solo ruso"), "Russian only");
+  assert.equal(t("Este modelo solo reconoce ruso."), "This model recognizes Russian only.");
+  assert.equal(
+    t("Reconocimiento dedicado al ruso, con puntuación. Fija el idioma del audio en ruso."),
+    "Dedicated Russian recognition with punctuation. Locks the audio language to Russian.",
+  );
+  assert.equal(
+    t("El modelo seleccionado no usa el vocabulario personalizado; se conserva para los modelos de Whisper."),
+    "The selected model does not use the custom vocabulary; it is kept for Whisper models.",
+  );
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
+  const commands = readFileSync(new URL("../src-tauri/src/commands.rs", import.meta.url), "utf8");
+  assert.match(html, /id="cfg-language-fixed" hidden/);
+  assert.match(html, /id="vocabulary-unsupported" hidden/);
+  assert.match(html, /id="vocabulary-whisper-hint"/);
+  assert.match(app, /language\.disabled = Boolean\(fixedLanguage\)/);
+  assert.match(app, /language\.value = state\.languageBeforeLock/);
+  assert.match(app, /model\?\.supportsVocabulary !== false/);
+  assert.match(app, /storageConfig\.whisper\.language = chosenAudioLanguage\(\)/);
+  assert.equal(t("Cargando el modelo…"), "Loading the model…");
+  assert.match(commands, /fixed_language: model\.fixed_language\(\)/);
+  assert.match(commands, /supports_vocabulary: model\.supports_vocabulary\(\)/);
+  setLanguagePreference("es", { notify: false });
+});
+
 test("a corrupt model is recovered only after Whisper rejects it", () => {
   const app = readFileSync(new URL("./app.js", import.meta.url), "utf8");
   const engine = readFileSync(

@@ -272,12 +272,22 @@ pub enum WhisperModel {
     LargeV3TurboLatam,
     /// The same Latin American fine-tune quantized to Q5_0.
     LargeV3TurboLatamQ5,
+    /// Sber's GigaAM-v3 end-to-end CTC model for Russian, with punctuation,
+    /// run through sherpa-onnx instead of whisper.cpp.
+    GigaamV3E2eCtc,
+}
+
+/// Recognition engine that runs a [`WhisperModel`] entry.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SpeechEngineKind {
+    Whisper,
+    GigaAm,
 }
 
 impl WhisperModel {
     /// Every weight Kuali recognizes on disk. Retired choices stay here so old
     /// configurations remain readable and their files can still be removed.
-    pub const ALL: [WhisperModel; 11] = [
+    pub const ALL: [WhisperModel; 12] = [
         Self::Tiny,
         Self::Base,
         Self::Small,
@@ -289,19 +299,51 @@ impl WhisperModel {
         Self::LargeV3Q8,
         Self::LargeV3TurboLatam,
         Self::LargeV3TurboLatamQ5,
+        Self::GigaamV3E2eCtc,
     ];
 
     /// Curated choices offered for new downloads, ordered from the lightest
     /// everyday option to the highest-fidelity local option.
-    pub const SELECTABLE: [WhisperModel; 4] = [
+    pub const SELECTABLE: [WhisperModel; 5] = [
         Self::LargeV3TurboQ5,
         Self::LargeV3Turbo,
         Self::LargeV3Q5,
         Self::LargeV3Q8,
+        Self::GigaamV3E2eCtc,
     ];
 
     pub fn is_selectable(self) -> bool {
         Self::SELECTABLE.contains(&self)
+    }
+
+    pub fn engine(self) -> SpeechEngineKind {
+        match self {
+            Self::Tiny
+            | Self::Base
+            | Self::Small
+            | Self::Medium
+            | Self::LargeV3Turbo
+            | Self::LargeV3TurboQ5
+            | Self::LargeV3
+            | Self::LargeV3Q5
+            | Self::LargeV3Q8
+            | Self::LargeV3TurboLatam
+            | Self::LargeV3TurboLatamQ5 => SpeechEngineKind::Whisper,
+            Self::GigaamV3E2eCtc => SpeechEngineKind::GigaAm,
+        }
+    }
+
+    /// Audio language a model is limited to, if it cannot follow the setting.
+    pub fn fixed_language(self) -> Option<&'static str> {
+        match self.engine() {
+            SpeechEngineKind::GigaAm => Some("ru"),
+            SpeechEngineKind::Whisper => None,
+        }
+    }
+
+    /// Whether the custom vocabulary reaches the decoder as a prompt.
+    pub fn supports_vocabulary(self) -> bool {
+        self.engine() == SpeechEngineKind::Whisper
     }
 
     pub fn file_name(self) -> &'static str {
@@ -317,11 +359,16 @@ impl WhisperModel {
             Self::LargeV3Q8 => "ggml-large-v3-q8_0.bin",
             Self::LargeV3TurboLatam => "ggml-large-v3-turbo-latam.bin",
             Self::LargeV3TurboLatamQ5 => "ggml-large-v3-turbo-latam-q5_0.bin",
+            Self::GigaamV3E2eCtc => "gigaam-v3-e2e-ctc.int8.onnx",
         }
     }
 
     pub fn download_url(self) -> String {
         let base = match self {
+            // The sherpa-onnx export, pinned to a commit of its upstream mirror.
+            Self::GigaamV3E2eCtc => {
+                return "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/4fb5407ff028a69fec516cdf4c10fac9ddea7c16/model.int8.onnx".to_string();
+            }
             Self::LargeV3Q8 => {
                 "https://github.com/igarrux/kuali-models/releases/download/large-v3-q8-v1"
             }
@@ -347,6 +394,7 @@ impl WhisperModel {
             Self::LargeV3Q8 => 1_656_538_283,
             Self::LargeV3TurboLatam => 1_624_555_275,
             Self::LargeV3TurboLatamQ5 => 574_041_195,
+            Self::GigaamV3E2eCtc => 224_893_661,
         }
     }
 
@@ -372,6 +420,9 @@ impl WhisperModel {
             Self::LargeV3TurboLatamQ5 => {
                 "1f6261540cb4bdb81cb5821ea40e1dc8ae3041fa4a73f00249abe3e65738dcc4"
             }
+            Self::GigaamV3E2eCtc => {
+                "d5fea8df94263c285e54b21e5774b707c707192d3bdbeffd7b1eb07fb6743b35"
+            }
         }
     }
 
@@ -388,6 +439,7 @@ impl WhisperModel {
             Self::LargeV3Q8 => "Large v3 Q8 — máxima precisión local",
             Self::LargeV3TurboLatam => "Large v3 Turbo LatAm — español latino, F16",
             Self::LargeV3TurboLatamQ5 => "Large v3 Turbo LatAm Q5 — español latino, ligero",
+            Self::GigaamV3E2eCtc => "GigaAM v3 — solo ruso, con puntuación",
         }
     }
 
@@ -398,6 +450,7 @@ impl WhisperModel {
             Self::LargeV3Turbo => "Equilibrado",
             Self::LargeV3Q5 => "Preciso",
             Self::LargeV3Q8 => "Máxima precisión",
+            Self::GigaamV3E2eCtc => "Solo ruso",
             _ => self.label(),
         }
     }
@@ -415,6 +468,7 @@ impl WhisperModel {
             Self::LargeV3Q8 => "Whisper Large v3 (Q8_0)",
             Self::LargeV3TurboLatam => "Whisper Large v3 Turbo LatAm (F16)",
             Self::LargeV3TurboLatamQ5 => "Whisper Large v3 Turbo LatAm (Q5_0)",
+            Self::GigaamV3E2eCtc => "GigaAM v3 E2E CTC (INT8)",
         }
     }
 
@@ -432,6 +486,9 @@ impl WhisperModel {
             Self::LargeV3Q8 => {
                 "La mayor fidelidad disponible en Kuali, con una cuantización conservadora."
             }
+            Self::GigaamV3E2eCtc => {
+                "Reconocimiento dedicado al ruso, con puntuación. Fija el idioma del audio en ruso."
+            }
             _ => "Modelo anterior conservado para administrar instalaciones existentes.",
         }
     }
@@ -444,6 +501,8 @@ impl WhisperModel {
             Self::LargeV3Turbo => 1_800_000_000,
             Self::LargeV3Q5 => 1_300_000_000,
             Self::LargeV3Q8 => 1_900_000_000,
+            // Peak of 406 MB measured with Silero on a 16 GB M-series Mac.
+            Self::GigaamV3E2eCtc => 450_000_000,
             _ => self.approx_bytes().saturating_add(150_000_000),
         }
     }
@@ -489,6 +548,13 @@ impl Default for WhisperConfig {
 impl WhisperConfig {
     pub fn resolved_models_directory(&self) -> PathBuf {
         crate::paths::resolve_models_dir(self.models_directory.as_deref())
+    }
+
+    /// Applies the audio language the selected model is limited to.
+    pub fn lock_model_language(&mut self) {
+        if let Some(language) = self.model.fixed_language() {
+            self.language = language.to_string();
+        }
     }
 }
 
@@ -635,6 +701,7 @@ impl KualiConfig {
         } else if !self.whisper.model.is_selectable() {
             self.whisper.model = WhisperConfig::default().model;
         }
+        self.whisper.lock_model_language();
         self
     }
 
@@ -1014,11 +1081,12 @@ mod tests {
 
     #[test]
     fn the_public_catalog_is_curated_without_removing_legacy_file_support() {
-        assert_eq!(WhisperModel::SELECTABLE.len(), 4);
+        assert_eq!(WhisperModel::SELECTABLE.len(), 5);
         assert!(WhisperModel::LargeV3TurboQ5.is_selectable());
         assert!(WhisperModel::LargeV3Turbo.is_selectable());
         assert!(WhisperModel::LargeV3Q5.is_selectable());
         assert!(WhisperModel::LargeV3Q8.is_selectable());
+        assert!(WhisperModel::GigaamV3E2eCtc.is_selectable());
         assert!(!WhisperModel::Tiny.is_selectable());
         assert!(!WhisperModel::Base.is_selectable());
         assert!(!WhisperModel::Small.is_selectable());
@@ -1078,6 +1146,80 @@ mod tests {
             model.download_url(),
             "https://github.com/igarrux/kuali-models/releases/download/large-v3-q8-v1/ggml-large-v3-q8_0.bin"
         );
+    }
+
+    #[test]
+    fn gigaam_points_to_the_pinned_sherpa_onnx_export() {
+        let model = WhisperModel::GigaamV3E2eCtc;
+        assert_eq!(
+            serde_json::to_value(model).unwrap().as_str(),
+            Some("gigaam-v3-e2e-ctc")
+        );
+        assert_eq!(model.engine(), SpeechEngineKind::GigaAm);
+        assert_eq!(model.fixed_language(), Some("ru"));
+        assert!(!model.supports_vocabulary());
+        assert_eq!(model.file_name(), "gigaam-v3-e2e-ctc.int8.onnx");
+        assert_eq!(model.approx_bytes(), 224_893_661);
+        assert_eq!(
+            model.sha256(),
+            "d5fea8df94263c285e54b21e5774b707c707192d3bdbeffd7b1eb07fb6743b35"
+        );
+        assert_eq!(
+            model.download_url(),
+            "https://huggingface.co/csukuangfj/sherpa-onnx-nemo-ctc-punct-giga-am-v3-russian-2025-12-16/resolve/4fb5407ff028a69fec516cdf4c10fac9ddea7c16/model.int8.onnx"
+        );
+        assert!(!model.is_recommended());
+    }
+
+    #[test]
+    fn whisper_models_keep_the_configured_language() {
+        for model in WhisperModel::ALL {
+            if model != WhisperModel::GigaamV3E2eCtc {
+                assert_eq!(model.engine(), SpeechEngineKind::Whisper);
+                assert_eq!(model.fixed_language(), None);
+                assert!(model.supports_vocabulary());
+            }
+        }
+        let mut cfg = KualiConfig::default();
+        cfg.whisper.model = WhisperModel::LargeV3Q5;
+        cfg.whisper.language = "auto".into();
+        assert_eq!(cfg.migrated().whisper.language, "auto");
+    }
+
+    #[test]
+    fn gigaam_locks_the_audio_language_to_russian() {
+        let mut cfg = KualiConfig::default();
+        cfg.whisper.model = WhisperModel::GigaamV3E2eCtc;
+        cfg.whisper.language = "es".into();
+        let migrated = cfg.migrated();
+        assert_eq!(migrated.whisper.model, WhisperModel::GigaamV3E2eCtc);
+        assert_eq!(migrated.whisper.language, "ru");
+    }
+
+    #[test]
+    fn configs_without_an_engine_choice_keep_whisper() {
+        let cfg: KualiConfig = toml::from_str(
+            r#"
+                [whisper]
+                model = "large-v3-q5"
+                language = "en"
+            "#,
+        )
+        .expect("old config");
+        let cfg = cfg.migrated();
+        assert_eq!(cfg.whisper.model.engine(), SpeechEngineKind::Whisper);
+        assert_eq!(cfg.whisper.language, "en");
+
+        let cfg: KualiConfig = toml::from_str(
+            r#"
+                [whisper]
+                model = "gigaam-v3-e2e-ctc"
+            "#,
+        )
+        .expect("GigaAM config");
+        let cfg = cfg.migrated();
+        assert_eq!(cfg.whisper.model.engine(), SpeechEngineKind::GigaAm);
+        assert_eq!(cfg.whisper.language, "ru");
     }
 
     #[test]

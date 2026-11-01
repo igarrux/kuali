@@ -9,14 +9,15 @@ use std::path::Path;
 use kuali_core::WhisperConfig;
 use whisper_rs::{
     FullParams, SamplingStrategy, WhisperContext, WhisperContextParameters, WhisperState,
-    WhisperTokenId, WhisperVadContext, WhisperVadContextParams, WhisperVadParams,
+    WhisperTokenId,
 };
 
 use crate::audio::{ms_to_samples, WHISPER_SAMPLE_RATE};
+use crate::vad::SpeechGate;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SttError {
-    #[error("failed to load the Whisper model: {0}")]
+    #[error("failed to load the transcription model: {0}")]
     Load(String),
     #[error("transcription failed: {0}")]
     Transcribe(String),
@@ -70,7 +71,7 @@ const HALLUCINATIONS: &[&str] = &[
 
 /// whisper.cpp uses 30-second windows and handles very short input poorly, so
 /// fragments are padded with silence to this minimum.
-const MIN_INPUT_MS: u64 = 1_000;
+pub(crate) const MIN_INPUT_MS: u64 = 1_000;
 const MAX_VOCABULARY_TERMS: usize = 64;
 const MAX_VOCABULARY_TERM_CHARS: usize = 80;
 const MAX_VOCABULARY_PROMPT_CHARS: usize = 1_024;
@@ -87,9 +88,7 @@ pub struct WhisperEngine {
     translate: bool,
     threads: i32,
     vocabulary_prompt_tokens: Vec<WhisperTokenId>,
-    /// Silero is a gate before Whisper rather than an optional post-processing
-    /// filter. It loads once with the primary model.
-    vad: WhisperVadContext,
+    vad: SpeechGate,
     /// Retained so the context lives as long as its state.
     _context: WhisperContext,
 }
@@ -123,15 +122,7 @@ impl WhisperEngine {
             .create_state()
             .map_err(|e| SttError::Load(e.to_string()))?;
 
-        let vad_path = crate::model::vad_model_path(&config.resolved_models_directory());
-        let vad_path = vad_path
-            .to_str()
-            .ok_or_else(|| SttError::BadPath(vad_path.display().to_string()))?;
-        let mut vad_params = WhisperVadContextParams::default();
-        vad_params.set_n_threads(1);
-        vad_params.set_use_gpu(false);
-        let vad = WhisperVadContext::new(vad_path, vad_params)
-            .map_err(|e| SttError::Load(format!("Silero VAD: {e}")))?;
+        let vad = SpeechGate::load(&config.resolved_models_directory())?;
 
         Ok(Self {
             state,
@@ -169,7 +160,7 @@ impl WhisperEngine {
         } else {
             samples
         };
-        let vad_samples = self.speech_only(samples)?;
+        let vad_samples = self.vad.speech_only(samples)?;
         if vad_samples.is_empty() {
             return Ok(Transcription {
                 text: String::new(),
@@ -280,38 +271,6 @@ impl WhisperEngine {
         Ok(tokens)
     }
 
-    /// Silero removes anything it does not recognize as speech and preserves
-    /// padding around accepted regions. VAD failures propagate instead of
-    /// degrading into sending noise to Whisper.
-    fn speech_only(&mut self, samples: &[f32]) -> Result<Vec<f32>, SttError> {
-        let mut params = WhisperVadParams::default();
-        params.set_threshold(0.5);
-        params.set_min_speech_duration(250);
-        params.set_min_silence_duration(250);
-        params.set_speech_pad(80);
-        params.set_samples_overlap(0.1);
-        let segments = self
-            .vad
-            .segments_from_samples(params, samples)
-            .map_err(|e| SttError::Transcribe(format!("Silero VAD: {e}")))?;
-
-        let mut speech = Vec::new();
-        for segment in segments {
-            let start = ((segment.start / 100.0) * WHISPER_SAMPLE_RATE as f32) as usize;
-            let end = ((segment.end / 100.0) * WHISPER_SAMPLE_RATE as f32) as usize;
-            let start = start.min(samples.len());
-            let end = end.min(samples.len());
-            if start >= end {
-                continue;
-            }
-            if !speech.is_empty() {
-                speech.resize(speech.len() + ms_to_samples(100), 0.0);
-            }
-            speech.extend_from_slice(&samples[start..end]);
-        }
-        Ok(speech)
-    }
-
     pub fn sample_rate(&self) -> u32 {
         WHISPER_SAMPLE_RATE
     }
@@ -409,7 +368,7 @@ fn build_vocabulary_prompt(terms: &[String], language: &str) -> Option<String> {
     })
 }
 
-fn resolve_threads(configured: u16) -> i32 {
+pub(crate) fn resolve_threads(configured: u16) -> i32 {
     if configured > 0 {
         return configured as i32;
     }

@@ -1,4 +1,4 @@
-//! Whisper runs on a dedicated thread.
+//! Speech recognition runs on a dedicated thread.
 //!
 //! Transcription blocks for hundreds of milliseconds and whisper.cpp retains
 //! mutable state between calls, making async-runtime execution and task sharing
@@ -10,7 +10,7 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 
 use kuali_core::{DiscordUserId, WhisperConfig};
-use kuali_stt::{SttError, Transcription, WhisperEngine};
+use kuali_stt::{SpeechEngine, SttError, Transcription};
 use tokio::sync::{mpsc, oneshot};
 
 enum Command {
@@ -75,7 +75,7 @@ impl SttWorker {
         std::thread::Builder::new()
             .name("kuali-whisper".into())
             .spawn(move || {
-                let mut engine: Option<WhisperEngine> = None;
+                let mut engine: Option<SpeechEngine> = None;
                 let mut speaker_contexts: HashMap<DiscordUserId, SpeakerContext> = HashMap::new();
 
                 while let Some(command) = rx.blocking_recv() {
@@ -88,7 +88,7 @@ impl SttWorker {
                             // Drop the previous model before loading another to
                             // avoid holding two large models in RAM.
                             engine = None;
-                            let result = WhisperEngine::load(&path, &config).map(|loaded| {
+                            let result = SpeechEngine::load(&path, &config).map(|loaded| {
                                 engine = Some(loaded);
                                 speaker_contexts.clear();
                             });
@@ -144,7 +144,7 @@ impl SttWorker {
                         Command::Unload { reply } => {
                             engine = None;
                             speaker_contexts.clear();
-                            tracing::debug!("Whisper model unloaded from memory");
+                            tracing::debug!("transcription model unloaded from memory");
                             // Confirm only after dropping the engine, not merely
                             // after enqueueing the command.
                             let _ = reply.send(());
