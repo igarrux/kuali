@@ -5,7 +5,10 @@
  */
 import { encodeAudio, encodeMeetingEvent, mapFrameChannel } from "./protocol.js";
 import { healthUrl, isKualiHealthMessage } from "./health.js";
-import { meetingPresence } from "./lifecycle.js";
+import { applyFrameReady, forgetFrameSlot, meetingPresence } from "./lifecycle.js";
+import "./capture-policy.js";
+
+const capturePolicy = globalThis.KualiCapturePolicy;
 
 const DEFAULT_PORT = 9099;
 const HEALTH_TIMEOUT_MS = 900;
@@ -28,6 +31,7 @@ function stateFor(tabId) {
       error: null,
       frames: new Map([[0, 0]]),
       nextFrameSlot: 1,
+      primaryFrameId: 0,
       channels: new Map(),
       tracks: new Map(),
       participantCount: 0,
@@ -163,7 +167,7 @@ function rememberFrame(state, frameId = 0) {
 
 function wireChannel(state, frameId, localChannel) {
   rememberFrame(state, frameId);
-  // Each frame receives a block of 2,048 channels. The top frame retains
+  // Each frame receives a block of 2,048 channels. The primary frame retains
   // reserved channels 999 (mixed) and 1000 (microphone) for compatibility.
   return mapFrameChannel(state.frames.get(frameId), localChannel);
 }
@@ -375,7 +379,18 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
     case "frame-ready":
       {
         const frameId = sender.frameId ?? 0;
-        rememberFrame(state, frameId);
+        const { displaced } = applyFrameReady(state, frameId, {
+          topDocument: !!message.platform,
+          primary: !!message.primary,
+        });
+        if (displaced !== null) {
+          // The previous primary frame's slot-0
+          // lanes and roster count are stale.
+          forgetFrameSlot(state.channels, 0);
+          forgetFrameSlot(state.tracks, 0);
+          state.participantCountsByFrame.delete(displaced);
+          state.participantCount = Math.max(0, ...state.participantCountsByFrame.values());
+        }
         if (message.platform) state.info = {
           platform: message.platform,
           meetingId: message.meetingId,
@@ -389,6 +404,12 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
           ).catch(() => {});
         }
         publish(tabId);
+      }
+      break;
+    case "primary-frame-gone":
+      if ((sender.frameId ?? 0) === state.primaryFrameId && state.status === "capturing") {
+        state.selfPresent = false;
+        scheduleAutomaticStop(tabId, state);
       }
       break;
     case "capture-start":
@@ -455,7 +476,7 @@ chrome.runtime.onMessage.addListener((message, sender, reply) => {
             : typeof detail.selfPresentInDom === "boolean"
               ? (detail.selfPresentInDom ? [{ isSelf: true }] : [])
             : detail.participants;
-          const presence = meetingPresence(frameId, state.hadSelf, presenceParticipants);
+          const presence = meetingPresence(frameId, state.hadSelf, presenceParticipants, state.primaryFrameId);
           if (presence) {
             state.selfPresent = presence.selfPresent;
             state.hadSelf = presence.hadSelf;
@@ -500,11 +521,7 @@ chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
   if (!["connecting", "waiting", "capturing"].includes(state.status)) return;
   try {
     const next = new URL(changeInfo.url);
-    const stillOnPlatform = state.info?.platform === "google_meet"
-      ? next.hostname === "meet.google.com"
-      : state.info?.platform === "zoom"
-        ? next.hostname === "zoom.us" || next.hostname.endsWith(".zoom.us")
-        : next.hostname === "teams.microsoft.com";
+    const stillOnPlatform = capturePolicy.isPlatformHost(state.info?.platform, next.hostname);
     if (!stillOnPlatform) stop(tabId, false);
   } catch (_) {
     stop(tabId, false);

@@ -4,7 +4,7 @@
     "description": "Extension name"
   },
   "appDescription": {
-    "message": "Capture Meet, Microsoft Teams, and Zoom audio for local transcription in the Kuali desktop app.",
+    "message": "Capture Meet, Teams, Zoom, and Telemost audio for local transcription in the Kuali desktop app.",
     "description": "Extension description"
   },
   "webMeetings": { "message": "Web meetings" },

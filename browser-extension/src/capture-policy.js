@@ -10,6 +10,37 @@
   const MEET_REMOTE_AUDIO_ACTIVITY_GAP_MS = 750;
   const MEET_REMOTE_AUDIO_STALL_MS = 4_000;
   const MEET_REMOTE_AUDIO_RECOVERY_COOLDOWN_MS = 8_000;
+  const TELEMOST_HOSTS = new Set([
+    "telemost.yandex.ru",
+    "telemost.yandex.com",
+    "telemost.360.yandex.ru",
+    "telemost.360.yandex.com",
+  ]);
+
+  function meetingPlatformForHost(host) {
+    if (host === "meet.google.com") return "google_meet";
+    if (host === "zoom.us" || String(host).endsWith(".zoom.us")) return "zoom";
+    if (TELEMOST_HOSTS.has(host)) return "yandex_telemost";
+    return "microsoft_teams";
+  }
+
+  /** Whether a navigated tab stays on the platform; Teams is the fallback. */
+  function isPlatformHost(platform, host) {
+    const name = String(host || "");
+    if (platform === "google_meet") return name === "meet.google.com";
+    if (platform === "zoom") return name === "zoom.us" || name.endsWith(".zoom.us");
+    if (platform === "yandex_telemost") return TELEMOST_HOSTS.has(name);
+    return name === "teams.microsoft.com";
+  }
+
+  /**
+   * Telemost renders the call in a same-origin /private-join/ iframe under its
+   * messenger shell, so that frame owns roster, microphone and presence.
+   */
+  function isPrimaryCaptureFrame(platform, pathname, isTopFrame) {
+    if (platform === "yandex_telemost") return /^\/private-join\//.test(String(pathname || ""));
+    return !!isTopFrame;
+  }
 
   /**
    * A direct DOM/MediaStream identity belongs to that track. The microphone is
@@ -28,7 +59,8 @@
    * still given its explicit self identity by startMic().
    */
   function mediaElementIdentity(platform, identity) {
-    return platform === "google_meet" ? null : identity;
+    // Telemost plays one server-side mix; its speakers come from goloom VAD.
+    return platform === "google_meet" || platform === "yandex_telemost" ? null : identity;
   }
 
   function rosterDetail(roster, platform) {
@@ -482,8 +514,21 @@
     return !!trackEnabled && controlMuted === false;
   }
 
+  /**
+   * Telemost local microphone gate, fail closed: only inside the call, the
+   * visible toolbar button wins, then the client's own updateMe/hello state.
+   */
+  function shouldSendTelemostMicrophone({ trackEnabled, inCall, controlMuted = null, protocolMuted = null }) {
+    if (!trackEnabled || !inCall) return false;
+    if (typeof controlMuted === "boolean") return !controlMuted;
+    return protocolMuted === false;
+  }
+
   globalThis.KualiCapturePolicy = Object.freeze({
     MIC_CHANNEL,
+    meetingPlatformForHost,
+    isPlatformHost,
+    isPrimaryCaptureFrame,
     shouldCorrelateIdentity,
     mediaElementIdentity,
     rosterDetail,
@@ -504,5 +549,6 @@
     resolveMeetRouteIdentity,
     meetMicrophoneMuted,
     shouldSendMeetMicrophone,
+    shouldSendTelemostMicrophone,
   });
 })();

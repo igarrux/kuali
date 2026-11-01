@@ -7,6 +7,25 @@ const FROM_PAGE = "kuali.capture.v1";
 const TO_PAGE = "kuali.control.v1";
 const SUGGESTION_LIFETIME_MS = 10_000;
 const PRIVACY_URL = chrome.runtime.getURL("privacy.html");
+// Mirrors capture-policy.js: Chrome injects a file into one world per frame,
+// so the isolated content script cannot share the MAIN-world copy.
+const TELEMOST_HOSTS = new Set([
+  "telemost.yandex.ru",
+  "telemost.yandex.com",
+  "telemost.360.yandex.ru",
+  "telemost.360.yandex.com",
+]);
+const PLATFORM = location.hostname === "meet.google.com"
+  ? "google_meet"
+  : location.hostname === "zoom.us" || location.hostname.endsWith(".zoom.us")
+    ? "zoom"
+    : TELEMOST_HOSTS.has(location.hostname) ? "yandex_telemost" : "microsoft_teams";
+// Telemost runs the call in a /private-join/ iframe below its messenger shell.
+const PRIMARY_FRAME = PLATFORM === "yandex_telemost"
+  ? location.pathname.startsWith("/private-join/")
+  : window === window.top;
+// Platforms whose capture reports roster-state, which the suggestion needs.
+const SUGGESTION_PLATFORMS = new Set(["google_meet", "yandex_telemost"]);
 
 function translated(key, fallback) {
   try {
@@ -64,13 +83,16 @@ function sendRuntimeMessage(message) {
 }
 
 function meetingInfo() {
-  const host = location.hostname;
-  if (host === "meet.google.com") {
+  if (PLATFORM === "google_meet") {
     return { platform: "google_meet", meetingId: location.pathname.split("/").filter(Boolean)[0] || document.title };
   }
-  if (host === "zoom.us" || host.endsWith(".zoom.us")) {
+  if (PLATFORM === "zoom") {
     const match = location.pathname.match(/\/(?:wc|j|w)\/([^/?#]+)/);
     return { platform: "zoom", meetingId: match?.[1] || document.title };
+  }
+  if (PLATFORM === "yandex_telemost") {
+    const match = location.pathname.match(/\/(?:j|private-join)\/(\d+)/);
+    return { platform: "yandex_telemost", meetingId: match?.[1] || document.title };
   }
   return {
     platform: "microsoft_teams",
@@ -80,7 +102,7 @@ function meetingInfo() {
 
 window.addEventListener("message", (event) => {
   if (event.source !== window || event.data?.protocol !== FROM_PAGE) return;
-  if (window === window.top && event.data.type === "meeting-event" && event.data.kind === "roster-state") {
+  if (PRIMARY_FRAME && event.data.type === "meeting-event" && event.data.kind === "roster-state") {
     maybeSuggestRecording(event.data).catch(() => {});
   }
   sendRuntimeMessage({ type: "capture-event", event: event.data });
@@ -104,7 +126,7 @@ chrome.runtime.onMessage.addListener((message) => {
 });
 
 async function maybeSuggestRecording(event) {
-  if (location.hostname !== "meet.google.com" || suggestionHost) return;
+  if (!SUGGESTION_PLATFORMS.has(PLATFORM) || suggestionHost) return;
   const participants = event.detail?.participants;
   if (!Array.isArray(participants) || participants.length === 0) {
     clearTimeout(suggestionRetry);
@@ -590,11 +612,17 @@ function showRecordingSuggestion() {
 
 sendRuntimeMessage({
   type: "frame-ready",
+  primary: PRIMARY_FRAME,
   ...(window === window.top ? { ...meetingInfo(), title: document.title } : {}),
 });
 
 if (window === window.top) {
   window.addEventListener("pagehide", () => {
     sendRuntimeMessage({ type: "capture-stop" });
+  }, { once: true });
+} else if (PRIMARY_FRAME) {
+  // Telemost removes its call iframe on hang-up while the shell page stays.
+  window.addEventListener("pagehide", () => {
+    sendRuntimeMessage({ type: "primary-frame-gone" });
   }, { once: true });
 }
