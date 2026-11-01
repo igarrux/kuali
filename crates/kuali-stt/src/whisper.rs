@@ -17,7 +17,7 @@ use crate::vad::SpeechGate;
 
 #[derive(Debug, thiserror::Error)]
 pub enum SttError {
-    #[error("failed to load the Whisper model: {0}")]
+    #[error("failed to load the transcription model: {0}")]
     Load(String),
     #[error("transcription failed: {0}")]
     Transcribe(String),

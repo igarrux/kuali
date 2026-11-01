@@ -192,13 +192,16 @@ pub(crate) async fn process(
         }
         let model_path = kuali_stt::model_path(&models_dir, config.whisper.model);
         report(&progress, AudioImportStage::Transcribing, 0, turns.len() as u64);
-        let mut whisper = match kuali_stt::WhisperEngine::load(&model_path, &config.whisper) {
+        let mut whisper = match kuali_stt::SpeechEngine::load(&model_path, &config.whisper) {
             Ok(whisper) => whisper,
-            Err(error) if config.whisper.gpu => {
+            Err(error)
+                if config.whisper.gpu
+                    && config.whisper.model.engine() == kuali_core::SpeechEngineKind::Whisper =>
+            {
                 tracing::warn!(%error, "import Whisper load failed with GPU; retrying on CPU");
                 let mut cpu = config.whisper.clone();
                 cpu.gpu = false;
-                kuali_stt::WhisperEngine::load(&model_path, &cpu).map_err(|error| error.to_string())?
+                kuali_stt::SpeechEngine::load(&model_path, &cpu).map_err(|error| error.to_string())?
             }
             Err(error) => return Err(error.to_string()),
         };
