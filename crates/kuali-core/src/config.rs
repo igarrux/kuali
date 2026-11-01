@@ -28,8 +28,8 @@ pub struct KualiConfig {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(default, rename_all = "kebab-case")]
 pub struct ApplicationConfig {
-    /// `auto` follows the operating system/browser locale. `es` and `en` pin
-    /// the interface to that language without changing transcription or
+    /// `auto` follows the operating system/browser locale. `es`, `en` and `ru`
+    /// pin the interface to that language without changing transcription or
     /// summary languages.
     pub language: String,
     /// Install signed updates whenever no recording or summary is in progress.

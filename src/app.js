@@ -1428,7 +1428,7 @@ function renderLiveMeetingList() {
     const participants = meeting.speakers.filter(isMeetingParticipant).length;
     meta.textContent = t("{count} {people} · Transcribiendo", {
       count: participants || "—",
-      people: t(participants === 1 ? "participante" : "participantes"),
+      people: t(participants === 1 ? "participante" : "participantes", { count: participants }),
     });
     copy.append(title, meta);
     const pulse = document.createElement("span");
