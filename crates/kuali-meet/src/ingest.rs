@@ -895,7 +895,8 @@ pub fn is_web_meeting_platform(name: &str) -> bool {
     )
 }
 
-fn platform_label(platform: &str) -> &str {
+/// Display label for the `platform` an extension declares when it connects.
+pub fn platform_label(platform: &str) -> &str {
     match platform {
         "google_meet" | "meet" => "Google Meet",
         "microsoft_teams" | "ms_teams" | "teams" => "Microsoft Teams",
