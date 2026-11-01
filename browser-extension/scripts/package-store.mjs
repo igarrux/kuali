@@ -62,6 +62,7 @@ const files = [
   "src/page-capture.js",
   "src/pcm-worklet.js",
   "src/protocol.js",
+  "src/telemost-protocol.js",
 ].sort();
 
 for (const relative of files) {

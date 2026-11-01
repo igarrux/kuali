@@ -2,6 +2,7 @@ const platformNames = {
   google_meet: "Google Meet",
   microsoft_teams: "Microsoft Teams",
   zoom: "Zoom",
+  yandex_telemost: "Yandex Telemost",
 };
 const message = (key, substitutions, fallback) => {
   try {

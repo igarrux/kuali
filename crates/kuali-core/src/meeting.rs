@@ -411,6 +411,7 @@ impl Meeting {
             [] if self.meta.guild_name == "Google Meet" => "Reunión de Google Meet".into(),
             [] if self.meta.guild_name == "Microsoft Teams" => "Reunión de Microsoft Teams".into(),
             [] if self.meta.guild_name == "Zoom" => "Reunión de Zoom".into(),
+            [] if self.meta.guild_name == "Yandex Telemost" => "Reunión de Yandex Telemost".into(),
             [] => format!("Reunión en #{}", self.meta.channel_name),
             [one] => format!("Sesión de {one}"),
             [one, two] => format!("{one} y {two}"),
@@ -697,6 +698,14 @@ mod tests {
     fn a_meeting_without_an_llm_gets_a_participant_title() {
         let meeting = meeting_with(vec![(10, 0, 1_000, "hola"), (20, 2_000, 3_000, "qué tal")]);
         assert_eq!(meeting.fallback_title(), "Ana y Luis");
+    }
+
+    #[test]
+    fn a_telemost_meeting_without_participants_gets_a_platform_title() {
+        let mut meeting = meeting_with(vec![]);
+        meeting.meta.guild_name = "Yandex Telemost".into();
+        meeting.speakers.clear();
+        assert_eq!(meeting.fallback_title(), "Reunión de Yandex Telemost");
     }
 
     #[test]

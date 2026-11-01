@@ -71,12 +71,14 @@ test("localized store summaries fit the 132-character limit", () => {
   }
 });
 
-test("store copy marks Teams and Zoom as experimental with partial support", () => {
+test("store copy marks Teams, Zoom, and Telemost as experimental with partial support", () => {
   const english = read("store/listing.en.md");
   const spanish = read("store/listing.es-419.md");
 
   assert.match(english, /Google Meet support is stable/);
-  assert.match(english, /Microsoft Teams and Zoom support is experimental[\s\S]*partial/);
+  assert.match(english, /Microsoft Teams, Zoom, and Yandex Telemost\s+support is experimental[\s\S]*partial/);
+  assert.match(english, /not affiliated with Google, Microsoft, Zoom, or Yandex/);
   assert.match(spanish, /Google Meet tiene soporte estable/);
-  assert.match(spanish, /Microsoft Teams y Zoom tienen soporte[\s\S]*experimental y parcial/);
+  assert.match(spanish, /Microsoft Teams, Zoom y Yandex Telemost\s+tienen soporte[\s\S]*experimental y parcial/);
+  assert.match(spanish, /no está afiliado con Google, Microsoft, Zoom ni Yandex/);
 });

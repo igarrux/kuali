@@ -84,8 +84,8 @@ workflows on the official website.
 - Interactive Discord delivery with summaries, key points, decisions,
   questions, tasks, paginated transcripts, and complete downloads.
 - Automatic Discord following with an immediate pause control.
-- Experimental browser capture for Microsoft Teams and Zoom, with partial
-  support while their integrations are validated and improved.
+- Experimental browser capture for Microsoft Teams, Zoom, and Yandex Telemost,
+  with partial support while their integrations are validated and improved.
 - Separate concurrent meetings without shared participants, clocks, or state.
 - Native Rust desktop core with about 40 MB of observed memory use while idle.
 - On-demand Whisper lifecycle: one model is shared by active meetings and
@@ -167,9 +167,9 @@ present, inside the server where the command was used. This is not a filter
 applied to results: meetings outside that set are never retrieved, so the model
 never sees them and cannot quote them. Attending silently still counts, and
 browser meetings are excluded because a Discord account cannot be matched
-against a Google Meet, Teams, or Zoom participant. Answers are always ephemeral
-and cite the meetings they rest on, so a claim about what the team decided can
-be checked.
+against a Google Meet, Teams, Zoom, or Telemost participant. Answers are always
+ephemeral and cite the meetings they rest on, so a claim about what the team
+decided can be checked.
 
 The desktop application has the same feature under **Ask**, without the
 participant restriction: it runs on the machine that recorded the meetings, for
@@ -211,10 +211,21 @@ and labels mixed audio honestly instead of inventing an attribution.
 | Google Meet | Stable |
 | Microsoft Teams | Experimental · partial support |
 | Zoom | Experimental · partial support |
+| Yandex Telemost | Experimental · partial support |
 
-Teams and Zoom have not yet received the same depth of real-world testing as
-Discord and Google Meet. Their capture, participant identity, or speaker
-separation may be incomplete in some meeting modes while support improves.
+Teams, Zoom, and Yandex Telemost have not yet received the same depth of
+real-world testing as Discord and Google Meet. Their capture, participant
+identity, or speaker separation may be incomplete
+in some meeting modes while support improves.
+
+Telemost mixes all remote participants into a single audio stream on its
+server, so it has no per-participant tracks. Kuali reads Telemost's own
+per-participant voice-activity flags and roster from the meeting page, locally
+in the browser, and routes the mixed audio to whoever was speaking. Overlapping
+speech is credited to whoever started speaking most recently, and very short
+interjections or sound Telemost does not flag as speech appear under the shared
+room speaker. Behavior with more than about 12 participants is not verified
+yet. Your own microphone is captured separately.
 
 ## Resource use
 

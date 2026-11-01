@@ -1,0 +1,531 @@
+{
+  "_about": "Yandex Telemost goloom signalling and REST samples for unit tests, captured from a controlled test call and redacted. Placeholders: <P_HOST>, <P1>, <P2>, <P3> = goloom participant ids; <NAME_*> = display names. Direction: in = server->client, out = client->server.",
+  "out.hello": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000001",
+        "hello": {
+          "participantMeta": {
+            "name": "<NAME_HOST>",
+            "role": "SPEAKER",
+            "description": "",
+            "sendAudio": true,
+            "sendVideo": true
+          },
+          "participantAttributes": {
+            "name": "<NAME_HOST>",
+            "role": "SPEAKER",
+            "description": ""
+          },
+          "sendAudio": true,
+          "sendVideo": true,
+          "sendSharing": false,
+          "participantId": "<P_HOST>",
+          "roomId": "<ROOM_ID>",
+          "serviceName": "telemost",
+          "credentials": "<REDACTED>"
+        }
+      }
+    }
+  ],
+  "out.updateMe.mic_off": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000002",
+        "updateMe": {
+          "participantMeta": {
+            "name": "<NAME_HOST>",
+            "description": "",
+            "role": "SPEAKER",
+            "sendAudio": false,
+            "sendVideo": true
+          },
+          "participantAttributes": {
+            "name": "<NAME_HOST>",
+            "role": "SPEAKER",
+            "description": ""
+          },
+          "sendAudio": false,
+          "sendVideo": true,
+          "sendSharing": false
+        }
+      }
+    }
+  ],
+  "out.updateMe.camera_off": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000003",
+        "updateMe": {
+          "participantMeta": {
+            "name": "<NAME_HOST>",
+            "description": "",
+            "role": "SPEAKER",
+            "sendAudio": true,
+            "sendVideo": false
+          },
+          "participantAttributes": {
+            "name": "<NAME_HOST>",
+            "role": "SPEAKER",
+            "description": ""
+          },
+          "sendAudio": true,
+          "sendVideo": false,
+          "sendSharing": false
+        }
+      }
+    }
+  ],
+  "out.ping": [
+    {"msg": {"uid": "00000000-0000-4000-8000-000000000004", "ping": {}}}
+  ],
+  "out.setSlots": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000005",
+        "setSlots": {
+          "slots": [
+            {"width": 1312, "height": 738},
+            {"width": 720, "height": 405},
+            {"width": 656, "height": 369},
+            {"width": 656, "height": 369},
+            {"width": 464, "height": 261},
+            {"width": 464, "height": 261},
+            {"width": 416, "height": 234},
+            {"width": 416, "height": 234},
+            {"width": 416, "height": 234},
+            {"width": 352, "height": 198},
+            {"width": 352, "height": 198},
+            {"width": 352, "height": 198}
+          ],
+          "audioSlotsCount": 0,
+          "key": 5,
+          "shutdownAllVideo": null,
+          "withSelfView": true,
+          "selfViewVisibility": "ON_LOADING_THEN_SHOW",
+          "gridConfig": {}
+        }
+      }
+    }
+  ],
+  "in.updateDescription.snapshot_on_join_one_peer": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000006",
+        "updateDescription": {
+          "description": [
+            {
+              "id": "<P_HOST>",
+              "meta": {
+                "name": "<NAME_HOST>",
+                "role": "SPEAKER",
+                "description": "",
+                "sendAudio": true,
+                "sendVideo": true
+              },
+              "participantAttributes": {},
+              "sendAudio": true,
+              "sendVideo": true,
+              "sendSharing": false,
+              "hideFromParticipantsList": false,
+              "networkScore": "EXCELLENT",
+              "connectionType": "CONNECTION_TYPE_SDK"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "in.updateDescription.snapshot_on_join_alone": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000007",
+        "updateDescription": {"description": []}
+      }
+    }
+  ],
+  "in.upsertDescription.join": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000008",
+        "upsertDescription": {
+          "description": [
+            {
+              "id": "<P1>",
+              "meta": {
+                "name": "<NAME_P1>",
+                "role": "SPEAKER",
+                "description": "",
+                "sendAudio": true,
+                "sendVideo": true
+              },
+              "participantAttributes": {},
+              "sendAudio": true,
+              "sendVideo": true,
+              "sendSharing": false,
+              "hideFromParticipantsList": false,
+              "networkScore": "NETWORK_QUALITY_SCORE_UNSPECIFIED",
+              "connectionType": "CONNECTION_TYPE_SDK"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "in.upsertDescription.remote_mic_muted": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000009",
+        "upsertDescription": {
+          "description": [
+            {
+              "id": "<P2>",
+              "meta": {
+                "name": "<NAME_P2>",
+                "role": "SPEAKER",
+                "description": "",
+                "sendAudio": false,
+                "sendVideo": true
+              },
+              "participantAttributes": {},
+              "sendAudio": false,
+              "sendVideo": true,
+              "sendSharing": false,
+              "hideFromParticipantsList": false,
+              "networkScore": "EXCELLENT",
+              "connectionType": "CONNECTION_TYPE_SDK"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "in.upsertDescription.remote_camera_off": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000010",
+        "upsertDescription": {
+          "description": [
+            {
+              "id": "<P_HOST>",
+              "meta": {
+                "name": "<NAME_HOST>",
+                "role": "SPEAKER",
+                "description": "",
+                "sendAudio": true,
+                "sendVideo": false
+              },
+              "participantAttributes": {},
+              "sendAudio": true,
+              "sendVideo": false,
+              "sendSharing": false,
+              "hideFromParticipantsList": false,
+              "networkScore": "EXCELLENT",
+              "connectionType": "CONNECTION_TYPE_SDK"
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "in.removeDescription.leave": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000011",
+        "removeDescription": {"descriptionId": ["<P2>"]}
+      }
+    }
+  ],
+  "in.slotsMeta": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000012",
+        "slotsMeta": {"maxOffset": 1}
+      }
+    }
+  ],
+  "in.slotsConfig.alone": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000014",
+        "slotsConfig": {
+          "key": 5,
+          "videoSlots": [],
+          "audioSlots": [],
+          "prevSlots": [],
+          "slots": [
+            {"selfView": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""}
+          ],
+          "nextSlots": [],
+          "offset": 0,
+          "gridConfig": {}
+        }
+      }
+    }
+  ],
+  "in.slotsConfig.remote_speaking_vad_true": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000017",
+        "slotsConfig": {
+          "key": 9,
+          "videoSlots": [],
+          "audioSlots": [],
+          "prevSlots": [],
+          "slots": [
+            {"selfView": {}, "vad": false, "pinned": false, "label": ""},
+            {
+              "participantVideoByMid": {
+                "participantId": "<P1>",
+                "mid": "video_AA",
+                "limitationReason": "NO_LIMITATION"
+              },
+              "vad": false,
+              "pinned": false,
+              "label": "fake_device_0"
+            },
+            {
+              "participantVideoByMid": {
+                "participantId": "<P2>",
+                "mid": "video_AB",
+                "limitationReason": "NO_LIMITATION"
+              },
+              "vad": true,
+              "pinned": false,
+              "label": "fake_device_0"
+            },
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""}
+          ],
+          "nextSlots": [],
+          "offset": 0,
+          "gridConfig": {}
+        }
+      }
+    }
+  ],
+  "in.slotsConfig.remote_speaking_camera_off_vad_true": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000018",
+        "slotsConfig": {
+          "key": 9,
+          "videoSlots": [],
+          "audioSlots": [],
+          "prevSlots": [],
+          "slots": [
+            {"selfView": {}, "vad": false, "pinned": false, "label": ""},
+            {
+              "participantVideoByMid": {
+                "participantId": "<P1>",
+                "mid": "video_AA",
+                "limitationReason": "NO_LIMITATION"
+              },
+              "vad": false,
+              "pinned": false,
+              "label": "fake_device_0"
+            },
+            {
+              "participant": {"participantId": "<P2>"},
+              "vad": true,
+              "pinned": false,
+              "label": ""
+            },
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""}
+          ],
+          "nextSlots": [],
+          "offset": 0,
+          "gridConfig": {}
+        }
+      }
+    }
+  ],
+  "in.slotsConfig.three_remote_peers": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000019",
+        "slotsConfig": {
+          "key": 23,
+          "videoSlots": [],
+          "audioSlots": [],
+          "prevSlots": [],
+          "slots": [
+            {"selfView": {}, "vad": false, "pinned": false, "label": ""},
+            {
+              "participantVideoByMid": {
+                "participantId": "<P1>",
+                "mid": "video_AA",
+                "limitationReason": "NO_LIMITATION"
+              },
+              "vad": true,
+              "pinned": false,
+              "label": "fake_device_0"
+            },
+            {
+              "participant": {"participantId": "<P2>"},
+              "vad": false,
+              "pinned": false,
+              "label": ""
+            },
+            {
+              "participant": {"participantId": "<P3>"},
+              "vad": false,
+              "pinned": false,
+              "label": ""
+            },
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""},
+            {"empty": {}, "vad": false, "pinned": false, "label": ""}
+          ],
+          "nextSlots": [],
+          "offset": 0,
+          "gridConfig": {}
+        }
+      }
+    }
+  ],
+  "in.vadActivity.self": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000020",
+        "vadActivity": {"active": true}
+      }
+    },
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000021",
+        "vadActivity": {"active": false}
+      }
+    }
+  ],
+  "in.ack": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000022",
+        "ack": {"status": {"code": "OK", "description": ""}}
+      }
+    }
+  ],
+  "in.upsertParticipantsQualityReport": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000023",
+        "upsertParticipantsQualityReport": {
+          "participantsQualityReport": [
+            {"participantId": "<P1>", "networkScore": "EXCELLENT"}
+          ]
+        }
+      }
+    }
+  ],
+  "in.selfQualityReport": [
+    {
+      "msg": {
+        "uid": "00000000-0000-4000-8000-000000000024",
+        "selfQualityReport": {"networkScore": "EXCELLENT"}
+      }
+    }
+  ],
+  "rest.POST_request-states.initial": {
+    "url": "https://cloud-api.yandex.ru/telemost_front/v2/telemost/conferences/https%3A%2F%2Ftelemost.yandex.ru%2Fj%2F00000000000000/request-states",
+    "response": {
+      "peers": [
+        {
+          "peer_id": "<P1>",
+          "peer_type": "USER",
+          "version": 2,
+          "state": {
+            "user_data": {
+              "role": "MEMBER",
+              "display_name": "<NAME_P1>",
+              "avatar_placeholder": {
+                "background_color": "#6e41f5",
+                "text_color": "#fff",
+                "abbreviation": "<INITIALS>"
+              }
+            }
+          },
+          "public_permissions_override": null
+        },
+        {
+          "peer_id": "<P_HOST>",
+          "peer_type": "USER",
+          "version": 1,
+          "state": {
+            "user_data": {
+              "role": "OWNER",
+              "display_name": "<NAME_HOST>",
+              "avatar_url": "https://avatars.example.test/p_host/islands-300",
+              "is_default_avatar": false,
+              "avatar_placeholder": {
+                "background_color": "#eb4940",
+                "text_color": "#fff",
+                "abbreviation": "<INITIALS>"
+              }
+            }
+          },
+          "public_permissions_override": null
+        }
+      ]
+    }
+  },
+  "rest.POST_request-states.new_peer": {
+    "url": "https://cloud-api.yandex.ru/telemost_front/v2/telemost/conferences/https%3A%2F%2Ftelemost.yandex.ru%2Fj%2F00000000000000/request-states",
+    "response": {
+      "peers": [
+        {
+          "peer_id": "<P2>",
+          "peer_type": "USER",
+          "version": 3,
+          "state": {
+            "user_data": {
+              "role": "MEMBER",
+              "display_name": "<NAME_P2>",
+              "avatar_placeholder": {
+                "background_color": "#f8cd46",
+                "text_color": "#000",
+                "abbreviation": "<INITIALS>"
+              }
+            }
+          },
+          "public_permissions_override": null
+        }
+      ]
+    }
+  },
+  "rest.POST_request-states.periodic_no_change": {
+    "url": "https://cloud-api.yandex.ru/telemost_front/v2/telemost/conferences/https%3A%2F%2Ftelemost.yandex.ru%2Fj%2F00000000000000/request-states",
+    "response": {"peers": []}
+  }
+}

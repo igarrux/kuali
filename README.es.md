@@ -89,8 +89,8 @@ en el sitio oficial.
 - Entrega interactiva en Discord con resumen, puntos clave, decisiones,
   preguntas, tareas, transcripción paginada y descargas completas.
 - Seguimiento automático en Discord con un control inmediato para pausarlo.
-- Captura experimental para Microsoft Teams y Zoom, con soporte parcial mientras
-  se validan y mejoran sus integraciones.
+- Captura experimental para Microsoft Teams, Zoom y Yandex Telemost, con soporte
+  parcial mientras se validan y mejoran sus integraciones.
 - Varias reuniones simultáneas con participantes, relojes y estado independientes.
 - Núcleo de escritorio nativo en Rust con cerca de 40 MB de memoria observada
   mientras está en espera.
@@ -176,8 +176,8 @@ aplicado a los resultados: las reuniones fuera de ese conjunto nunca se
 recuperan, así que el modelo no las ve y no puede citarlas. Haber estado en
 silencio también cuenta, y las reuniones de navegador quedan excluidas porque
 una cuenta de Discord no puede corresponderse con un participante de Google
-Meet, Teams o Zoom. Las respuestas son siempre efímeras y citan las reuniones en
-las que se apoyan, para que puedas comprobar lo que se afirma.
+Meet, Teams, Zoom o Telemost. Las respuestas son siempre efímeras y citan las
+reuniones en las que se apoyan, para que puedas comprobar lo que se afirma.
 
 La aplicación de escritorio tiene lo mismo en **Preguntar**, sin la restricción
 por participación: se ejecuta en la máquina que grabó las reuniones, para quien
@@ -222,11 +222,22 @@ inventar quién habló.
 | Google Meet | Estable |
 | Microsoft Teams | Experimental · soporte parcial |
 | Zoom | Experimental · soporte parcial |
+| Yandex Telemost | Experimental · soporte parcial |
 
-Teams y Zoom todavía no tienen el mismo nivel de pruebas en reuniones reales
-que Discord y Google Meet. La captura, la identidad de participantes o la
-separación de hablantes pueden ser incompletas en algunos modos mientras mejora
-el soporte.
+Teams, Zoom y Yandex Telemost todavía no tienen el mismo nivel de pruebas en
+reuniones reales que Discord y Google Meet. La captura, la identidad de
+participantes o la separación de hablantes pueden ser incompletas en algunos
+modos mientras mejora el soporte.
+
+Telemost mezcla a todos los participantes remotos en un solo flujo de audio en
+su servidor, así que no hay pistas por participante. Kuali lee, en local y desde
+la página de la reunión, los indicadores de actividad de voz y la lista de
+participantes que da el propio Telemost, y asigna el audio mezclado a quien
+estaba hablando. El habla superpuesta se atribuye a quien empezó a hablar más
+recientemente, y las interjecciones muy cortas o el sonido que Telemost no
+marca como voz aparecen bajo el hablante compartido «Sala». El comportamiento
+con más de unos 12 participantes aún no está verificado. Tu propio micrófono se
+captura por separado.
 
 ## Uso de recursos
 

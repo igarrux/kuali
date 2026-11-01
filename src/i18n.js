@@ -458,8 +458,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Instalar en Arc": "Install in Arc",
   "Chrome Web Store también permite instalar extensiones en Edge, Brave y Arc.":
     "The Chrome Web Store also supports installing extensions in Edge, Brave, and Arc.",
-  "Google Meet tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y parcial.":
-    "Google Meet has stable support. Microsoft Teams and Zoom have experimental, partial support.",
+  "Google Meet tiene soporte estable. Microsoft Teams, Zoom y Yandex Telemost tienen soporte experimental y parcial.":
+    "Google Meet has stable support. Microsoft Teams, Zoom, and Yandex Telemost have experimental, partial support.",
   "Instalación manual": "Manual installation",
   "Úsala solamente si la tienda no está disponible. Abre el administrador del navegador, activa":
     "Use this only when the store is unavailable. Open the browser's extension manager, enable",

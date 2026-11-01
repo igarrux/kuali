@@ -32,6 +32,13 @@ process:
 - the resulting speaker-attributed transcript, confidence values, summary,
   key points, decisions, open questions, and action items.
 
+For Yandex Telemost meetings, the extension reads Telemost's own meeting
+signalling inside the page — participant names, mute state, voice-activity
+flags, and the local participant ID — plus one Telemost profile response for
+avatar URLs. This happens only on your computer; Kuali keeps no credentials or
+tokens and sends nothing beyond the loopback
+connection to the desktop application.
+
 For Discord calls, the desktop application may process the equivalent server,
 channel, participant, voice, and message-delivery information required to join
 the call, attribute speakers, announce recording, and deliver results.
