@@ -10,7 +10,7 @@ use std::io::Write;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use anyhow::{anyhow, Context, Result};
 use chrono::Utc;
@@ -99,6 +99,13 @@ struct ChannelProbe {
     peak: f32,
 }
 
+fn now_ms() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_millis() as u64)
+        .unwrap_or(0)
+}
+
 #[derive(Debug, Clone, Default, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct WireProbe {
@@ -112,9 +119,46 @@ struct WireProbe {
     roster: Vec<serde_json::Value>,
     meet_probe: Option<serde_json::Value>,
     channels: BTreeMap<u32, ChannelProbe>,
+    connections: Vec<IngestConnection>,
+}
+
+/// One `/ingest` session, timed so runners can measure automatic stops.
+#[derive(Debug, Clone, Default, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct IngestConnection {
+    index: usize,
+    path: String,
+    opened_ms: u64,
+    close_code: Option<u16>,
+    close_frame_ms: Option<u64>,
+    closed_ms: Option<u64>,
+}
+
+fn is_ingest_path(path: &str) -> bool {
+    path.split('?').next() == Some("/ingest")
+}
+
+/// Prints the session as a `KUALI_E2E_INGEST` line for runners that follow
+/// stdout while the browser is still in the call.
+fn announce_ingest(event: &str, connection: &IngestConnection) {
+    let line = serde_json::json!({ "event": event, "connection": connection });
+    println!("KUALI_E2E_INGEST {line}");
+    let _ = std::io::stdout().flush();
 }
 
 impl WireProbe {
+    fn open_ingest(&mut self, path: &str, now_ms: u64) -> IngestConnection {
+        self.request_path.get_or_insert_with(|| path.to_string());
+        let connection = IngestConnection {
+            index: self.connections.len(),
+            path: path.to_string(),
+            opened_ms: now_ms,
+            ..IngestConnection::default()
+        };
+        self.connections.push(connection.clone());
+        connection
+    }
+
     fn observe(&mut self, message: &Message) {
         match message {
             Message::Binary(bytes) => {
@@ -296,11 +340,12 @@ async fn main() -> Result<()> {
     let wire = Arc::new(Mutex::new(WireProbe::default()));
     let (proxy_errors_tx, mut proxy_errors_rx) = mpsc::unbounded_channel();
     let proxy_wire = Arc::clone(&wire);
-    let proxy = tokio::spawn(async move {
-        if let Err(error) = proxy_once(external_listener, internal_port, proxy_wire).await {
-            let _ = proxy_errors_tx.send(error.to_string());
-        }
-    });
+    let proxy = tokio::spawn(serve_extension(
+        external_listener,
+        internal_port,
+        proxy_wire,
+        proxy_errors_tx,
+    ));
 
     let ready = serde_json::json!({
         "port": external_port,
@@ -407,12 +452,7 @@ async fn main() -> Result<()> {
     engine.stop_web_ingest().await;
     engine.disconnect().await;
 
-    if !proxy.is_finished() {
-        tokio::time::sleep(Duration::from_millis(250)).await;
-    }
-    if !proxy.is_finished() {
-        proxy.abort();
-    }
+    proxy.abort();
 
     let test_meeting_removed = match meeting_id.as_deref() {
         Some(id) => engine.delete_meeting(id).is_ok(),
@@ -487,53 +527,117 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-// Tungstenite's handshake callback owns a deliberately large HTTP error type.
-#[allow(clippy::result_large_err)]
-async fn proxy_once(
+/// Accepts every extension connection. `/health` checks pass straight through
+/// to the engine; `/ingest` sessions are also observed and timed.
+async fn serve_extension(
     listener: TcpListener,
     upstream_port: u16,
     wire: Arc<Mutex<WireProbe>>,
-) -> Result<()> {
-    let (stream, _) = listener.accept().await?;
+    errors: mpsc::UnboundedSender<String>,
+) {
+    loop {
+        let stream = match listener.accept().await {
+            Ok((stream, _)) => stream,
+            Err(error) => {
+                let _ = errors.send(error.to_string());
+                return;
+            }
+        };
+        tokio::spawn(proxy_connection(
+            stream,
+            upstream_port,
+            Arc::clone(&wire),
+            errors.clone(),
+        ));
+    }
+}
+
+// Tungstenite's handshake callback owns a deliberately large HTTP error type.
+#[allow(clippy::result_large_err)]
+async fn proxy_connection(
+    stream: TcpStream,
+    upstream_port: u16,
+    wire: Arc<Mutex<WireProbe>>,
+    errors: mpsc::UnboundedSender<String>,
+) {
     let request_path = Arc::new(Mutex::new(String::new()));
     let captured_path = Arc::clone(&request_path);
-    let client = tokio_tungstenite::accept_hdr_async(
+    let client = match tokio_tungstenite::accept_hdr_async(
         stream,
         move |request: &Request, response: Response| {
             *captured_path.lock() = request.uri().to_string();
             Ok(response)
         },
     )
-    .await?;
+    .await
+    {
+        Ok(client) => client,
+        Err(error) => {
+            eprintln!("[sonda] conexión rechazada: {error}");
+            return;
+        }
+    };
     let request_path = request_path.lock().clone();
-    wire.lock().request_path = Some(request_path.clone());
+    let session = is_ingest_path(&request_path).then(|| {
+        let connection = wire.lock().open_ingest(&request_path, now_ms());
+        announce_ingest("open", &connection);
+        connection.index
+    });
 
-    let upstream_stream = connect_with_retry(upstream_port).await?;
-    let upstream_url = format!("ws://127.0.0.1:{upstream_port}{request_path}");
-    let (upstream, _) = tokio_tungstenite::client_async(upstream_url, upstream_stream).await?;
-    let (mut client_sink, mut client_source) = client.split();
-    let (mut upstream_sink, mut upstream_source) = upstream.split();
+    let piped: Result<()> = async {
+        let upstream_stream = connect_with_retry(upstream_port).await?;
+        let upstream_url = format!("ws://127.0.0.1:{upstream_port}{request_path}");
+        let (upstream, _) = tokio_tungstenite::client_async(upstream_url, upstream_stream).await?;
+        let (mut client_sink, mut client_source) = client.split();
+        let (mut upstream_sink, mut upstream_source) = upstream.split();
 
-    loop {
-        tokio::select! {
-            message = client_source.next() => {
-                let Some(message) = message else { break };
-                let message = message?;
-                let closing = matches!(message, Message::Close(_));
-                wire.lock().observe(&message);
-                upstream_sink.send(message).await?;
-                if closing { break; }
-            }
-            message = upstream_source.next() => {
-                let Some(message) = message else { break };
-                let message = message?;
-                let closing = matches!(message, Message::Close(_));
-                client_sink.send(message).await?;
-                if closing { break; }
+        loop {
+            tokio::select! {
+                message = client_source.next() => {
+                    let Some(message) = message else { break };
+                    let message = message?;
+                    let closing = matches!(message, Message::Close(_));
+                    if let Some(index) = session {
+                        let mut wire = wire.lock();
+                        wire.observe(&message);
+                        if let Message::Close(frame) = &message {
+                            let connection = &mut wire.connections[index];
+                            connection.close_code =
+                                frame.as_ref().map(|frame| u16::from(frame.code));
+                            connection.close_frame_ms = Some(now_ms());
+                            announce_ingest("close-frame", connection);
+                        }
+                    }
+                    upstream_sink.send(message).await?;
+                    if closing { break; }
+                }
+                message = upstream_source.next() => {
+                    let Some(message) = message else { break };
+                    let message = message?;
+                    let closing = matches!(message, Message::Close(_));
+                    client_sink.send(message).await?;
+                    if closing { break; }
+                }
             }
         }
+        Ok(())
     }
-    Ok(())
+    .await;
+
+    if let Some(index) = session {
+        let mut wire = wire.lock();
+        let connection = &mut wire.connections[index];
+        connection.closed_ms = Some(now_ms());
+        announce_ingest("closed", connection);
+    }
+    match piped {
+        Ok(()) => {}
+        // Only a broken capture session invalidates the run.
+        Err(error) if session.is_some() => {
+            let _ = errors.send(error.to_string());
+        }
+        Err(error) => eprintln!("[sonda] {request_path}: {error}"),
+    }
 }
 
 async fn connect_with_retry(port: u16) -> Result<TcpStream> {
@@ -758,4 +862,24 @@ fn workspace_root() -> PathBuf {
         .and_then(Path::parent)
         .expect("kuali-engine debe vivir dentro del workspace")
         .to_path_buf()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_ingest_sessions_are_observed_and_the_first_one_names_the_run() {
+        assert!(is_ingest_path("/ingest?platform=yandex_telemost"));
+        assert!(is_ingest_path("/ingest"));
+        assert!(!is_ingest_path("/health?client=kuali-extension"));
+        assert!(!is_ingest_path("/ingestion"));
+
+        let mut wire = WireProbe::default();
+        let first = wire.open_ingest("/ingest?platform=a", 10);
+        let second = wire.open_ingest("/ingest?platform=b", 20);
+        assert_eq!((first.index, second.index), (0, 1));
+        assert_eq!(wire.request_path.as_deref(), Some("/ingest?platform=a"));
+        assert_eq!(wire.connections[1].opened_ms, 20);
+    }
 }
