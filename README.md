@@ -45,7 +45,7 @@ Kuali is built around participants, not around one mixed system-audio file:
   participant context with live audio. Kuali does not need to guess afterward
   with post-recording diarization.
 - **Discord and Google Meet setup is deliberately simple: three short steps.**
-  The bilingual guide shows the real controls, saves progress, and avoids
+  The localized guide shows the real controls, saves progress, and avoids
   manual OAuth URLs, configuration files, and browser developer mode.
 - **Your existing AI setup can generate the insights.** Kuali can reuse an
   authenticated Claude Code, Codex, or Gemini CLI session. It also supports
@@ -98,8 +98,8 @@ workflows on the official website.
 - Optional summaries, key points, decisions, questions, and tasks by participant.
 - Task filters by person, meeting, status, and date range.
 - Signed webhooks containing the completed meeting and full transcript.
-- English and Spanish interface, guided setup, menu-bar controls, and launch at
-  login.
+- English, Spanish, and Russian interface, guided setup, menu-bar
+  controls, and launch at login.
 
 ## Quick start
 
@@ -343,7 +343,7 @@ npm run test:e2e:meet
 | `crates/kuali-llm` | LLM providers and structured meeting insights |
 | `crates/kuali-store` | Persistence, search, and export |
 | `crates/kuali-engine` | Concurrent meeting orchestration |
-| `src-tauri` / `src` | Desktop backend and bilingual interface |
+| `src-tauri` / `src` | Desktop backend and localized interface |
 | `browser-extension` | Browser capture extension |
 
 ## Community

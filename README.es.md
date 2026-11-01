@@ -47,7 +47,7 @@ con todo el audio mezclado:
   el contexto del participante junto al audio. Kuali no tiene que adivinar
   después mediante diarización sobre una grabación.
 - **Configurar Discord y Google Meet es extremadamente simple: tres pasos
-  cortos.** La guía bilingüe muestra los controles reales, guarda el progreso y
+  cortos.** La guía traducida muestra los controles reales, guarda el progreso y
   evita URLs de OAuth manuales, archivos de configuración y el modo
   desarrollador del navegador.
 - **La IA que ya usas puede generar los resultados.** Kuali reutiliza sesiones
@@ -105,8 +105,8 @@ en el sitio oficial.
   completamente opcionales.
 - Filtros de tareas por persona, reunión, estado y rango de fechas.
 - Webhooks firmados con la reunión terminada y su transcripción completa.
-- Interfaz en español e inglés, configuración guiada, controles en la barra de
-  menús e inicio automático.
+- Interfaz en español, inglés y ruso, configuración guiada, controles en la
+  barra de menús e inicio automático.
 
 ## Inicio rápido
 
@@ -357,7 +357,7 @@ npm run test:e2e:meet
 | `crates/kuali-llm` | Proveedores y resultados estructurados |
 | `crates/kuali-store` | Persistencia, búsqueda y exportación |
 | `crates/kuali-engine` | Coordinación de reuniones simultáneas |
-| `src-tauri` / `src` | Backend de escritorio e interfaz bilingüe |
+| `src-tauri` / `src` | Backend de escritorio e interfaz traducida |
 | `browser-extension` | Extensión de captura para el navegador |
 
 ## Comunidad
