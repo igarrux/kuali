@@ -34,8 +34,8 @@ test("the recording indicator stays compact, movable, and out of Meet controls",
   assert.match(content, /pointerdown/);
 });
 
-test("both store locales contain a name and description", () => {
-  for (const locale of ["en", "es_419"]) {
+test("every store locale contains a name and description", () => {
+  for (const locale of ["en", "es_419", "ru"]) {
     const messages = JSON.parse(read(`_locales/${locale}/messages.json`));
     assert(messages.appName.message);
     assert(messages.appDescription.message.length >= 40);

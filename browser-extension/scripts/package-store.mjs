@@ -48,6 +48,7 @@ const files = [
   "privacy.js",
   "_locales/en/messages.json",
   "_locales/es_419/messages.json",
+  "_locales/ru/messages.json",
   "icons/icon16.png",
   "icons/icon32.png",
   "icons/icon48.png",
