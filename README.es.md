@@ -34,8 +34,8 @@ quién dijo cada cosa. Las reuniones se convierten en una biblioteca con
 transcripción en vivo, búsqueda, resúmenes, decisiones, preguntas y tareas por
 participante.
 
-Whisper y Silero procesan el audio en memoria. Kuali no conserva una grabación
-de audio ni la envía a un servicio operado por el proyecto.
+Whisper (o GigaAM) y Silero procesan el audio en memoria. Kuali no conserva una
+grabación de audio ni la envía a un servicio operado por el proyecto.
 
 ## Por qué Kuali
 
@@ -68,8 +68,8 @@ con todo el audio mezclado:
 
 El núcleo nativo de escritorio está escrito en Rust. El bot y el gateway de
 Discord corren desde tu Mac, mientras que las reuniones del navegador usan una
-conexión loopback hacia la misma computadora. Kuali carga Whisper solo cuando
-una reunión activa lo necesita y libera el modelo de la RAM al finalizar la
+conexión loopback hacia la misma computadora. Kuali carga el modelo de voz solo
+cuando una reunión activa lo necesita y lo libera de la RAM al finalizar la
 última reunión activa. El proyecto es gratis y open source; no requiere una
 suscripción ni una cuenta alojada por Kuali.
 
@@ -94,9 +94,11 @@ en el sitio oficial.
 - Varias reuniones simultáneas con participantes, relojes y estado independientes.
 - Núcleo de escritorio nativo en Rust con cerca de 40 MB de memoria observada
   mientras está en espera.
-- Ciclo de Whisper bajo demanda: las reuniones activas comparten un modelo y se
-  libera de la RAM al finalizar la última.
+- Ciclo del modelo de voz bajo demanda: las reuniones activas comparten un
+  modelo y se libera de la RAM al finalizar la última.
 - Whisper local con aceleración Metal y detección de voz mediante Silero.
+- Motor GigaAM opcional solo para ruso, que corre en la CPU; consulta
+  [Transcripción en ruso](docs/russian-transcription.md).
 - Biblioteca con búsqueda dentro de la transcripción, carpetas por canal y
   exportación Markdown o JSON.
 - Preguntas respondidas sobre reuniones pasadas desde Discord o la app, con
@@ -272,7 +274,7 @@ permisos `0600` en el archivo de configuración de Kuali.
 |---|---|
 | Audio | Se procesa en memoria; no se guarda como archivo de audio |
 | Transcripciones y metadatos | Se guardan localmente en los datos de Kuali |
-| Pesos de Whisper | Se guardan en la carpeta elegida por el usuario |
+| Pesos de Whisper y GigaAM | Se guardan en la carpeta elegida por el usuario |
 | Solicitudes a LLM | El interruptor **Resúmenes y tareas** las desactiva; si está activo, van únicamente al proveedor configurado |
 | CLI local como proveedor | Se ejecuta sin herramientas, con el entorno vacío y encerrada por el núcleo: no ve tu carpeta personal ni puede escribir en el disco |
 | Webhooks | Permanecen desactivados hasta crear y habilitar una suscripción |
@@ -285,7 +287,7 @@ siendo responsable de utilizarlos correctamente. Consulta la
 ### Ubicaciones de datos
 
 ```text
-~/.kuali/                                      Pesos de Whisper y Silero
+~/.kuali/                                      Pesos de Whisper, GigaAM y Silero
 
 ~/Library/Application Support/com.onwev.Kuali/
 └── meetings/<id>/
@@ -296,9 +298,9 @@ siendo responsable de utilizarlos correctamente. Consulta la
 ```
 
 **Ajustes → Datos → Restablecer Kuali** elimina la configuración, reuniones,
-registros y pesos de Whisper que pertenecen a Kuali después de pedir una frase
-de confirmación. Conserva el runtime, Silero, la extensión y cualquier archivo
-ajeno dentro de carpetas externas.
+registros y pesos de Whisper y GigaAM que pertenecen a Kuali después de pedir
+una frase de confirmación. Conserva el runtime, Silero, la extensión y
+cualquier archivo ajeno dentro de carpetas externas.
 
 ## Webhooks
 
@@ -353,7 +355,7 @@ npm run test:e2e:meet
 | `crates/kuali-core` | Tipos compartidos y configuración |
 | `crates/kuali-discord` | Discord, consentimiento y audio por hablante |
 | `crates/kuali-meet` | Receptor local y protocolo de reuniones del navegador |
-| `crates/kuali-stt` | Segmentación, Silero, Whisper y almacenamiento de modelos |
+| `crates/kuali-stt` | Segmentación, Silero, Whisper, GigaAM y almacenamiento de modelos |
 | `crates/kuali-llm` | Proveedores y resultados estructurados |
 | `crates/kuali-store` | Persistencia, búsqueda y exportación |
 | `crates/kuali-engine` | Coordinación de reuniones simultáneas |

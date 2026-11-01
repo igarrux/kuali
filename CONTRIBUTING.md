@@ -115,7 +115,7 @@ controlled manual test when automation cannot reproduce the platform behavior.
 | `kuali-core` | Shared contracts and configuration |
 | `kuali-discord` | Discord gateway, consent, and per-speaker audio |
 | `kuali-meet` | Local browser-extension ingest and wire protocol |
-| `kuali-stt` | Segmentation, Silero VAD, Whisper, and model storage |
+| `kuali-stt` | Segmentation, Silero VAD, Whisper, GigaAM, and model storage |
 | `kuali-llm` | Provider discovery and structured meeting insights |
 | `kuali-store` | Meeting persistence, search, and export |
 | `kuali-engine` | Cross-source lifecycle and concurrency |

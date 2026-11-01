@@ -11,9 +11,9 @@ extensión de navegador Kuali distribuidos desde este repositorio.
 
 Kuali no opera cuentas, publicidad, analítica ni un servicio de transcripción
 en la nube. La extensión envía el audio y los datos de los participantes
-únicamente a la aplicación Kuali que corre en tu propio equipo. Whisper
-transcribe el audio localmente. Kuali no vende información personal ni conserva
-el audio capturado como un archivo de audio.
+únicamente a la aplicación Kuali que corre en tu propio equipo. Whisper o
+GigaAM transcribe el audio localmente. Kuali no vende información personal ni
+conserva el audio capturado como un archivo de audio.
 
 Si configuras un proveedor de resúmenes, entregas por Discord o un webhook, la
 aplicación envía a ese servicio los datos descritos abajo porque tú se lo
@@ -62,7 +62,7 @@ mediante un WebSocket de loopback (`127.0.0.1`), a la aplicación Kuali del mism
 equipo. El servicio local rechaza los orígenes de páginas web normales. La
 extensión no envía estos datos a un servidor operado por Kuali.
 
-Whisper transcribe localmente. Según lo que configures:
+Whisper y GigaAM transcriben localmente. Según lo que configures:
 
 - un proveedor OpenAI, Anthropic, Gemini, compatible con OpenAI o de línea de
   comandos recibe los metadatos, nombres visibles y transcripción necesarios
