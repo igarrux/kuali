@@ -61,6 +61,25 @@ The machine-readable report is written to `target/e2e/reports`. Chrome for
 Testing is used because current branded Chrome releases do not allow automation
 to sideload an unpacked extension through the old command-line flag.
 
+## Real Yandex Telemost E2E
+
+Run the automated end-to-end test against a live Telemost meeting from this
+directory, or with `just telemost-e2e <url>` from the repository root:
+
+```sh
+npm run test:e2e:telemost -- --meeting-url https://telemost.yandex.ru/j/<id> \
+  [--host-cdp http://127.0.0.1:9222]
+```
+
+Three Chrome for Testing profiles join the meeting: two guests and a recorder
+with this extension. They speak synthetic Russian voices on a shared clock, so
+no real microphone or camera is used. The probe transcribes in Russian with the
+Whisper model selected in Kuali, which must already be downloaded together with
+Silero VAD; Kuali's configuration is not changed. `--host-cdp` replaces the
+first guest with a new window in an already running Chrome that is signed in to
+Yandex and owns the meeting. The test checks speaker attribution, mute windows,
+a participant leaving, and the automatic stop. `--help` lists every option.
+
 ## Speaker separation contract
 
 Every audio frame references a stable numeric channel. A `participant-upsert`

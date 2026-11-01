@@ -58,6 +58,26 @@ la RAM. Para una prueba rápida de una sola persona usa
 `npm run test:e2e:meet -- --solo`. El reporte JSON queda en
 `target/e2e/reports`.
 
+## E2E real con Yandex Telemost
+
+Ejecuta la prueba automática contra una reunión real de Telemost desde esta
+carpeta, o con `just telemost-e2e <url>` desde la raíz del repositorio:
+
+```sh
+npm run test:e2e:telemost -- --meeting-url https://telemost.yandex.ru/j/<id> \
+  [--host-cdp http://127.0.0.1:9222]
+```
+
+Tres perfiles de Chrome for Testing entran a la reunión: dos invitados y un
+grabador con la extensión. Hablan con voces sintéticas en ruso sobre un reloj
+común, así que no usa micrófono ni cámara reales. La sonda transcribe en ruso
+con el modelo de Whisper elegido en Kuali, que debe estar descargado junto con
+Silero VAD; la configuración de Kuali no cambia. `--host-cdp` sustituye al
+primer invitado por una ventana nueva en un Chrome ya abierto, con sesión de
+Yandex, que organiza la reunión. Comprueba la atribución de hablantes, las
+ventanas de silencio, la salida de un participante y la parada automática;
+`--help` muestra todas las opciones.
+
 ## Separación real y mezcla
 
 - Meet observa los frames Opus codificados antes de que la web los consuma,
