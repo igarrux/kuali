@@ -313,6 +313,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   Equilibrado: "Balanced",
   Preciso: "Precise",
   "Máxima precisión": "Highest accuracy",
+  "Solo ruso": "Russian only",
   "Transcripción en vivo rápida y precisa para la mayoría de reuniones.":
     "Fast, accurate live transcription for most meetings.",
   "Más fidelidad sin dejar de priorizar una transcripción ágil en tiempo real.":
@@ -321,6 +322,9 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
     "Better recognition for difficult audio, accents, and mixed-language vocabulary.",
   "La mayor fidelidad disponible en Kuali, con una cuantización conservadora.":
     "Kuali's highest available fidelity, with conservative quantization.",
+  "Reconocimiento dedicado al ruso, con puntuación. Fija el idioma del audio en ruso.":
+    "Dedicated Russian recognition with punctuation. Locks the audio language to Russian.",
+  "GigaAM v3 — solo ruso, con puntuación": "GigaAM v3 — Russian only, with punctuation",
   "≈ {memory} de RAM": "≈ {memory} RAM",
   Descargado: "Downloaded",
   "{technicalName}. Listo para usar; la RAM indicada es una estimación y varía según el sistema.":
@@ -552,6 +556,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Calidad, velocidad e idioma del audio.": "Audio quality, speed, and language.",
   "Modelo de Whisper": "Whisper model",
   "Idioma del audio": "Audio language",
+  "Este modelo solo reconoce ruso.": "This model recognizes Russian only.",
   Español: "Spanish",
   Inglés: "English",
   "Detectar automáticamente (no recomendado)": "Detect automatically (not recommended)",
@@ -567,6 +572,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   Añadir: "Add",
   "Whisper usará estas grafías como contexto desde la próxima llamada.":
     "Whisper will use these spellings as context starting with the next call.",
+  "El modelo seleccionado no usa el vocabulario personalizado; se conserva para los modelos de Whisper.":
+    "The selected model does not use the custom vocabulary; it is kept for Whisper models.",
   Almacenamiento: "Storage",
   "Dónde guardar los pesos descargables del modelo.": "Where to store downloadable model weights.",
   "Carpeta de los modelos": "Models folder",
@@ -685,7 +692,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Terminando transcripción…": "Finishing transcript…",
   "Sacando el resumen…": "Generating summary…",
   "Verificando modelo…": "Verifying model…",
-  "Cargando Whisper…": "Loading Whisper…",
+  "Cargando el modelo…": "Loading the model…",
   Desactivado: "Disabled",
   "Sin conexión": "Not connected",
   Editar: "Edit",
