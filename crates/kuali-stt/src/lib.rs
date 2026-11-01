@@ -21,6 +21,7 @@ pub mod audio_file;
 pub mod diarization;
 pub mod model;
 pub mod segmenter;
+mod vad;
 pub mod whisper;
 
 pub use audio::{i16_to_f32, ms_to_samples, samples_to_ms, WHISPER_SAMPLE_RATE};
