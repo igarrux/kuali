@@ -3,12 +3,15 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
+  ENGLISH_TRANSLATIONS,
   currentLanguage,
+  currentLocale,
   detectLanguage,
   resolveLanguage,
   setLanguagePreference,
   t,
 } from "./i18n.js";
+import { RUSSIAN_TRANSLATIONS } from "./i18n-ru.js";
 
 test("Spanish and all its regional variants resolve to Spanish", () => {
   for (const locale of ["es", "es-ES", "es-MX", "es-419", "es_CO"]) {
@@ -26,6 +29,50 @@ test("an explicit preference overrides automatic detection", () => {
   assert.equal(resolveLanguage("en", ["es-MX"]), "en");
   assert.equal(resolveLanguage("es", ["en-US"]), "es");
   assert.equal(resolveLanguage("auto", ["es-CO"]), "es");
+});
+
+test("Russian locales resolve to Russian", () => {
+  for (const locale of ["ru", "ru-RU", "ru_UA"]) {
+    assert.equal(detectLanguage([locale]), "ru");
+  }
+  assert.equal(detectLanguage(["uk-UA", "ru-RU"]), "en");
+  assert.equal(resolveLanguage("ru", ["es-MX"]), "ru");
+  assert.equal(resolveLanguage("auto", ["ru-RU"]), "ru");
+});
+
+test("the Russian interface picks the plural form from the count", () => {
+  setLanguagePreference("ru", { notify: false });
+  assert.equal(currentLanguage(), "ru");
+  assert.equal(currentLocale(), "ru");
+  assert.deepEqual(
+    [1, 3, 5, 21].map((count) => t("{count} reuniones", { count })),
+    ["1 встреча", "3 встречи", "5 встреч", "21 встреча"],
+  );
+  assert.equal(t("{count} reunión", { count: 2 }), "2 встречи");
+  assert.equal(t("{n} minutos", { n: 5 }), "5 минут");
+  assert.equal(t("participantes", { count: 5 }), "участников");
+  // Counts formatted for display keep their grammatical number.
+  const thousand = (1000).toLocaleString("ru");
+  assert.equal(t("{count} personas", { count: thousand }), `${thousand} человек`);
+  assert.equal(t("Puerto {port} no disponible", { port: 9099 }), "Порт 9099 недоступен");
+  setLanguagePreference("es", { notify: false });
+});
+
+test("Russian covers every English string with the same placeholders", () => {
+  const placeholders = (text) => [...text.matchAll(/\{([a-zA-Z0-9_]+)\}/g)].map((match) => match[1]).sort();
+  assert.deepEqual(Object.keys(RUSSIAN_TRANSLATIONS).sort(), Object.keys(ENGLISH_TRANSLATIONS).sort());
+  for (const [spanish, russian] of Object.entries(RUSSIAN_TRANSLATIONS)) {
+    const forms = typeof russian === "string" ? [russian] : Object.values(russian);
+    if (typeof russian !== "string") {
+      assert.deepEqual(Object.keys(russian).sort(), ["few", "many", "one", "other"], spanish);
+    }
+    for (const form of forms) assert.deepEqual(placeholders(form), placeholders(spanish), spanish);
+  }
+});
+
+test("the interface language picker offers Russian", () => {
+  const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
+  assert.match(html, /<option value="ru" data-i18n-skip>🇷🇺 Русский<\/option>/);
 });
 
 test("runtime translations interpolate variables", () => {

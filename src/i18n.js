@@ -1,3 +1,5 @@
+import { RUSSIAN_TRANSLATIONS } from "./i18n-ru.js";
+
 export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Saltar al contenido": "Skip to content",
   "Ir a Inicio": "Go to Home",
@@ -1066,6 +1068,10 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   biblioteca: "library",
 });
 
+/** Spanish is the source language; every other one maps its strings. */
+const TRANSLATIONS = Object.freeze({ en: ENGLISH_TRANSLATIONS, ru: RUSSIAN_TRANSLATIONS });
+const INTERFACE_LANGUAGES = Object.freeze(["es", "en", "ru"]);
+
 let preference = "auto";
 let language = resolveLanguage(preference);
 const originalText = new WeakMap();
@@ -1077,12 +1083,13 @@ function normalizedLocale(locale) {
 
 export function detectLanguage(languages = []) {
   const primary = languages.find((entry) => String(entry || "").trim());
-  return normalizedLocale(primary).split("-")[0] === "es" ? "es" : "en";
+  const code = normalizedLocale(primary).split("-")[0];
+  return INTERFACE_LANGUAGES.includes(code) ? code : "en";
 }
 
 export function resolveLanguage(value, languages = browserLanguages()) {
   const normalized = String(value || "auto").trim().toLowerCase();
-  if (normalized === "es" || normalized === "en") return normalized;
+  if (INTERFACE_LANGUAGES.includes(normalized)) return normalized;
   return detectLanguage(languages);
 }
 
@@ -1096,9 +1103,22 @@ function interpolate(value, variables) {
   return value.replaceAll(/\{([a-zA-Z0-9_]+)\}/g, (_, key) => String(variables[key] ?? `{${key}}`));
 }
 
+/**
+ * A string in the current language, or `undefined` when it has none. Missing
+ * Russian strings fall back to English. A plural entry maps `Intl.PluralRules`
+ * categories to text, because Russian needs more forms than Spanish.
+ */
+function lookup(spanish, variables = {}) {
+  if (language === "es") return spanish;
+  const value = TRANSLATIONS[language][spanish] ?? ENGLISH_TRANSLATIONS[spanish];
+  if (value === undefined || typeof value === "string") return value;
+  // Counts may arrive formatted for display, such as `1 000` in Russian.
+  const amount = Number(String(variables.count ?? variables.n).replace(/\s/g, ""));
+  return value[new Intl.PluralRules(language).select(amount)] ?? value.other;
+}
+
 export function t(spanish, variables = {}) {
-  const translated = language === "en" ? (ENGLISH_TRANSLATIONS[spanish] ?? spanish) : spanish;
-  return interpolate(translated, variables);
+  return interpolate(lookup(spanish, variables) ?? spanish, variables);
 }
 
 export function currentLanguage() {
@@ -1106,7 +1126,7 @@ export function currentLanguage() {
 }
 
 export function currentLocale() {
-  return language === "es" ? "es" : "en";
+  return language;
 }
 
 export function languagePreference() {
@@ -1124,7 +1144,7 @@ function translateTextNode(node) {
   const source = originalText.get(node);
   const key = normalizedText(source);
   if (!key) return;
-  const value = language === "en" ? ENGLISH_TRANSLATIONS[key] : key;
+  const value = lookup(key);
   if (!value) return;
   const leading = source.match(/^\s*/)?.[0] ?? "";
   const trailing = source.match(/\s*$/)?.[0] ?? "";
@@ -1139,10 +1159,7 @@ function translateAttributes(element) {
     if (!element.hasAttribute(name)) continue;
     if (!originals.has(name)) originals.set(name, element.getAttribute(name));
     const source = originals.get(name);
-    element.setAttribute(
-      name,
-      language === "en" ? (ENGLISH_TRANSLATIONS[source] ?? source) : source,
-    );
+    element.setAttribute(name, lookup(source) ?? source);
   }
 }
 
@@ -1156,7 +1173,7 @@ export function localizeStaticDocument(root = document) {
 }
 
 export function setLanguagePreference(value, { notify = true } = {}) {
-  preference = ["es", "en"].includes(value) ? value : "auto";
+  preference = INTERFACE_LANGUAGES.includes(value) ? value : "auto";
   const next = resolveLanguage(preference);
   const changed = next !== language;
   language = next;
