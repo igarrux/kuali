@@ -154,13 +154,13 @@ test("browser onboarding prefers the verified store and keeps manual installatio
 
 test("browser guidance distinguishes stable and experimental platform support", () => {
   const html = readFileSync(new URL("./index.html", import.meta.url), "utf8");
-  const supportNotice = "Google Meet tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y parcial.";
+  const supportNotice = "Google Meet tiene soporte estable. Microsoft Teams, Zoom y Yandex Telemost tienen soporte experimental y parcial.";
 
   assert.equal((html.match(new RegExp(supportNotice, "g")) ?? []).length, 2);
   setLanguagePreference("en", { notify: false });
   assert.equal(
     t(supportNotice),
-    "Google Meet has stable support. Microsoft Teams and Zoom have experimental, partial support.",
+    "Google Meet has stable support. Microsoft Teams, Zoom, and Yandex Telemost have experimental, partial support.",
   );
   setLanguagePreference("es", { notify: false });
 });

@@ -1779,10 +1779,7 @@ impl Engine {
             .iter()
             .find(|meeting| meeting.id == meeting_id)
             .ok_or_else(|| kuali_store::StoreError::NotFound(meeting_id.to_string()))?;
-        let web_platform = matches!(
-            anchor.guild_name.as_str(),
-            "Google Meet" | "Microsoft Teams" | "Zoom" | "Reunión web"
-        );
+        let web_platform = kuali_meet::ingest::is_web_meeting_platform(&anchor.guild_name);
         let ids: Vec<String> = meetings
             .iter()
             .filter(|meeting| {
@@ -4206,10 +4203,8 @@ fn prepare_discord_summary_delivery(meeting: &mut Meeting, text_channel_id: u64)
 
     let channel_id = if text_channel_id != 0 {
         Some(text_channel_id)
-    } else if !matches!(
-        meeting.meta.guild_name.as_str(),
-        "Google Meet" | "Microsoft Teams" | "Zoom" | "Reunión web"
-    ) && meeting.meta.guild_id != 0
+    } else if !kuali_meet::ingest::is_web_meeting_platform(&meeting.meta.guild_name)
+        && meeting.meta.guild_id != 0
         && meeting.meta.channel_id != 0
     {
         // Meetings saved before delivery references existed still use their

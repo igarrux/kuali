@@ -5,8 +5,9 @@ These answers describe version `0.1.6`.
 ## Single purpose
 
 > Capture audio and participant information from a user-selected Google Meet,
-> Microsoft Teams, or Zoom meeting and send it to the Kuali desktop application
-> on the same computer for live transcription and meeting notes.
+> Microsoft Teams, Zoom, or Yandex Telemost meeting and send it to the Kuali
+> desktop application on the same computer
+> for live transcription and meeting notes.
 
 ## Permission justifications
 
@@ -28,11 +29,19 @@ These answers describe version `0.1.6`.
 > the captured tab audio so the user can continue hearing the meeting. It is
 > used only while a supported meeting is actively being captured.
 
-### Host permissions: Google Meet, Microsoft Teams, and Zoom
+### Host permissions: Google Meet, Microsoft Teams, Zoom, and Yandex Telemost
 
 > Injects the capture and participant-mapping code only into supported meeting
 > pages so Kuali can identify the meeting, observe its roster and audio tracks,
-> show consent/recording controls, and stop when the participant leaves.
+> show consent/recording controls, and stop when the participant leaves. For
+> Yandex Telemost (`telemost.yandex.ru`, `telemost.yandex.com`,
+> `telemost.360.yandex.ru`, `telemost.360.yandex.com`), which mixes all remote
+> participants into one audio stream, the code observes, inside the page and
+> only locally, Telemost's own meeting signalling (participant names, mute
+> state, voice-activity flags, the local participant ID) and one Telemost
+> profile response for avatar URLs, to attribute speech to the person who was
+> speaking. It does not keep credentials or tokens and sends nothing anywhere
+> except the existing loopback connection to the Kuali app on the same computer.
 
 ### Host permission: `ws://127.0.0.1/*`
 

@@ -93,6 +93,11 @@ meet-e2e:
 meet-e2e-solo:
     npm --prefix browser-extension run test:e2e:meet -- --solo
 
+# Run the automated Yandex Telemost E2E: `just telemost-e2e https://telemost.yandex.ru/j/<id>`.
+[group('browser extension')]
+telemost-e2e url *args:
+    npm --prefix browser-extension run test:e2e:telemost -- --meeting-url {{url}} {{args}}
+
 # Serve the static website locally at http://127.0.0.1:4173.
 [group('website')]
 website-serve:

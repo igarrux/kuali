@@ -16,14 +16,26 @@
   const MEET_PCM_SOURCE_LEASE_MS = 250;
   const MEET_ENCODED_FALLBACK_MAX_FRAMES = 125;
   const MEET_ENCODED_ARBITRATION_HOLD_FRAMES = 3;
+  // Telemost sends one server-side mix; hold it until server VAD names the
+  // speaker. The hold covers the VAD-on delay
+  // only; the ~1.5 s off hangover is not awaited.
+  const TELEMOST_ROUTE_DELAY_MS = 600;
+  const TELEMOST_ROUTE_TICK_MS = 100;
+  const TELEMOST_MIXED_CHANNEL = 999;
+  // One receiver carries the mix; a block
+  // at or above this peak counts as signal.
+  const TELEMOST_MIX_SIGNAL_PEAK = 0.002;
+  // The mix lease moves only after its holder was silent this long.
+  const TELEMOST_MIX_HANDOFF_MS = 1_500;
   const capturePolicy = globalThis.KualiCapturePolicy;
   if (!capturePolicy) throw new Error("Kuali capture policy was not loaded");
   const meetProtocol = globalThis.KualiMeetProtocol;
   const { MIC_CHANNEL } = capturePolicy;
-  const host = location.hostname;
-  const platform = host === "meet.google.com"
-    ? "google_meet"
-    : (host === "zoom.us" || host.endsWith(".zoom.us") ? "zoom" : "microsoft_teams");
+  const platform = capturePolicy.meetingPlatformForHost(location.hostname);
+  const primaryFrame = capturePolicy.isPrimaryCaptureFrame(platform, location.pathname, window === window.top);
+  const telemost = platform === "yandex_telemost" ? globalThis.KualiTelemostProtocol : null;
+  if (platform === "yandex_telemost" && !telemost) throw new Error("Kuali Telemost protocol was not loaded");
+  const telemostState = telemost ? telemost.createState() : null;
 
   let running = false;
   let context = null;
@@ -77,6 +89,15 @@
   let meetProtocolMicMuted = null;
   let meetMicAllowed = false;
   let meetMicCheckedAt = 0;
+  const telemostChannels = new Map();
+  const telemostChannelIdentities = new Map();
+  const telemostHeldFrames = [];
+  const telemostDepartures = [];
+  let telemostMixLease = null;
+  const liveGoloomSockets = new Set();
+  let telemostRouteTimer = null;
+  let telemostMicAllowed = false;
+  let telemostMicCheckedAt = 0;
 
   function post(type, payload = {}) {
     window.postMessage({ protocol: FROM_PAGE, type, ...payload }, "*");
@@ -556,6 +577,7 @@
   }
 
   function shouldSendLocalMicrophone(track) {
+    if (telemost) return shouldSendTelemostMicrophone(track);
     if (platform !== "google_meet") return track.enabled && !track.muted;
     const now = performance.now();
     if (now - meetMicCheckedAt < 100) return meetMicAllowed;
@@ -1172,6 +1194,7 @@
   }
 
   function identitySnapshot(force = false) {
+    if (telemost) return telemostIdentitySnapshot();
     const now = performance.now();
     if (force || now - lastIdentityScan >= 250) {
       cachedDomRoster = participantTiles();
@@ -1193,7 +1216,8 @@
   }
 
   function sendRosterState(snapshot) {
-    if (window !== window.top || platform !== "google_meet") return;
+    if (telemost) return sendTelemostRosterState(snapshot);
+    if (!primaryFrame || platform !== "google_meet") return;
     const roster = [...snapshot.roster];
     if (localIdentity && roster.length === 0) {
       roster.push({ tile: null, identity: localIdentity });
@@ -1214,7 +1238,8 @@
   }
 
   function sendActiveSpeakerState(snapshot) {
-    if (!running || window !== window.top || platform !== "google_meet") return;
+    if (telemost) return sendTelemostActiveSpeakers();
+    if (!running || !primaryFrame || platform !== "google_meet") return;
     // Track correlation deliberately excludes the local user. Keep that user in
     // the UI roster so their tile lights up when Meet marks the microphone active.
     const rosterById = new Map(snapshot.roster.map(({ identity }) => [identity.id, identity]));
@@ -1231,7 +1256,7 @@
   }
 
   async function sendMeetProbe(snapshot) {
-    if (!running || meetProbeInFlight || window !== window.top || platform !== "google_meet") return;
+    if (!running || meetProbeInFlight || !primaryFrame || platform !== "google_meet") return;
     const now = Date.now();
     if (now - lastMeetProbeAt < 2_000) return;
     lastMeetProbeAt = now;
@@ -1490,6 +1515,225 @@
     } finally {
       meetProbeInFlight = false;
     }
+  }
+
+  function telemostIdentity(person) {
+    return {
+      id: person?.participantId || (person?.isSelf ? `${platform}:self` : ""),
+      name: person?.displayName || (person?.isSelf ? "Tú" : "Participante"),
+      avatarUrl: person?.avatarUrl || null,
+      isSelf: !!person?.isSelf,
+    };
+  }
+
+  function telemostIdentitySnapshot() {
+    const roster = telemost.roster(telemostState).map((person) => ({ tile: null, identity: telemostIdentity(person) }));
+    const active = telemost.activeSpeakers(telemostState).filter((person) => !person.isSelf).map(telemostIdentity);
+    return { roster, domRoster: [], active };
+  }
+
+  function visibleTelemostControl(selector) {
+    for (const control of document.querySelectorAll(selector)) {
+      if (control.getAttribute?.("aria-hidden") === "true") continue;
+      const style = getComputedStyle(control);
+      if (style.display === "none" || style.visibility === "hidden") continue;
+      if (control.getClientRects?.().length === 0) continue;
+      return true;
+    }
+    return false;
+  }
+
+  function telemostInCall() {
+    return telemostState.sessionOpen
+      || !!document.querySelector('[data-testid="end-call-alt-button"], .GoloomParticipantsRenderer');
+  }
+
+  // Toolbar mic buttons are swapped, not relabelled;
+  // the sidebar reuses one testid for both states.
+  function telemostMicrophoneMutedFromControls() {
+    if (visibleTelemostControl('[data-testid="call-toolbar"] [data-testid="turn-on-mic-button"]')) return true;
+    if (visibleTelemostControl('[data-testid="call-toolbar"] [data-testid="turn-off-mic-button"]')) return false;
+    return null;
+  }
+
+  function shouldSendTelemostMicrophone(track) {
+    const now = performance.now();
+    if (now - telemostMicCheckedAt < 100) return telemostMicAllowed;
+    telemostMicCheckedAt = now;
+    telemostMicAllowed = capturePolicy.shouldSendTelemostMicrophone({
+      trackEnabled: track.enabled,
+      inCall: telemostInCall(),
+      controlMuted: telemostMicrophoneMutedFromControls(),
+      protocolMuted: telemostState.selfMuted,
+    });
+    return telemostMicAllowed;
+  }
+
+  function sendTelemostRosterState(snapshot) {
+    if (!primaryFrame) return;
+    const roster = [...snapshot.roster];
+    if (localIdentity && !roster.some(({ identity }) => identity.isSelf)) {
+      roster.unshift({ tile: null, identity: localIdentity });
+    }
+    const detail = capturePolicy.rosterDetail(roster, platform);
+    detail.inCall = telemostInCall();
+    detail.selfPresentInDom = detail.inCall;
+    detail.protocolBacked = telemostState.rosterKnown;
+    const fingerprint = JSON.stringify(detail);
+    if (fingerprint === lastRosterFingerprint) return;
+    lastRosterFingerprint = fingerprint;
+    meetingEvent("roster-state", detail);
+  }
+
+  function sendTelemostActiveSpeakers() {
+    if (!running || !primaryFrame) return;
+    const participants = telemost.activeSpeakers(telemostState).map((person) => {
+      const identity = person.isSelf && localIdentity ? localIdentity : telemostIdentity(person);
+      return {
+        participantId: identity.id || null,
+        displayName: identity.name,
+        avatarUrl: identity.avatarUrl || null,
+        isSelf: !!identity.isSelf,
+      };
+    });
+    const fingerprint = JSON.stringify(participants.map((person) => person.participantId || person.displayName).sort());
+    if (fingerprint === lastActiveFingerprint) return;
+    lastActiveFingerprint = fingerprint;
+    meetingEvent("active-speakers", { platform, participants });
+  }
+
+  // Speakers share the page channel counter, like Meet devices. It must stay
+  // below the reserved mix and microphone; past that, speech goes to the mix.
+  function telemostChannelFor(participantId) {
+    let channel = telemostChannels.get(participantId);
+    if (channel === undefined) {
+      if (nextChannel >= TELEMOST_MIXED_CHANNEL) return null;
+      channel = nextChannel++;
+      telemostChannels.set(participantId, channel);
+    }
+    return channel;
+  }
+
+  // Last known name/avatar per channel: a departed
+  // speaker's held audio must not rename it.
+  function telemostChannelIdentity(channel, participantId) {
+    const fresh = telemost.identity(telemostState, participantId);
+    const known = telemostChannelIdentities.get(channel);
+    const identity = {
+      id: participantId,
+      name: fresh?.displayName || known?.name || "Participante",
+      avatarUrl: fresh?.avatarUrl || known?.avatarUrl || null,
+      isSelf: false,
+    };
+    telemostChannelIdentities.set(channel, identity);
+    return identity;
+  }
+
+  function routeTelemostFrame({ capturedAt, at, samples, channel: laneChannel }) {
+    if (laneChannel !== undefined) {
+      post("audio", { channel: laneChannel, ts: capturedAt, pcm: Array.from(samples) });
+      return;
+    }
+    const speakerId = telemost.speakerAt(telemostState, at);
+    const channel = speakerId ? telemostChannelFor(speakerId) : null;
+    if (channel === null) {
+      sendIdentity(TELEMOST_MIXED_CHANNEL, { id: `${platform}:mixed`, name: "Sala", avatarUrl: null, isSelf: false }, "mixed");
+      post("audio", { channel: TELEMOST_MIXED_CHANNEL, ts: capturedAt, pcm: Array.from(samples) });
+      return;
+    }
+    sendIdentity(channel, telemostChannelIdentity(channel, speakerId), "separate");
+    post("audio", { channel, ts: capturedAt, pcm: Array.from(samples) });
+  }
+
+  function announceTelemostDeparture({ participantId, channel }) {
+    // A quick rejoin keeps both the participantId and its channel.
+    if (telemostState.participants.has(participantId) || !sentIdentity.has(channel)) return;
+    sentIdentity.delete(channel);
+    meetingEvent("participant-left", { channel, participantId }, telemostChannelIdentities.get(channel)?.name || null);
+  }
+
+  // Release held frames (and departures behind them)
+  // in capture order once VAD has caught up.
+  function releaseTelemostMix(now = Date.now(), flush = false) {
+    while (telemostHeldFrames.length && (flush || now - telemostHeldFrames[0].capturedAt >= TELEMOST_ROUTE_DELAY_MS)) {
+      routeTelemostFrame(telemostHeldFrames.shift());
+    }
+    while (telemostDepartures.length && (flush || now - telemostDepartures[0].at >= TELEMOST_ROUTE_DELAY_MS)) {
+      announceTelemostDeparture(telemostDepartures.shift());
+    }
+  }
+
+  // Lease the mix to the receiver with signal so
+  // an idle receiver cannot interleave its blocks.
+  function holdsTelemostMix(entry, samples, now) {
+    let peak = 0;
+    for (const sample of samples) peak = Math.max(peak, Math.abs(sample));
+    const signal = peak >= TELEMOST_MIX_SIGNAL_PEAK;
+    const lease = telemostMixLease;
+    if (lease && !lease.entry.released && lease.entry !== entry
+      && (!signal || now - lease.lastSignalAt < TELEMOST_MIX_HANDOFF_MS)) return false;
+    if (!lease || lease.entry !== entry || lease.entry.released) {
+      if (!signal) return false;
+      telemostMixLease = { entry, lastSignalAt: now };
+    } else if (signal) {
+      lease.lastSignalAt = now;
+    }
+    return true;
+  }
+
+  function holdTelemostMix(entry, samples) {
+    const now = Date.now();
+    if (!holdsTelemostMix(entry, samples, now)) {
+      entry.blockedFrames += 1;
+      return;
+    }
+    releaseTelemostMix(now);
+    // Worklet blocks arrive when they end; route by the block's midpoint.
+    telemostHeldFrames.push({ capturedAt: now, at: now - (samples.length * 500) / TARGET_RATE, samples });
+  }
+
+  // The desktop stamps audio on arrival: the
+  // already-gated mic waits as long as the mix.
+  function holdTelemostMic(samples) {
+    const now = Date.now();
+    releaseTelemostMix(now);
+    telemostHeldFrames.push({ capturedAt: now, samples, channel: MIC_CHANNEL });
+  }
+
+  function refreshTelemostSelf() {
+    if (!running || !localIdentity) return;
+    const self = telemostIdentity(telemost.selfIdentity(telemostState));
+    if (self.id === localIdentity.id && self.name === localIdentity.name && self.avatarUrl === localIdentity.avatarUrl) return;
+    localIdentity = self;
+    for (const entry of remoteTracks.values()) {
+      if (entry.channel === MIC_CHANNEL) entry.directIdentity = self;
+    }
+    for (const known of knownTracks.values()) {
+      if (known.forcedChannel === MIC_CHANNEL) known.directIdentity = self;
+    }
+    if (bindings.has(MIC_CHANNEL)) bind(MIC_CHANNEL, self);
+  }
+
+  function onTelemostChange(change) {
+    if (!change) return;
+    if (change.self) telemostMicCheckedAt = 0;
+    if (running) {
+      for (const participantId of change.left) {
+        const channel = telemostChannels.get(participantId);
+        if (channel !== undefined) telemostDepartures.push({ participantId, channel, at: Date.now() });
+      }
+    }
+    if (change.roster || change.self) {
+      refreshTelemostSelf();
+      if (running) {
+        for (const [participantId, channel] of telemostChannels) {
+          if (!sentIdentity.has(channel) || !telemostState.participants.has(participantId)) continue;
+          sendIdentity(channel, telemostChannelIdentity(channel, participantId), "separate");
+        }
+      }
+      sendRosterState(identitySnapshot(true));
+    }
+    if (change.vad) sendActiveSpeakerState(identitySnapshot(true));
   }
 
   function sendIdentity(channel, identity, audioKind = "separate") {
@@ -1857,6 +2101,19 @@
     entry.pcmFrames += 1;
     entry.lastPcmAt = Date.now();
     for (const sample of samples) entry.peak = Math.max(entry.peak, Math.abs(sample));
+    // Telemost receivers carry the server mix:
+    // VAD routing replaces transport channels.
+    if (telemost) {
+      if (channel === MIC_CHANNEL) {
+        if (entry.directIdentity) bind(channel, entry.directIdentity);
+        holdTelemostMic(samples);
+      } else if (entry.receiver) {
+        holdTelemostMix(entry, samples);
+      } else {
+        entry.blockedFrames += 1;
+      }
+      return;
+    }
     if (route) {
       entry.pcmFramesBySource?.set(
         route.source,
@@ -1933,8 +2190,11 @@
     try { entry.source?.disconnect(); } catch (_) {}
     try { entry.processor?.disconnect(); } catch (_) {}
     if (entry.processor?.port) entry.processor.port.onmessage = null;
+    if (telemostMixLease?.entry === entry) telemostMixLease = null;
     const binding = bindings.get(entry.channel);
-    if (emitDeparture) {
+    // Telemost transport channels are never
+    // announced; speakers leave via goloom.
+    if (emitDeparture && !(telemost && entry.channel !== MIC_CHANNEL)) {
       meetingEvent("participant-left", { channel: entry.channel, participantId: binding?.id || null }, binding?.name || null);
     }
     bindings.delete(entry.channel);
@@ -2030,6 +2290,11 @@
   }
 
   function stopCaptureImmediately() {
+    if (telemost) {
+      releaseTelemostMix(Date.now(), true);
+      clearInterval(telemostRouteTimer);
+      telemostRouteTimer = null;
+    }
     running = false;
     clearInterval(scanTimer);
     scanTimer = null;
@@ -2110,6 +2375,9 @@
     running = true;
     meetAnnouncedChannels.clear();
     sentIdentity.clear();
+    telemostHeldFrames.length = 0;
+    telemostDepartures.length = 0;
+    telemostMixLease = null;
     meetPcmLeaseBySource.clear();
     meetPcmArbitrationByReceiver = new WeakMap();
     meetSourceIdentityVotes.clear();
@@ -2142,7 +2410,7 @@
       captureTrack(known.track, known.directIdentity, known.forcedChannel, known.sourceStream, known.receiver);
     }
     for (const route of meetRoutesBySource.values()) announceMeetRoute(route);
-    if (window === window.top) {
+    if (primaryFrame) {
       await startMic(intent, signal);
       if (!captureIntentIsCurrent(intent, signal) || !running) {
         running = false;
@@ -2150,6 +2418,7 @@
       }
     }
     scanTimer = setInterval(scanMediaElements, 1000);
+    if (telemost) telemostRouteTimer = setInterval(() => releaseTelemostMix(), TELEMOST_ROUTE_TICK_MS);
     activityTimer = setInterval(() => {
       const snapshot = identitySnapshot(true);
       sendActiveSpeakerState(snapshot);
@@ -2159,7 +2428,7 @@
 
   async function stop() {
     stopCaptureImmediately();
-    if (platform === "google_meet" && window === window.top && lastActiveFingerprint) {
+    if ((platform === "google_meet" || telemost) && primaryFrame && lastActiveFingerprint) {
       meetingEvent("active-speakers", { platform, participants: [] });
     }
     localIdentity = null;
@@ -2281,6 +2550,68 @@
         });
       }
       return response;
+    };
+  }
+
+  // goloom signalling: observe both directions
+  // without touching the socket's constructor.
+  if (telemost && typeof window.WebSocket?.prototype?.send === "function") {
+    const socketPrototype = window.WebSocket.prototype;
+    const originalSend = socketPrototype.send;
+    const OPEN = window.WebSocket.OPEN ?? 1;
+    const goloomSockets = new WeakMap();
+    function watchGoloomSocket(socket) {
+      const known = goloomSockets.get(socket);
+      if (known !== undefined) return known;
+      const watched = telemost.isGoloomUrl(socket.url);
+      goloomSockets.set(socket, watched);
+      if (!watched) return false;
+      // The client speaks first (hello), so this
+      // listener precedes every server frame.
+      socket.addEventListener("message", (event) => {
+        try {
+          if (typeof event.data === "string") {
+            onTelemostChange(telemost.ingestIncoming(telemostState, event.data, Date.now()));
+          }
+        } catch (_) {}
+      });
+      socket.addEventListener("close", () => {
+        try {
+          liveGoloomSockets.delete(socket);
+          for (const live of liveGoloomSockets) {
+            if (live.readyState !== OPEN) liveGoloomSockets.delete(live);
+          }
+          if (!liveGoloomSockets.size) onTelemostChange(telemost.closeSession(telemostState, Date.now()));
+        } catch (_) {}
+      });
+      return true;
+    }
+    socketPrototype.send = function kualiObservedSend(data) {
+      const result = Reflect.apply(originalSend, this, arguments);
+      try {
+        // A late send on a closing socket must not revive the session.
+        if (typeof data === "string" && this.readyState === OPEN && watchGoloomSocket(this)) {
+          liveGoloomSockets.add(this);
+          onTelemostChange(telemost.ingestOutgoing(telemostState, data, Date.now()));
+        }
+      } catch (_) {}
+      return result;
+    };
+  }
+
+  // Avatars come only from REST request-states;
+  // read a clone, never the page's body.
+  if (telemost && typeof window.fetch === "function") {
+    const originalTelemostFetch = window.fetch;
+    window.fetch = function kualiObservedTelemostFetch(...args) {
+      const pending = Reflect.apply(originalTelemostFetch, this, args);
+      Promise.resolve(pending).then((response) => {
+        if (!telemost.isPeerStatesUrl(response?.url)) return;
+        response.clone().json()
+          .then((value) => onTelemostChange(telemost.ingestPeerStates(telemostState, value)))
+          .catch(() => {});
+      }).catch(() => {});
+      return pending;
     };
   }
 

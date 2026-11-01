@@ -21,6 +21,10 @@
     "https://teams.microsoft.com/*",
     "https://*.teams.microsoft.com/*",
     "https://teams.cloud.microsoft/*",
+    "https://telemost.yandex.ru/*",
+    "https://telemost.yandex.com/*",
+    "https://telemost.360.yandex.ru/*",
+    "https://telemost.360.yandex.com/*",
     "ws://127.0.0.1/*"
   ],
   "background": {
@@ -45,9 +49,13 @@
         "https://teams.live.com/*",
         "https://teams.microsoft.com/*",
         "https://*.teams.microsoft.com/*",
-        "https://teams.cloud.microsoft/*"
+        "https://teams.cloud.microsoft/*",
+        "https://telemost.yandex.ru/*",
+        "https://telemost.yandex.com/*",
+        "https://telemost.360.yandex.ru/*",
+        "https://telemost.360.yandex.com/*"
       ],
-      "js": ["src/capture-policy.js", "src/meet-protocol.js", "src/page-capture.js"],
+      "js": ["src/capture-policy.js", "src/meet-protocol.js", "src/telemost-protocol.js", "src/page-capture.js"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": true
@@ -59,7 +67,11 @@
         "https://teams.live.com/*",
         "https://teams.microsoft.com/*",
         "https://*.teams.microsoft.com/*",
-        "https://teams.cloud.microsoft/*"
+        "https://teams.cloud.microsoft/*",
+        "https://telemost.yandex.ru/*",
+        "https://telemost.yandex.com/*",
+        "https://telemost.360.yandex.ru/*",
+        "https://telemost.360.yandex.com/*"
       ],
       "js": ["src/content.js"],
       "run_at": "document_start",
@@ -75,7 +87,11 @@
         "https://teams.live.com/*",
         "https://teams.microsoft.com/*",
         "https://*.teams.microsoft.com/*",
-        "https://teams.cloud.microsoft/*"
+        "https://teams.cloud.microsoft/*",
+        "https://telemost.yandex.ru/*",
+        "https://telemost.yandex.com/*",
+        "https://telemost.360.yandex.ru/*",
+        "https://telemost.360.yandex.com/*"
       ]
     }
   ]

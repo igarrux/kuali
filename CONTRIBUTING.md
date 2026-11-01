@@ -105,6 +105,13 @@ real browser meeting and requires user participation:
 just meet-e2e
 ```
 
+The Yandex Telemost E2E needs no user participation, but it joins a live
+meeting, so it is separate too:
+
+```sh
+just telemost-e2e https://telemost.yandex.ru/j/<id>
+```
+
 Mention any test you could not run and why. A capture change should include a
 controlled manual test when automation cannot reproduce the platform behavior.
 
@@ -120,7 +127,7 @@ controlled manual test when automation cannot reproduce the platform behavior.
 | `kuali-store` | Meeting persistence, search, and export |
 | `kuali-engine` | Cross-source lifecycle and concurrency |
 | `src-tauri` / `src` | Desktop shell and bilingual interface |
-| `browser-extension` | Browser capture for Meet, Teams, and Zoom |
+| `browser-extension` | Browser capture for Meet, Teams, Zoom, and Telemost |
 | `website` | Dependency-free public website deployed through Cloudflare |
 
 Changes must preserve these system boundaries:

@@ -3,16 +3,17 @@
 **English** · [Español](README.es.md)
 
 This unpacked Chrome/Chromium extension connects browser meetings to the Kuali
-desktop app. Google Meet support is stable. Microsoft Teams and Zoom support is
-experimental and partial while those integrations receive broader real-world
-testing. You remain a normal participant in the meeting; no external bot
-account joins it.
+desktop app. Google Meet support is stable. Microsoft Teams, Zoom, and Yandex
+Telemost support is experimental and partial while those integrations receive
+broader real-world testing. You remain a normal participant in the meeting; no
+external bot account joins it.
 
 | Platform | Status |
 |---|---|
 | Google Meet | Stable |
 | Microsoft Teams | Experimental · partial support |
 | Zoom | Experimental · partial support |
+| Yandex Telemost | Experimental · partial support |
 
 ## Install
 
@@ -60,6 +61,25 @@ The machine-readable report is written to `target/e2e/reports`. Chrome for
 Testing is used because current branded Chrome releases do not allow automation
 to sideload an unpacked extension through the old command-line flag.
 
+## Real Yandex Telemost E2E
+
+Run the automated end-to-end test against a live Telemost meeting from this
+directory, or with `just telemost-e2e <url>` from the repository root:
+
+```sh
+npm run test:e2e:telemost -- --meeting-url https://telemost.yandex.ru/j/<id> \
+  [--host-cdp http://127.0.0.1:9222]
+```
+
+Three Chrome for Testing profiles join the meeting: two guests and a recorder
+with this extension. They speak synthetic Russian voices on a shared clock, so
+no real microphone or camera is used. The probe transcribes in Russian with the
+Whisper model selected in Kuali, which must already be downloaded together with
+Silero VAD; Kuali's configuration is not changed. `--host-cdp` replaces the
+first guest with a new window in an already running Chrome that is signed in to
+Yandex and owns the meeting. The test checks speaker attribution, mute windows,
+a participant leaving, and the automatic stop. `--help` lists every option.
+
 ## Speaker separation contract
 
 Every audio frame references a stable numeric channel. A `participant-upsert`
@@ -79,11 +99,21 @@ platform, and an `audioKind` of either `separate` or `mixed`.
   If none appear, an offscreen `tabCapture` fallback preserves the meeting as
   one `mixed` channel. It is discarded as soon as an individual page track is
   proven, so the two paths never intentionally transcribe the same audio.
+- Yandex Telemost (experimental): Telemost mixes every remote participant into
+  one audio stream on its server, so there are no per-participant tracks. Kuali
+  reads Telemost's own per-participant voice-activity flags and roster from the
+  meeting page (locally, in the browser) and routes the mixed audio to the
+  participant who was speaking. The local microphone is captured separately.
+  Overlapping speech is credited to whoever started speaking most recently, and
+  very short interjections or sound Telemost does not flag as speech appear
+  under the shared room speaker. Behavior beyond about 12 participants is not
+  verified. Supported hosts are `telemost.yandex.ru`, `telemost.yandex.com`,
+  `telemost.360.yandex.ru`, and `telemost.360.yandex.com`.
 
 Speaker mapping is deliberately conservative. A source stays unknown during
 overlap and is named only after sustained decoded speech agrees with exactly
 one non-local active tile. Name and avatar selectors are necessarily
-best-effort because all three sites can change their private DOM.
+best-effort because these sites can change their private DOM and signalling.
 
 ## Capacity
 

@@ -33,7 +33,7 @@ body:
       options:
         - Discord
         - Google Meet
-        - Microsoft Teams or Zoom
+        - Microsoft Teams, Zoom, or Yandex Telemost
         - Transcription and models
         - Summaries and tasks
         - Library and search
