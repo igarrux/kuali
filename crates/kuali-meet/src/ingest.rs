@@ -887,11 +887,20 @@ impl MeetingParams {
     }
 }
 
+/// Whether `name` is one of the browser-meeting labels this ingest produces.
+pub fn is_web_meeting_platform(name: &str) -> bool {
+    matches!(
+        name,
+        "Google Meet" | "Microsoft Teams" | "Zoom" | "Yandex Telemost" | "Reunión web"
+    )
+}
+
 fn platform_label(platform: &str) -> &str {
     match platform {
         "google_meet" | "meet" => "Google Meet",
         "microsoft_teams" | "ms_teams" | "teams" => "Microsoft Teams",
         "zoom" => "Zoom",
+        "yandex_telemost" | "telemost" => "Yandex Telemost",
         _ => "Reunión web",
     }
 }
@@ -1640,5 +1649,30 @@ mod tests {
         assert_ne!(teams.guild_id, zoom.guild_id);
         assert_ne!(teams.channel_id, zoom.channel_id);
         assert_ne!(teams.channel_id, 0);
+    }
+
+    #[test]
+    fn telemost_gets_its_own_label_and_aliases() {
+        let telemost =
+            MeetingParams::from_uri("/ingest?platform=yandex_telemost&native_meeting_id=12345678")
+                .call_info();
+        let alias = MeetingParams::from_uri("/ingest?platform=telemost&native_meeting_id=12345678")
+            .call_info();
+        let zoom =
+            MeetingParams::from_uri("/ingest?platform=zoom&native_meeting_id=12345678").call_info();
+        assert_eq!(telemost.guild_name, "Yandex Telemost");
+        assert_eq!(alias.guild_name, "Yandex Telemost");
+        assert_ne!(telemost.guild_id, zoom.guild_id);
+        assert_ne!(telemost.channel_id, 0);
+        for name in [
+            "Google Meet",
+            "Microsoft Teams",
+            "Zoom",
+            "Yandex Telemost",
+            "Reunión web",
+        ] {
+            assert!(is_web_meeting_platform(name), "{name}");
+        }
+        assert!(!is_web_meeting_platform("Servidor de Discord"));
     }
 }

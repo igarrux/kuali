@@ -4366,6 +4366,7 @@ select {
 .integration-logo.whisper { background: linear-gradient(145deg, #35c89a, #17876a); }
 .platform-mark.teams { background: #6264a7; }
 .platform-mark.zoom { background: #2d8cff; }
+.platform-mark.telemost { background: #5b3cc4; }
 .platform-mark.audio-file { background: var(--accent-soft); color: var(--accent); }
 
 .sidebar-head { padding-top: 15px; }
