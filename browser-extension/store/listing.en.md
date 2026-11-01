@@ -6,15 +6,16 @@ Kuali
 
 ## Summary
 
-Transcribe Google Meet locally with Kuali. Teams and Zoom support is experimental and partial.
+Transcribe Google Meet locally with Kuali. Teams, Zoom, and Telemost support is experimental and partial.
 
 ## Detailed description
 
 Kuali turns browser meetings into speaker-aware, searchable notes without
 adding a recording bot to the call.
 
-Google Meet support is stable. Microsoft Teams and Zoom support is experimental
-and partial while those integrations receive broader real-world testing.
+Google Meet support is stable. Microsoft Teams, Zoom, and Yandex Telemost
+support is experimental and partial while those
+integrations receive broader real-world testing.
 
 Start capture from the toolbar, review the data disclosure, and confirm that
 participants have been informed. Kuali then sends meeting audio directly to
@@ -37,13 +38,13 @@ only to Kuali on `127.0.0.1`; it has no Kuali-operated cloud backend and does
 not retain captured audio as an audio file. Transcripts leave the computer only
 when you configure a summary provider, Discord delivery, or a webhook.
 
-Meeting services may change their private browser interfaces. Teams and Zoom
-may have incomplete capture, participant identity, or speaker separation in
-some meeting modes. Kuali labels unavoidable mixed audio instead of assigning
-it to the wrong person.
+Meeting services may change their private browser interfaces. Teams, Zoom,
+and Telemost may have incomplete capture, participant identity, or speaker
+separation in some meeting modes. Kuali labels unavoidable mixed audio instead
+of assigning it to the wrong person.
 
 Always tell participants and obtain any consent required in your location.
-Kuali is not affiliated with Google, Microsoft, or Zoom.
+Kuali is not affiliated with Google, Microsoft, Zoom, or Yandex.
 
 Source, desktop downloads, documentation, and privacy policy:
 https://github.com/igarrux/kuali

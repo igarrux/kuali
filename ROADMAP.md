@@ -47,6 +47,9 @@ Every roadmap item must preserve these invariants:
 - Expand real-world Microsoft Teams test coverage across meeting modes.
 - Expand Zoom Web Client coverage and document modes where separate participant
   tracks are unavailable.
+- Verify Yandex Telemost with more than 12 participants.
+- Cover Telemost moderator-forced mute, the waiting room, and screen-share audio
+  on the second audio transceiver.
 - Keep platform adapters resilient to DOM and WebRTC changes.
 - Grow reproducible fixtures for roster, mute, track, lifecycle, and disconnect
   behavior.

@@ -3,15 +3,17 @@
 [English](README.md) · **Español**
 
 Conecta reuniones del navegador con la aplicación local de Kuali. Google Meet
-tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y
-parcial mientras sus integraciones reciben más pruebas en reuniones reales. Tú
-sigues siendo un participante normal; no entra una cuenta de bot externa.
+tiene soporte estable. Microsoft Teams, Zoom y Yandex Telemost tienen soporte
+experimental y parcial mientras sus integraciones reciben más pruebas en
+reuniones reales. Tú sigues siendo un participante normal; no entra una cuenta
+de bot externa.
 
 | Plataforma | Estado |
 |---|---|
 | Google Meet | Estable |
 | Microsoft Teams | Experimental · soporte parcial |
 | Zoom | Experimental · soporte parcial |
+| Yandex Telemost | Experimental · soporte parcial |
 
 ## Instalar
 
@@ -70,6 +72,17 @@ la RAM. Para una prueba rápida de una sola persona usa
 - Zoom (experimental) intenta lo mismo. Si ese modo no expone pistas WebRTC, un `tabCapture`
   aislado conserva la reunión como un canal `mixed`. El fallback se descarta tan
   pronto como aparece una pista individual, para no transcribir ambas rutas.
+- Yandex Telemost (experimental): Telemost mezcla a todos los participantes
+  remotos en un solo flujo de audio en su servidor, así que no hay pistas por
+  participante. Kuali lee los indicadores de actividad de voz y la lista de
+  participantes del propio Telemost desde la página (en local, en el navegador)
+  y asigna el audio mezclado a quien estaba hablando. El micrófono local se
+  captura por separado. El habla superpuesta se atribuye a quien empezó a hablar
+  más recientemente, y las interjecciones muy cortas o el sonido que Telemost no
+  marca como voz aparecen bajo el hablante compartido «Sala». El comportamiento
+  con más de unos 12 participantes no está verificado. Los dominios compatibles
+  son `telemost.yandex.ru`, `telemost.yandex.com`,
+  `telemost.360.yandex.ru` y `telemost.360.yandex.com`.
 
 Meet envía actualmente tres pistas virtuales con los hablantes más relevantes.
 Kuali conserva identidades estables en reuniones con más participantes conforme

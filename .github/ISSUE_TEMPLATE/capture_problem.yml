@@ -27,6 +27,7 @@ body:
         - Google Meet
         - Microsoft Teams (experimental)
         - Zoom (experimental)
+        - Yandex Telemost (experimental)
     validations:
       required: true
   - type: input

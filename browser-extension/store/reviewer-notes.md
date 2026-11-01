@@ -7,8 +7,8 @@ not use a Kuali cloud account and no reviewer credentials are required.
    `https://kuali.garrux.dev/`.
 2. Keep the default local browser-bridge port (`9099`) in Kuali.
 3. Join a meeting you are authorized to record in Google Meet and remain on the
-   meeting page. Google Meet is the stable browser integration; Microsoft Teams
-   and Zoom currently have experimental, partial support.
+   meeting page. Google Meet is the stable browser integration; Microsoft Teams,
+   Zoom, and Yandex Telemost currently have experimental, partial support.
 4. Select the Kuali toolbar icon. It should identify the platform and say that
    Kuali is available.
 5. Review the disclosure, select the participant-notice checkbox, and choose

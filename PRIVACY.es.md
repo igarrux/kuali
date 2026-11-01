@@ -31,6 +31,13 @@ Cuando eliges grabar y transcribir una reunión compatible, Kuali puede procesar
 - la transcripción atribuida por hablante, valores de confianza, resumen,
   puntos clave, decisiones, preguntas abiertas y tareas.
 
+En reuniones de Yandex Telemost, la extensión lee dentro de la página la
+señalización propia de Telemost —nombres de participantes, estado de silencio,
+indicadores de actividad de voz e ID del participante local— y una respuesta de
+perfil de Telemost para las URL de avatar. Esto ocurre sólo en tu equipo; Kuali
+no conserva credenciales ni tokens y no envía nada más allá de la conexión
+loopback con la aplicación de escritorio.
+
 En llamadas de Discord, la app puede procesar la información equivalente de
 servidor, canal, participante, voz y entrega de mensajes necesaria para entrar,
 atribuir hablantes, anunciar la grabación y entregar resultados.
