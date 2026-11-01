@@ -12,6 +12,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   Inicio: "Home",
   Tareas: "Tasks",
   Preguntar: "Ask",
+  "Preguntar a la IA sobre tus reuniones": "Ask AI about your meetings",
   "Memoria de reuniones": "Meeting memory",
   "Importar audio": "Import audio",
   "Audio local": "Local audio",
@@ -412,6 +413,8 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   Hablar: "Speak",
   "Usar actividad de voz": "Use Voice Activity",
   "Kuali no solicita": "Kuali does not request",
+  "Kuali no solicita Administrador ni acceso para leer tu historial de mensajes.":
+    "Kuali does not request Administrator or access to read your message history.",
   "ni acceso para leer tu historial de mensajes.": "or access to read your message history.",
   "Abrir autorización otra vez": "Open authorization again",
   "Ya autoricé · conectar": "I authorized it · connect",
@@ -458,6 +461,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Instalar en Arc": "Install in Arc",
   "Chrome Web Store también permite instalar extensiones en Edge, Brave y Arc.":
     "The Chrome Web Store also supports installing extensions in Edge, Brave, and Arc.",
+  "Meet, Teams y Zoom": "Meet, Teams, and Zoom",
   "Google Meet tiene soporte estable. Microsoft Teams y Zoom tienen soporte experimental y parcial.":
     "Google Meet has stable support. Microsoft Teams and Zoom have experimental, partial support.",
   "Instalación manual": "Manual installation",
@@ -626,6 +630,7 @@ export const ENGLISH_TRANSLATIONS = Object.freeze({
   "Haz que Kuali esté disponible antes de que empiece la llamada.":
     "Make Kuali available before the call starts.",
   "Idioma de la interfaz": "Interface language",
+  "🌐 Automático (idioma del sistema)": "🌐 Automatic (system language)",
   "Automático (idioma del sistema)": "Automatic (system language)",
   "Solo cambia la interfaz; no modifica el idioma del audio ni del resumen.":
     "Only changes the interface; it does not affect audio or summary language.",
